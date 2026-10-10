@@ -42,7 +42,7 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   /** Úroveň hlasu pre vlnu z daného zvuku. */
   const watch = useCallback((next: MediaStream) => {
     cancelAnimationFrame(rafRef.current);
-    void audioCtxRef.current?.close();
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") void audioCtxRef.current.close().catch(() => {});
     const ctx = new AudioContext();
     audioCtxRef.current = ctx;
     const analyser = ctx.createAnalyser();
@@ -101,7 +101,7 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     return () => {
       cancelAnimationFrame(rafRef.current);
       if (!externalRef.current) streamRef.current?.getTracks().forEach((track) => track.stop());
-      void audioCtxRef.current?.close();
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") void audioCtxRef.current.close().catch(() => {});
     };
   }, []);
 

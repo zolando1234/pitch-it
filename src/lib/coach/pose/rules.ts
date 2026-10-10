@@ -71,6 +71,7 @@ export const GROUPS: Group[] = [
     title: "Postoj",
     principles: [
       "Stoj vzpriamene, váhu rovnomerne na oboch nohách, ramená uvoľnené.",
+      "Nohy na šírku bokov, nekrížiť ich a nestáť s chodidlami tesne pri sebe.",
       "Natoč sa k publiku. Kam smeruje hrudník, tam smeruje tvoja pozornosť.",
     ],
   },
@@ -401,6 +402,26 @@ export const RULES: Rule[] = [
     tip: "Rozlož váhu rovnomerne na obe nohy a vyrovnaj ramená.",
     activateMs: 3000,
     test: (m) => m.shoulderTilt > CONFIG.shoulderTiltDeg,
+  },
+
+  {
+    id: "legs-crossed",
+    group: "posture",
+    severity: "bad",
+    title: "Prekrížené nohy",
+    tip: "Prekrížené nohy pôsobia neisto a hrozí, že stratíš rovnováhu. Postav sa na obe nohy na šírku bokov.",
+    activateMs: 1200,
+    test: (m) => m.legsCrossed,
+  },
+  {
+    id: "narrow-stance",
+    group: "posture",
+    severity: "warn",
+    title: "Nohy tesne pri sebe",
+    scoreWeight: 0.6,
+    tip: "Chodidlá úplne pri sebe pôsobia stiesnene a ľahko sa začneš knísať. Rozkroč sa na šírku bokov.",
+    activateMs: 4000,
+    test: (m) => m.narrowStance,
   },
 
   // ── Stage ──────────────────────────────────────────────

@@ -14,9 +14,33 @@ export const LM = {
   rightWrist: 16,
   leftHip: 23,
   rightHip: 24,
+  leftKnee: 25,
+  rightKnee: 26,
+  leftAnkle: 27,
+  rightAnkle: 28,
 } as const;
 
 export type Point = { x: number; y: number };
+
+/**
+ * Postoj nôh z bodov v pixeloch. `facing` je znamienko (ľavé rameno x − pravé rameno x):
+ * pri pohľade do kamery majú ľavý členok a koleno rovnakú stranu ako ľavé rameno.
+ * Prekrížené = ľavá noha je na strane pravej (o aspoň `legsCrossedMargin` šírok ramien).
+ */
+export function legsPose(
+  p: { leftKnee: Point | null; rightKnee: Point | null; leftAnkle: Point | null; rightAnkle: Point | null },
+  sw: number,
+  facing: number,
+): { legsVisible: boolean; legsCrossed: boolean; narrowStance: boolean } {
+  const legsVisible = !!p.leftKnee && !!p.rightKnee;
+  if (!legsVisible || facing === 0) return { legsVisible, legsCrossed: false, narrowStance: false };
+  const swapped = (l: Point, r: Point) => ((l.x - r.x) * Math.sign(facing)) / sw < -CONFIG.legsCrossedMargin;
+  const anklesCrossed = !!p.leftAnkle && !!p.rightAnkle && swapped(p.leftAnkle, p.rightAnkle);
+  const kneesCrossed = swapped(p.leftKnee!, p.rightKnee!);
+  const narrowStance =
+    !anklesCrossed && !!p.leftAnkle && !!p.rightAnkle && Math.abs(p.leftAnkle.x - p.rightAnkle.x) / sw < CONFIG.narrowStance;
+  return { legsVisible, legsCrossed: anklesCrossed || kneesCrossed, narrowStance };
+}
 export type Zone = { top: number; bottom: number; left: number; right: number };
 /** Strany sú z pohľadu rečníka (= ako v zrkadle na obrazovke). */
 export type Side = "left" | "center" | "right";
@@ -84,6 +108,12 @@ export type Metrics = {
   // postoj
   shoulderTilt: number;
   turned: boolean;
+  /** kamera vidí kolená (nohy sa dajú hodnotiť) */
+  legsVisible: boolean;
+  /** prekrížené nohy (členky alebo kolená) */
+  legsCrossed: boolean;
+  /** chodidlá tesne pri sebe */
+  narrowStance: boolean;
 
   // pohyb po pódiu
   hipsVisible: boolean;
@@ -468,6 +498,18 @@ export class MetricsTracker {
       const wr = world[LM.rightShoulder];
       turned = Math.abs(wl.z - wr.z) / Math.max(Math.abs(wl.x - wr.x), 0.01) > CONFIG.turnedRatio;
     }
+    // nohy: pri natočení bokom sa strany nôh prekrývajú, vtedy ich nehodnotíme
+    const legPoint = (i: number) => (vis(i) ? px(i) : null);
+    const legs = legsPose(
+      {
+        leftKnee: legPoint(LM.leftKnee),
+        rightKnee: legPoint(LM.rightKnee),
+        leftAnkle: legPoint(LM.leftAnkle),
+        rightAnkle: legPoint(LM.rightAnkle),
+      },
+      sw,
+      turned ? 0 : ls.x - rs.x,
+    );
 
     // ── Pódium ─────────────────────────────────────────────
     const stageX = 1 - body.x / width; // zrkadlovo, z pohľadu rečníka
@@ -559,6 +601,7 @@ export class MetricsTracker {
       nodding: this.nodding(t),
       shoulderTilt,
       turned,
+      ...legs,
       hipsVisible,
       stageX,
       stage,

@@ -205,7 +205,7 @@ export const FEEDBACK_FIXTURE: FeedbackData = {
   audienceLabel: "Investorovi",
   targetSeconds: 60,
   focus: "tempo",
-  retryHref: "/ukazka/nahravka",
+  retryHref: "/ukazka/nahravka/kamera",
   tempo: { value: 4.6, position: 55, advice: TEMPO_ADVICE.target },
   pauses: { count: 5, label: "pauzy nad 1 sekundu, najdlhšia 2,4 s" },
   fillers: { per60s: 6, chips: [{ phrase: "akože", count: 3 }, { phrase: "vlastne", count: 2 }, { phrase: "ehm", count: 1 }] },

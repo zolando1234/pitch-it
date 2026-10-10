@@ -2,7 +2,8 @@
 
 import "@/styles/screens/record.css";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCoachPrefs, type CoachResult } from "@/components/coach/coach-live";
 import { preloadCoachModels } from "@/components/coach/CameraStage";
 import SessionSetup from "@/components/coach/SessionSetup";
@@ -61,6 +62,7 @@ export function CameraRecordScreen({
   const { open, attach, release } = recorder;
   const phone = usePhoneMic();
   const phoneStream = phone.stream;
+  const stopPhone = phone.stop;
   const usingPhone = useRef(false);
   const [phase, setPhase] = useState<Phase>("setup");
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +156,23 @@ export function CameraRecordScreen({
     outline: typeof outline;
   } | null>(null);
   const [canResend, setCanResend] = useState(false);
+  const router = useRouter();
+
+  // Next.js stránku pri odchode neodpojí, len skryje. Po návrate (napr. „Skús znova“) má čakať nové nahrávanie,
+  // nie hotová analýza minulého pokusu.
+  useLayoutEffect(
+    () => () => {
+      pending.current = null;
+      setPhase("setup");
+      setK(0);
+      setAttemptId(null);
+      setError(null);
+      setCanResend(false);
+      // spojenie s mobilom sa pri skrytí zavrie, po návrate sa pripája nanovo
+      stopPhone();
+    },
+    [stopPhone],
+  );
 
   const send = async () => {
     const p = pending.current;
@@ -167,6 +186,8 @@ export function CameraRecordScreen({
       keepLocalSession(uploaded.attemptId, { summary: p.summary, videoUrl: p.videoUrl });
       setAttemptId(uploaded.attemptId);
       setK(4);
+      // report hneď po analýze
+      router.push(feedbackHref.replace("{id}", uploaded.attemptId));
     } else {
       setError(uploaded.message);
       setCanResend(uploaded.retryable);
@@ -179,6 +200,7 @@ export function CameraRecordScreen({
     const coach = toStoredCoach(result.summary, { teleprompter: !!prefs.prompterText, micMode: prefs.micMode });
     if (preview) {
       keepLocalSession("ukazka", { summary: result.summary, videoUrl: result.recording?.url ?? null });
+      router.push(feedbackHref.replace("{id}", "ukazka"));
       return;
     }
     const recording = audioStarted.current ? await recorder.stop().catch(() => null) : null;

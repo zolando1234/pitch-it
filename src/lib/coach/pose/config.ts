@@ -95,6 +95,10 @@ export const CONFIG = {
   // ── Postoj ───────────────────────────────────────────────
   shoulderTiltDeg: 9,
   turnedRatio: 0.75, // |dz| / |dx| ramien vo svetových súradniciach
+  /** členky (kolená) prekrížené aspoň o toľko šírok ramien = prekrížené nohy */
+  legsCrossedMargin: 0.08,
+  /** členky bližšie ako toľko šírok ramien = nohy pri sebe (nestabilný postoj) */
+  narrowStance: 0.22,
 
   // ── Pohyb po pódiu ───────────────────────────────────────
   swayWindowMs: 4000,

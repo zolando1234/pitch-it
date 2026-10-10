@@ -29,6 +29,13 @@ const UPPER_BODY: [number, number][] = [
   [LM.leftHip, LM.rightHip],
 ];
 
+const LEGS: [number, number][] = [
+  [LM.leftHip, LM.leftKnee],
+  [LM.leftKnee, LM.leftAnkle],
+  [LM.rightHip, LM.rightKnee],
+  [LM.rightKnee, LM.rightAnkle],
+];
+
 const TRAIL_MS = 700;
 
 /** Kreslí "pódium": stlmené video, farebnú siluetu, power zónu a stopy rúk. */
@@ -188,7 +195,7 @@ export class StageRenderer {
     ctx.lineCap = "round";
     ctx.lineWidth = 5;
     ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    for (const [a, b] of UPPER_BODY) {
+    for (const [a, b] of [...UPPER_BODY, ...LEGS]) {
       if (!visible(a) || !visible(b)) continue;
       ctx.beginPath();
       ctx.moveTo(lm[a].x * W, lm[a].y * H);

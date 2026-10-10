@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DRILLS, DrillTracker, ruleFilterFor, TALK_MODES } from "../src/lib/coach/modes.ts";
 import { FeedbackEngine } from "../src/lib/coach/pose/feedback.ts";
 import { RULES, RULE_BY_ID } from "../src/lib/coach/pose/rules.ts";
+import { legsPose } from "../src/lib/coach/pose/metrics.ts";
 import { computeFinalScore, gradeFor } from "../src/lib/coach/pose/scoring.ts";
 import { SessionRecorder } from "../src/lib/coach/pose/session.ts";
 import { finalScoreFor, fromStoredCoach, parseStoredCoach, toStoredCoach } from "../src/lib/coach/stored.ts";
@@ -54,6 +55,38 @@ describe("tréner reči tela – pravidlá a režimy", () => {
   test("známky sú po slovensky", () => {
     assert.equal(gradeFor(98).grade, "A+");
     assert.equal(gradeFor(40).label, "Treba zapracovať");
+  });
+});
+
+describe("tréner reči tela – nohy", () => {
+  // rečník čelom ku kamere: jeho ľavé rameno (a ľavá noha) má v obraze väčšie x
+  const sw = 200;
+  const facing = 1;
+  const pt = (x: number, y: number) => ({ x, y });
+
+  test("rozkročený postoj je v poriadku", () => {
+    const legs = legsPose({ leftKnee: pt(560, 700), rightKnee: pt(440, 700), leftAnkle: pt(570, 900), rightAnkle: pt(430, 900) }, sw, facing);
+    assert.deepEqual(legs, { legsVisible: true, legsCrossed: false, narrowStance: false });
+  });
+
+  test("prekrížené členky aj kolená sa rozpoznajú", () => {
+    const ankles = legsPose({ leftKnee: pt(520, 700), rightKnee: pt(480, 700), leftAnkle: pt(450, 900), rightAnkle: pt(550, 900) }, sw, facing);
+    assert.equal(ankles.legsCrossed, true);
+    const knees = legsPose({ leftKnee: pt(460, 700), rightKnee: pt(540, 700), leftAnkle: null, rightAnkle: null }, sw, facing);
+    assert.equal(knees.legsCrossed, true);
+    assert.equal(RULE_BY_ID["legs-crossed"].severity, "bad");
+  });
+
+  test("chodidlá tesne pri sebe sú upozornenie, nie prekríženie", () => {
+    const legs = legsPose({ leftKnee: pt(515, 700), rightKnee: pt(485, 700), leftAnkle: pt(515, 900), rightAnkle: pt(490, 900) }, sw, facing);
+    assert.equal(legs.narrowStance, true);
+    assert.equal(legs.legsCrossed, false);
+  });
+
+  test("bez kolien v zábere alebo pri natočení bokom nohy nehodnotíme", () => {
+    assert.equal(legsPose({ leftKnee: null, rightKnee: null, leftAnkle: null, rightAnkle: null }, sw, facing).legsVisible, false);
+    const sideways = legsPose({ leftKnee: pt(460, 700), rightKnee: pt(540, 700), leftAnkle: pt(450, 900), rightAnkle: pt(550, 900) }, sw, 0);
+    assert.equal(sideways.legsCrossed, false);
   });
 });
 
