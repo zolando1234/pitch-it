@@ -56,7 +56,7 @@ export async function createCheckoutSession(input: {
   cancelUrl: string;
 }): Promise<string> {
   const config = getStripeConfig();
-  if (!config) throw new StripeError("not_configured", "Platby nie sú nakonfigurované.");
+  if (!config?.proPriceId) throw new StripeError("not_configured", "Platby nie sú nakonfigurované.");
   const params: Record<string, string> = {
     mode: "subscription",
     "line_items[0][price]": config.proPriceId,
@@ -71,6 +71,37 @@ export async function createCheckoutSession(input: {
   };
   if (input.customerId) params.customer = input.customerId;
   else if (input.email) params.customer_email = input.email;
+  const session = await stripePost<{ url?: string }>("/checkout/sessions", params);
+  if (!session.url) throw new StripeError("request_failed", "Stripe nevrátil adresu platby.");
+  return session.url;
+}
+
+/** Jednorazová platba za balík pitchov. Zľavový kód (napr. SWZA) sa dá zadať priamo v Checkoute. */
+export async function createPitchPackCheckout(input: {
+  userId: string;
+  email: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  pack: { credits: number; priceCents: number; currency: string; name: string };
+}): Promise<string> {
+  const params: Record<string, string> = {
+    mode: "payment",
+    "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": input.pack.currency,
+    "line_items[0][price_data][unit_amount]": String(input.pack.priceCents),
+    "line_items[0][price_data][product_data][name]": input.pack.name,
+    "line_items[0][price_data][product_data][description]": `${input.pack.credits} nahraných pitchov s analýzou a reportom`,
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    client_reference_id: input.userId,
+    "metadata[user_id]": input.userId,
+    "metadata[kind]": "pitch_pack",
+    "metadata[credits]": String(input.pack.credits),
+    "payment_intent_data[metadata][user_id]": input.userId,
+    allow_promotion_codes: "true",
+    locale: "sk",
+  };
+  if (input.email) params.customer_email = input.email;
   const session = await stripePost<{ url?: string }>("/checkout/sessions", params);
   if (!session.url) throw new StripeError("request_failed", "Stripe nevrátil adresu platby.");
   return session.url;

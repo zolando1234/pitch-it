@@ -10,6 +10,7 @@ import SessionSetup from "@/components/coach/SessionSetup";
 import { OutlineEditor, usePitchOutline } from "@/components/pitch/outline-editor";
 import { PhoneMicPanel } from "@/components/pitch/phone-mic-panel";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
+import { balanceLabel, PitchPaywall, usePitchBalance } from "@/components/pitch/pitch-paywall";
 import { PitchStudio } from "@/components/pitch/pitch-studio";
 import { usePhoneMic } from "@/components/pitch/use-phone-mic";
 import { uploadPitchWithRetry, usePitchRecorder, type RecorderSetup } from "@/components/pitch/use-recorder";
@@ -18,6 +19,7 @@ import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
 import type { SessionSummary } from "@/lib/coach/pose/session";
 import { toStoredCoach, type StoredCoach } from "@/lib/coach/stored";
 import { AUDIENCE_LABELS, FOCUS_GOALS } from "@/lib/onboarding/plan";
+import type { PitchBalance } from "@/lib/billing/pitch-pack";
 
 /*
   Nahrávanie pitchu s kamerou: živý tréner reči tela (silueta, rady nad hlavou, teleprompter)
@@ -45,8 +47,14 @@ export function CameraRecordScreen({
   homeHref = "/app",
   setupHref = "/app/vitaj",
   preview = false,
+  balance: initialBalance = null,
+  paid = false,
 }: {
   setup: RecorderSetup;
+  /** zostatok pitchov (paywall); null = bez paywallu (ukážka) */
+  balance?: PitchBalance | null;
+  /** návrat zo Stripe po platbe */
+  paid?: boolean;
   /** Návrat na prehľad. */
   homeHref?: string;
   /** Kvíz, kde sa mení publikum, dĺžka a cieľ. */
@@ -56,6 +64,8 @@ export function CameraRecordScreen({
   preview?: boolean;
 }) {
   const prefs = useCoachPrefs();
+  const wallet = usePitchBalance(initialBalance, paid);
+  const blocked = !!wallet.balance && !wallet.balance.canPitch;
   const outlineState = usePitchOutline();
   const { outline } = outlineState;
   const recorder = usePitchRecorder();
@@ -226,6 +236,7 @@ export function CameraRecordScreen({
     setAttemptId(null);
     setK(0);
     setPhase("setup");
+    void wallet.reload();
     if (!preview) {
       if (phoneStream) attach(phoneStream);
       else void open();
@@ -271,7 +282,12 @@ export function CameraRecordScreen({
   return (
     <div className="pi-rec" style={{ background: PI_BACKGROUND, color: "var(--color-paper)", minHeight: "100dvh" }}>
       <PiTopbar href={homeHref} />
-      {phase === "setup" ? (
+      {phase === "setup" && (blocked || wallet.confirming) ? (
+        <main id="obsah" className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10 md:px-8">
+          <h1 className="h text-4xl leading-tight md:text-6xl">Pitch pred kamerou</h1>
+          <PitchPaywall paymentsEnabled={wallet.paymentsEnabled} confirming={wallet.confirming} />
+        </main>
+      ) : phase === "setup" ? (
         <main id="obsah">
           <SessionSetup
             heading="Pitch pred kamerou"
@@ -293,6 +309,7 @@ export function CameraRecordScreen({
             onStart={start}
             micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
           >
+            {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance)}</p> : null}
             <OutlineEditor {...outlineState} />
             <button
               type="button"

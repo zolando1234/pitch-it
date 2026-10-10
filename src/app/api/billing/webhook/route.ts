@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStripeConfig } from "@/config/server-env";
 import { mapSubscriptionStatus, verifyWebhookSignature, type StripeSubscription } from "@/lib/billing/stripe";
+import { addPitchCredits } from "@/lib/db/pitch-wallet";
 import { trackEvent } from "@/lib/events/track";
 import { getAdminDb } from "@/lib/store/client";
 import { isUuid } from "@/lib/validation/ids";
@@ -11,6 +12,30 @@ import { isUuid } from "@/lib/validation/ids";
 */
 
 type StripeEvent = { id: string; type: string; data: { object: Record<string, unknown> } };
+
+type CheckoutSession = {
+  id: string;
+  client_reference_id?: string;
+  customer?: string;
+  subscription?: string;
+  payment_status?: string;
+  amount_total?: number;
+  metadata?: Record<string, string>;
+};
+
+/** Balík pitchov: pripíše kredity, až keď je platba naozaj zaplatená. */
+async function creditPitchPack(session: CheckoutSession) {
+  const userId = session.metadata?.user_id ?? session.client_reference_id;
+  const credits = Number(session.metadata?.credits);
+  if (!isUuid(userId) || !Number.isInteger(credits) || credits <= 0) {
+    console.error("[billing] balík pitchov bez používateľa alebo počtu", session.id);
+    return;
+  }
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") return;
+  if (await addPitchCredits(userId, credits, session.id)) {
+    await trackEvent(userId, "purchase_completed", { kind: "pitch_pack", credits, amount: session.amount_total ?? null });
+  }
+}
 
 async function upsertFromSubscription(subscription: StripeSubscription, fallbackUserId: string | null) {
   const admin = getAdminDb();
@@ -63,8 +88,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as { client_reference_id?: string; customer?: string; subscription?: string };
+    const session = event.data.object as unknown as CheckoutSession;
+    if (event.type.startsWith("checkout.session.") && session.metadata?.kind === "pitch_pack") {
+      // completed (karta) alebo async_payment_succeeded (oneskorené platobné metódy)
+      if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") await creditPitchPack(session);
+    } else if (event.type === "checkout.session.completed") {
       if (isUuid(session.client_reference_id) && typeof session.customer === "string") {
         await getAdminDb()
           .from("subscriptions")

@@ -5,11 +5,12 @@ import { LlmError } from "@/lib/ai/llm/types";
 import { TranscriptionError, transcribeWithWords } from "@/lib/ai/transcription";
 import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
-import { checkEntitlement } from "@/lib/billing/plans";
+import { FREE_PITCHES, PITCH_PACK, formatEur } from "@/lib/billing/pitch-pack";
 import { getProfile } from "@/lib/db/profile";
 import { insertPitchAttempt, updatePitchAttempt } from "@/lib/db/pitch";
 import type { PitchAttemptRow } from "@/lib/db/types";
-import { getBillingContext, recordUsage } from "@/lib/db/usage";
+import { consumePitch, getPitchBalance } from "@/lib/db/pitch-wallet";
+import { recordUsage } from "@/lib/db/usage";
 import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
 import { buildContentPrompt, CONTENT_SYSTEM, contentScoreSchema, overallScore } from "@/lib/pitch/content";
@@ -53,9 +54,12 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
   if ((input.audio.size === 0 && !hasBody) || input.audio.size > MAX_PITCH_AUDIO_BYTES) {
     throw new PitchServiceError("invalid", "Nahrávka je prázdna alebo príliš dlhá (najviac 3 minúty).");
   }
-  const billing = await getBillingContext(userId);
-  if (!checkEntitlement(billing.plan, billing.usage, "exercise_evaluation").allowed) {
-    throw new PitchServiceError("limit_reached", "Na tento mesiac si vyčerpal analýzy vo free pláne. Prejdi na Pro alebo počkaj na ďalší mesiac.", 402);
+  if (!(await getPitchBalance(userId)).canPitch) {
+    throw new PitchServiceError(
+      "limit_reached",
+      `Využil si ${FREE_PITCHES} pitche zadarmo. Kúp si balík ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)} a trénuj ďalej.`,
+      402,
+    );
   }
 
   const attempt = await insertPitchAttempt({
@@ -172,6 +176,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       model,
     };
     await updatePitchAttempt(attempt.id, patch);
+    // pitch sa započíta až po hotovej analýze
+    await consumePitch(userId);
     await trackEvent(userId, "pitch_analyzed", {
       audience: input.audience,
       target: input.targetSeconds,

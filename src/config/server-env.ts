@@ -64,14 +64,15 @@ export function getMistralLlmConfig(): { apiKey: string; model: string; fastMode
 export type StripeConfig = {
   secretKey: string;
   webhookSecret: string;
-  proPriceId: string;
+  /** mesačné predplatné Pro (voliteľné; balíky pitchov ho nepotrebujú) */
+  proPriceId: string | null;
 };
 
 export function getStripeConfig(): StripeConfig | null {
   const secretKey = read("STRIPE_SECRET_KEY");
   const webhookSecret = read("STRIPE_WEBHOOK_SECRET");
   const proPriceId = read("STRIPE_PRICE_ID_PRO");
-  return secretKey && webhookSecret && proPriceId ? { secretKey, webhookSecret, proPriceId } : null;
+  return secretKey && webhookSecret ? { secretKey, webhookSecret, proPriceId } : null;
 }
 
 /** Tajomstvo na HMAC (napr. hash IP pri rate limite). */

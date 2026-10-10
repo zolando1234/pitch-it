@@ -61,6 +61,13 @@ export const TABLES: Record<string, TableSpec> = {
     read: own("id"),
     update: own("id"),
   },
+  pitch_wallets: {
+    pk: ["user_id"],
+    defaults: () => ({ free_used: 0, credits: 0 }),
+    updatedAt: true,
+    refs: [user()],
+    read: own("user_id"),
+  },
   user_settings: {
     pk: ["user_id"],
     defaults: () => ({ default_mode: "coach", coach_focus: ["pace", "answer_length"], data_retention_days: null }),

@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import { CameraRecordScreen } from "@/components/pitch/camera-record-screen";
 import { requireUser } from "@/lib/auth/session";
+import { getPitchBalance } from "@/lib/db/pitch-wallet";
 import { loadPitchSetup } from "@/lib/pitch/setup";
 
 export const instant = false;
 
 export const metadata: Metadata = { title: "Nahrávanie" };
 
-export default async function RecordPage() {
+export default async function RecordPage({ searchParams }: PageProps<"/app/nahravka">) {
   const user = await requireUser("/app/nahravka");
-  const { setup } = await loadPitchSetup(user.id);
-  return <CameraRecordScreen setup={setup} feedbackHref="/app/nahravka/{id}" />;
+  const [{ setup }, balance, params] = await Promise.all([loadPitchSetup(user.id), getPitchBalance(user.id), searchParams]);
+  return <CameraRecordScreen setup={setup} balance={balance} paid={params.platba === "ok"} feedbackHref="/app/nahravka/{id}" />;
 }
