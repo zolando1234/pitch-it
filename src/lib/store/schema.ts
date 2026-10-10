@@ -278,6 +278,7 @@ export const TABLES: Record<string, TableSpec> = {
       content: null,
       content_score: null,
       body: null,
+      outline: null,
       model: null,
       event_id: null,
       share_name: null,

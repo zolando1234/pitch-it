@@ -5,6 +5,7 @@ import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
 import type { PitchAttemptRow } from "@/lib/db/types";
 import { keepLocalAttempt } from "@/lib/pitch/local-attempt";
+import type { PitchOutline } from "@/lib/pitch/outline";
 
 /*
   Nahrávanie pitchu v prehliadači: mikrofón (a voliteľne kamera), úroveň hlasu pre vlnu,
@@ -35,6 +36,31 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  /** zvuk z mobilu: jeho stopy nezastavujeme, spojenie riadi usePhoneMic */
+  const externalRef = useRef(false);
+
+  /** Úroveň hlasu pre vlnu z daného zvuku. */
+  const watch = useCallback((next: MediaStream) => {
+    cancelAnimationFrame(rafRef.current);
+    void audioCtxRef.current?.close();
+    const ctx = new AudioContext();
+    audioCtxRef.current = ctx;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    ctx.createMediaStreamSource(next).connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    let last = 0;
+    const tick = (now: number) => {
+      rafRef.current = requestAnimationFrame(tick);
+      if (now - last < 60) return;
+      last = now;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (const v of data) sum += ((v - 128) / 128) ** 2;
+      setLevel(Math.min(1, Math.sqrt(sum / data.length) * 4));
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
 
   const open = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -48,35 +74,33 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
         video: video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
       });
       streamRef.current = next;
+      externalRef.current = false;
       setStream(next);
       setMedia("ready");
-
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      ctx.createMediaStreamSource(next).connect(analyser);
-      const data = new Uint8Array(analyser.fftSize);
-      let last = 0;
-      const tick = (now: number) => {
-        rafRef.current = requestAnimationFrame(tick);
-        if (now - last < 60) return;
-        last = now;
-        analyser.getByteTimeDomainData(data);
-        let sum = 0;
-        for (const v of data) sum += ((v - 128) / 128) ** 2;
-        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 4));
-      };
-      rafRef.current = requestAnimationFrame(tick);
+      watch(next);
     } catch {
       setMedia("denied");
     }
-  }, [video]);
+  }, [video, watch]);
+
+  /** Nahrávanie z iného zdroja zvuku (mobil ako mikrofón) namiesto mikrofónu počítača. */
+  const attach = useCallback(
+    (next: MediaStream) => {
+      if (streamRef.current === next) return;
+      if (!externalRef.current) streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = next;
+      externalRef.current = true;
+      setStream(next);
+      setMedia("ready");
+      watch(next);
+    },
+    [watch],
+  );
 
   useEffect(() => {
     return () => {
       cancelAnimationFrame(rafRef.current);
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      if (!externalRef.current) streamRef.current?.getTracks().forEach((track) => track.stop());
       void audioCtxRef.current?.close();
     };
   }, []);
@@ -135,12 +159,12 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
 
   const release = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (!externalRef.current) streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setStream(null);
   }, []);
 
-  return { media, stream, level, open, start, pause, resume, stop, release };
+  return { media, stream, level, open, attach, start, pause, resume, stop, release };
 }
 
 /** Odošle nahrávku na analýzu. Vráti id pokusu alebo chybovú správu. */
@@ -149,6 +173,7 @@ export async function uploadPitch(
   setup: RecorderSetup,
   vision: VisionSample[] | null,
   coach: StoredCoach | null = null,
+  outline: PitchOutline | null = null,
 ): Promise<{ ok: true; attemptId: string } | { ok: false; message: string; retryable: boolean }> {
   const form = new FormData();
   form.set("audio", recording.audio, "pitch");
@@ -158,6 +183,7 @@ export async function uploadPitch(
   form.set("focus", setup.focus);
   if (vision?.length) form.set("vision", JSON.stringify(vision));
   if (coach) form.set("coach", JSON.stringify(coach));
+  if (outline) form.set("outline", JSON.stringify(outline));
   try {
     const response = await fetch("/api/pitch", { method: "POST", body: form });
     const data = (await response.json().catch(() => null)) as { attemptId?: string; attempt?: PitchAttemptRow; error?: { message?: string } } | null;

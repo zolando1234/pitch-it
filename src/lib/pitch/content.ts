@@ -63,7 +63,9 @@ Hodnotíš iba to, čo v prepise naozaj zaznelo. Nič si nedomýšľaj a nevymý
 Kategórie: problem (Problém), solution (Riešenie), market (Trh), traction (Traction), ask (Ask – žiadosť: suma a na čo).
 Pre každú kategóriu daj celé skóre 0–10 (0 = vôbec nezaznelo, 5 = spomenuté všeobecne, 8+ = konkrétne s číslom alebo dôkazom)
 a jednu až dve krátke vety po slovensky v tykaní: čo funguje a jednu konkrétnu vec, ktorú zlepšiť. Tón: vľúdny, koučovací, nikdy karhajúci.
-Ak chceš navrhnúť číslo, ktoré nepoznáš, použi zástupný symbol [X].`;
+Ak chceš navrhnúť číslo, ktoré nepoznáš, použi zástupný symbol [X].
+Ak zakladateľ zadal tému pitchu, je záväzná: hodnotíš pitch voči nej. Časti mimo témy do skóre nezapočítaj a rady píš tak,
+aby pitch lepšie povedal práve zadanú tému. Nenavrhuj iné zameranie ani iný produkt.`;
 
 const AUDIENCE_BRIEF: Record<Audience, string> = {
   investor: "investor (dôraz na Ask a Traction)",
@@ -72,11 +74,20 @@ const AUDIENCE_BRIEF: Record<Audience, string> = {
   team: "vlastný tím (dôraz na jasnosť a príbeh)",
 };
 
-export function buildContentPrompt(input: { transcript: string; audience: Audience; targetSeconds: number; notes: string | null }): string {
+export function buildContentPrompt(input: {
+  transcript: string;
+  audience: Audience;
+  targetSeconds: number;
+  notes: string | null;
+  topic?: string | null;
+  outline?: string[] | null;
+}): string {
   const audience = AUDIENCE_BRIEF[input.audience];
   return [
     `Publikum: ${audience}.`,
     `Cieľová dĺžka: ${input.targetSeconds} sekúnd.`,
+    input.topic ? `Téma pitchu (záväzné zadanie od zakladateľa):\n"""${input.topic.slice(0, 1500)}"""` : null,
+    input.outline?.length ? `Osnova, ktorú si zakladateľ pripravil:\n${input.outline.map((p) => `- ${p}`).join("\n")}` : null,
     input.notes ? `Poznámky, ktoré si zakladateľ pripravil (porovnaj, čo z nich naozaj povedal):\n"""${input.notes.slice(0, 4000)}"""` : null,
     `Prepis pitchu:\n"""${input.transcript.slice(0, 12000)}"""`,
   ]

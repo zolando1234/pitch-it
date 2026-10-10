@@ -4,6 +4,7 @@ import { PREVIEW_COACH } from "@/lib/preview/coach";
 import { BODY_EVENT_LABELS, bodyNarrative, clock, type BodySummary } from "@/lib/pitch/body";
 import { CATEGORY_LABELS, orderedCategories, type ContentScore } from "@/lib/pitch/content";
 import { decimal, pausesLabel, TEMPO_ADVICE, tempoPosition, tempoVerdict, type PitchMetrics, type TranscriptToken } from "@/lib/pitch/metrics";
+import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
 import type { PitchAttemptRow } from "@/lib/db/types";
 
 /*
@@ -37,9 +38,62 @@ export type FeedbackData = {
   } | null;
   /** Živý tréner reči tela z nahrávania s kamerou. */
   coach: StoredCoach | null;
+  /** Zhoda s témou a osnovou uloženou pred nahrávaním. */
+  outline: OutlineFeedback | null;
   shared: boolean;
   shareDefaults: { name: string; team: string; email: string };
 };
+
+export type OutlineFeedback = {
+  topic: string;
+  /** null = v nahrávke nebol prepis reči, osnova sa nedala porovnať */
+  match: {
+    pct: number | null;
+    tone: ScoreTone;
+    byKeywords: boolean;
+    onTopicPct: number | null;
+    order: { verdict: OrderVerdict; label: string; tone: ScoreTone } | null;
+    clarity: { score: number; tone: ScoreTone } | null;
+    takeaway: string | null;
+    advice: string | null;
+    digressions: string[];
+    points: Array<{ text: string; status: PointStatus; clarity: number | null; note: string | null }>;
+  } | null;
+  points: string[];
+};
+
+const ORDER_LABELS: Record<OrderVerdict, { label: string; tone: ScoreTone }> = {
+  kept: { label: "Poradie bodov si dodržal", tone: "good" },
+  minor: { label: "Drobné odbočky od poradia", tone: "mid" },
+  jumped: { label: "Preskakoval si medzi bodmi", tone: "low" },
+};
+
+const pctTone = (pct: number): ScoreTone => (pct >= 70 ? "good" : pct >= 45 ? "mid" : "low");
+
+export function outlineFeedback(value: unknown): OutlineFeedback | null {
+  const result = parseOutlineResult(value);
+  if (!result) return null;
+  const check = result.check;
+  const pct = matchPct(result);
+  return {
+    topic: result.topic,
+    points: result.points,
+    match: check
+      ? {
+          pct,
+          tone: pctTone(pct ?? 0),
+          byKeywords: check.source === "keywords",
+          onTopicPct: check.onTopicPct,
+          order: check.order ? { verdict: check.order, ...ORDER_LABELS[check.order] } : null,
+          clarity: check.clarity !== null ? { score: check.clarity, tone: scoreTone(check.clarity) } : null,
+          takeaway: check.takeaway,
+          advice: check.advice,
+          digressions: check.digressions,
+          points: check.points,
+        }
+      : null,
+  };
+}
 
 export const SECTION_LABELS: Record<FeedbackSection, string> = { tempo: "Tempo", fillery: "Vypĺňacie slová", obsah: "Obsah" };
 
@@ -137,6 +191,7 @@ export function buildFeedback(
           }
         : null,
     coach: parseStoredCoach(body?.coach ?? null),
+    outline: outlineFeedback(attempt.outline),
     shared: attempt.shared_at !== null,
     shareDefaults: extra.shareDefaults ?? { name: "", team: "", email: "" },
   };
@@ -195,6 +250,28 @@ export const FEEDBACK_FIXTURE: FeedbackData = {
     ],
   },
   coach: PREVIEW_COACH,
+  outline: {
+    topic: "AI tréner, ktorý founderov pripraví na stretnutie s investorom",
+    points: ["Problém: founderi pitchujú bez spätnej väzby", "Riešenie: nahráš pitch a AI povie, čo zlepšiť", "Veľkosť trhu", "Výsledky z pilotu", "Čo od investora chceme"],
+    match: {
+      pct: 60,
+      tone: "mid",
+      byKeywords: false,
+      onTopicPct: 85,
+      order: { verdict: "minor", ...ORDER_LABELS.minor },
+      clarity: { score: 7, tone: "good" },
+      takeaway: "Poslucháč pochopí, že appka dáva founderom rýchlu spätnú väzbu na pitch. Nevie však, či to už niekto používa a koľko peňazí chcete.",
+      advice: "Po trhu povedz jednou vetou výsledok pilotu a zakonči konkrétnou sumou, ktorú hľadáš.",
+      digressions: ["Krátka odbočka o tom, ako vznikol tím na hackathone"],
+      points: [
+        { text: "Problém: founderi pitchujú bez spätnej väzby", status: "covered", clarity: 8, note: "Jasne a konkrétne, s príkladom zo Startup Weekendu." },
+        { text: "Riešenie: nahráš pitch a AI povie, čo zlepšiť", status: "covered", clarity: 8, note: "Je zrozumiteľné, čo produkt robí a za aký čas." },
+        { text: "Veľkosť trhu", status: "partial", clarity: 4, note: "Spomenul si Európu, ale bez čísla a segmentu." },
+        { text: "Výsledky z pilotu", status: "missing", clarity: 0, note: "Pilot v pitchi nezaznel." },
+        { text: "Čo od investora chceme", status: "partial", clarity: 5, note: "Zaznelo, že hľadáš investora, chýba suma a na čo ju použiješ." },
+      ],
+    },
+  },
   shared: false,
   shareDefaults: { name: "", team: "", email: "" },
 };

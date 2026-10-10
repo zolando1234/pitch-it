@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseStoredCoach } from "@/lib/coach/stored";
+import { outlineInputSchema } from "@/lib/pitch/outline";
 import { analyzePitch, MAX_PITCH_AUDIO_BYTES, PitchServiceError } from "@/lib/pitch/service";
 import { AUDIENCES } from "@/lib/onboarding/plan";
 import { apiError, apiOk, handleRouteError, rateLimited, requireApiUser } from "@/lib/http/route";
@@ -78,6 +79,17 @@ export async function POST(request: Request) {
       }
     }
 
+    let outline = null;
+    const rawOutline = form.get("outline");
+    if (typeof rawOutline === "string" && rawOutline && rawOutline.length < 10_000) {
+      try {
+        const parsed = outlineInputSchema.safeParse(JSON.parse(rawOutline));
+        outline = parsed.success ? parsed.data : null;
+      } catch {
+        outline = null;
+      }
+    }
+
     const extension = baseType === "audio/mp4" || baseType === "audio/x-m4a" ? "m4a" : baseType.split("/")[1];
     const attempt = await analyzePitch(user.id, {
       audio,
@@ -88,6 +100,7 @@ export async function POST(request: Request) {
       focus: meta.data.focus,
       vision,
       coach,
+      outline,
     });
     // celý výsledok ide aj klientovi, feedback sa tak zobrazí aj bez trvalého úložiska
     return apiOk({ attemptId: attempt.id, attempt }, 201);

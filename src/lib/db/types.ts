@@ -294,6 +294,8 @@ export type PitchAttemptRow = {
   content_score: number | null;
   /** Tvar `BodySummary` (src/lib/pitch/body.ts). */
   body: Record<string, unknown> | null;
+  /** Tvar `OutlineResult` (src/lib/pitch/outline.ts): téma, osnova a zhoda s pitchom. */
+  outline: Record<string, unknown> | null;
   model: string | null;
   event_id: string | null;
   share_name: string | null;

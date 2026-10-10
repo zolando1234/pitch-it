@@ -39,4 +39,6 @@ export const RATE_LIMITS = {
   exerciseAttempt: { limit: 30, windowMs: 60 * 60 * 1000 },
   auth: { limit: 10, windowMs: 10 * 60 * 1000 },
   report: { limit: 10, windowMs: 60 * 60 * 1000 },
+  micLink: { limit: 20, windowMs: 60 * 60 * 1000 },
+  micAnswer: { limit: 10, windowMs: 10 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitRule>;

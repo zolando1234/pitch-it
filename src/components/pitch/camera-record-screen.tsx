@@ -6,8 +6,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useCoachPrefs, type CoachResult } from "@/components/coach/coach-live";
 import { preloadCoachModels } from "@/components/coach/CameraStage";
 import SessionSetup from "@/components/coach/SessionSetup";
+import { OutlineEditor, usePitchOutline } from "@/components/pitch/outline-editor";
+import { PhoneMicPanel } from "@/components/pitch/phone-mic-panel";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
 import { PitchStudio } from "@/components/pitch/pitch-studio";
+import { usePhoneMic } from "@/components/pitch/use-phone-mic";
 import { uploadPitchWithRetry, usePitchRecorder, type RecorderSetup } from "@/components/pitch/use-recorder";
 import { keepLocalSession } from "@/lib/coach/local-session";
 import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
@@ -29,6 +32,10 @@ const STEPS = [
   ["Obsahové skóre", "Problém, Riešenie, Trh, Traction a Ask"],
 ] as const;
 
+const OUTLINE_STEP = ["Obsah a zhoda s osnovou", "Rubrika pitchu, pokryté body, odbočky a zrozumiteľnosť"] as const;
+
+const FULLSCREEN_KEY = "pitchit-pitch-fullscreen";
+
 const fmtTarget = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 export function CameraRecordScreen({
@@ -48,14 +55,37 @@ export function CameraRecordScreen({
   preview?: boolean;
 }) {
   const prefs = useCoachPrefs();
+  const outlineState = usePitchOutline();
+  const { outline } = outlineState;
   const recorder = usePitchRecorder();
-  const { open, release } = recorder;
+  const { open, attach, release } = recorder;
+  const phone = usePhoneMic();
+  const phoneStream = phone.stream;
+  const usingPhone = useRef(false);
   const [phase, setPhase] = useState<Phase>("setup");
   const [error, setError] = useState<string | null>(null);
   const [k, setK] = useState(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const audioStarted = useRef(false);
   const [take, setTake] = useState(0);
+  const [fullscreen, setFullscreen] = useState(true);
+  useEffect(() => {
+    try {
+      setFullscreen(localStorage.getItem(FULLSCREEN_KEY) !== "0"); // eslint-disable-line react-hooks/set-state-in-effect -- localStorage je len na klientovi
+    } catch {
+      // predvolene na celú obrazovku
+    }
+  }, []);
+  const toggleFullscreen = () => {
+    setFullscreen((on) => {
+      try {
+        localStorage.setItem(FULLSCREEN_KEY, on ? "0" : "1");
+      } catch {
+        // voľbu si len nezapamätáme
+      }
+      return !on;
+    });
+  };
 
   const mode: TalkMode = useMemo(
     () => ({ kind: "talk", id: "pitch", title: `Pitch · ${setup.targetSeconds} s`, subtitle: AUDIENCE_LABELS[setup.audience], durationMs: setup.targetSeconds * 1000 }),
@@ -67,6 +97,18 @@ export function CameraRecordScreen({
     if (!preview) void open();
   }, [open, preview]);
 
+  // zvuk z mobilu nahradí mikrofón počítača; po odpojení mobilu sa vrátime k mikrofónu počítača
+  useEffect(() => {
+    if (preview) return;
+    if (phoneStream) {
+      usingPhone.current = true;
+      attach(phoneStream);
+    } else if (usingPhone.current) {
+      usingPhone.current = false;
+      void open();
+    }
+  }, [phoneStream, attach, open, preview]);
+
   // modely sťahujeme už počas nastavenia, aby štart nahrávania nečakal
   useEffect(() => preloadCoachModels(prefs.quality), [prefs.quality]);
 
@@ -77,11 +119,14 @@ export function CameraRecordScreen({
     return () => clearInterval(timer);
   }, [phase, error, attemptId, preview]);
 
-  const micReady = preview || recorder.media === "ready";
+  const phoneSelected = phone.state !== "idle";
+  const micReady = preview || (phoneSelected ? phone.state === "connected" : recorder.media === "ready");
   const micText =
-    preview || recorder.media === "ready"
+    preview || micReady
       ? null
-      : recorder.media === "denied"
+      : phoneSelected
+        ? "Najprv pripoj mobil cez odkaz vyššie, alebo prepni na mikrofón počítača."
+        : recorder.media === "denied"
         ? "Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a obnov stránku."
         : recorder.media === "unsupported"
           ? "Tento prehliadač nevie nahrávať. Skús Chrome, Edge alebo Safari."
@@ -89,6 +134,8 @@ export function CameraRecordScreen({
 
   const start = () => {
     if (!micReady) return;
+    // celú obrazovku smie prehliadač zapnúť len priamo po kliknutí
+    if (fullscreen && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
     setError(null);
     audioStarted.current = false;
     setPhase("live");
@@ -99,7 +146,13 @@ export function CameraRecordScreen({
   };
 
   // posledná nahrávka čaká v pamäti, kým ju server neprijme (dá sa poslať znova bez nového nahrávania)
-  const pending = useRef<{ audio: { audio: Blob; durationMs: number }; coach: StoredCoach; summary: SessionSummary; videoUrl: string | null } | null>(null);
+  const pending = useRef<{
+    audio: { audio: Blob; durationMs: number };
+    coach: StoredCoach;
+    summary: SessionSummary;
+    videoUrl: string | null;
+    outline: typeof outline;
+  } | null>(null);
   const [canResend, setCanResend] = useState(false);
 
   const send = async () => {
@@ -108,7 +161,7 @@ export function CameraRecordScreen({
     setError(null);
     setCanResend(false);
     setK(1);
-    const uploaded = await uploadPitchWithRetry(p.audio, setup, null, p.coach);
+    const uploaded = await uploadPitchWithRetry(p.audio, setup, null, p.coach, p.outline);
     if (uploaded.ok) {
       pending.current = null;
       keepLocalSession(uploaded.attemptId, { summary: p.summary, videoUrl: p.videoUrl });
@@ -132,7 +185,7 @@ export function CameraRecordScreen({
     release();
     // bez zvuku pošleme aspoň reč tela, server z nej spraví spätnú väzbu
     const audio = recording ?? { audio: new Blob([], { type: "audio/webm" }), durationMs: result.summary.durationMs };
-    pending.current = { audio, coach, summary: result.summary, videoUrl: result.recording?.url ?? null };
+    pending.current = { audio, coach, summary: result.summary, videoUrl: result.recording?.url ?? null, outline };
     await send();
   };
 
@@ -151,7 +204,10 @@ export function CameraRecordScreen({
     setAttemptId(null);
     setK(0);
     setPhase("setup");
-    if (!preview) void open();
+    if (!preview) {
+      if (phoneStream) attach(phoneStream);
+      else void open();
+    }
   };
 
   // zahodí rozbehnutý zvuk; video zahodí CameraStage pri odpojení
@@ -168,6 +224,8 @@ export function CameraRecordScreen({
         title="Tréning pitchu"
         subtitle={`Pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()} · cieľ ${fmtTarget(setup.targetSeconds)}`}
         prefs={prefs}
+        outline={outline}
+        startFull={fullscreen}
         ruleFilter={ruleFilter}
         onLive={onLive}
         onPause={recorder.pause}
@@ -202,12 +260,36 @@ export function CameraRecordScreen({
             mode={mode}
             onMode={() => {}}
             {...prefs}
+            onMic={(on) => {
+              prefs.onMic(on);
+              if (!on) phone.stop();
+            }}
             error={error}
             startLabel="Spustiť nahrávanie"
             canStart={micReady}
             finePrint="Spustením súhlasíš, že nahrávku vyhodnotí AI. Video zostáva v tvojom prehliadači."
             onStart={start}
+            micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
           >
+            <OutlineEditor {...outlineState} />
+            <button
+              type="button"
+              role="switch"
+              aria-checked={fullscreen}
+              onClick={toggleFullscreen}
+              className={`flex w-full items-center gap-4 rounded-3xl border-2 p-5 text-left transition md:p-6 ${fullscreen ? "border-signal bg-signal/10" : "border-line hover:border-faint"}`}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0 text-signal">
+                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+              </svg>
+              <span className="min-w-0 flex-1">
+                <span className="block text-lg font-bold">Spustiť na celú obrazovku</span>
+                <span className="block text-sm leading-snug text-mute">Veľký záber, ktorý uvidíš aj z diaľky. Na obrazovke bude len tlačidlo Zastaviť.</span>
+              </span>
+              <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${fullscreen ? "bg-signal" : "bg-line"}`} aria-hidden="true">
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${fullscreen ? "left-6" : "left-1"}`} />
+              </span>
+            </button>
             <p className="text-sm text-mute">
               <Link href={setupHref} className="font-bold text-signal">
                 Zmeniť publikum a dĺžku
@@ -230,7 +312,7 @@ export function CameraRecordScreen({
               Výsledok bude hotový približne za 15 sekúnd.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }} aria-live="polite">
-              {STEPS.map(([title, detail], i) => (
+              {(outline ? [...STEPS.slice(0, 3), OUTLINE_STEP] : STEPS).map(([title, detail], i) => (
                 <div
                   key={title}
                   className="stp"

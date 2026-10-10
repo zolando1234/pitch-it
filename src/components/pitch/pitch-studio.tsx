@@ -15,10 +15,11 @@ import type { FeedbackState, Status } from "@/lib/coach/pose/feedback";
 import type { Metrics } from "@/lib/coach/pose/metrics";
 import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
 import { RULE_BY_ID } from "@/lib/coach/pose/rules";
+import { keywordsOf, matchesStem as matches, normalize, stemOf, tokenize, type PitchOutline } from "@/lib/pitch/outline";
 
 /*
-  Štúdio na nahrávanie pitchu s kamerou: vľavo body pitchu (odškrtávajú sa podľa živého prepisu)
-  a poznámky, vpravo video s titulkami a pod ním reč tela naživo.
+  Štúdio na nahrávanie pitchu s kamerou: vľavo body pitchu alebo vlastná osnova (odškrtávajú sa
+  podľa živého prepisu) a poznámky, vpravo video s titulkami a pod ním reč tela naživo.
 */
 
 type Point = { id: string; title: string; keywords: string[] };
@@ -35,22 +36,6 @@ const DEFAULT_POINTS: Point[] = [
 const POINTS_KEY = "pitchit-pitch-points";
 const NOTES_KEY = "pitchit-pitch-notes";
 const CAPTION_WORDS = 14;
-
-const normalize = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-
-const tokenize = (s: string) => normalize(s).match(/[a-z0-9]+/g) ?? [];
-
-/** Kmeň kľúčového slova, aby sa chytili aj skloňované tvary (riešenie → riešenia). */
-const stemOf = (keyword: string) => {
-  const n = normalize(keyword);
-  return n.length <= 4 ? n : n.slice(0, Math.min(n.length - 2, 7));
-};
-
-const matches = (token: string, stem: string) => (stem.length <= 2 ? token === stem : token.startsWith(stem));
 
 function readLocal<T>(key: string, fallback: T): T {
   try {
@@ -128,6 +113,8 @@ export function PitchStudio({
   title,
   subtitle,
   prefs,
+  outline = null,
+  startFull = false,
   ruleFilter,
   onLive,
   onPause,
@@ -141,6 +128,10 @@ export function PitchStudio({
   title: string;
   subtitle: string;
   prefs: CoachPrefs;
+  /** téma a osnova z nastavenia; keď má body, nahradí predvolené body pitchu */
+  outline?: PitchOutline | null;
+  /** začať na celej obrazovke (prehliadač ju zapína už pri kliknutí na štart) */
+  startFull?: boolean;
   ruleFilter: (id: string) => boolean;
   onLive?: () => void;
   onPause?: () => void;
@@ -159,6 +150,7 @@ export function PitchStudio({
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const session = useCoachSession({
     mode,
+    countdown: prefs.countdown,
     onLive,
     onPause,
     onResume,
@@ -171,11 +163,42 @@ export function PitchStudio({
       setAnchor(bubbleAnchor(head, stageRef.current, bubbleRef.current, p ? p.offsetTop + p.offsetHeight : 48));
     },
   });
-  const { phase, fb, metrics, count, elapsedMs, durationMs, stageApi } = session;
+  const { phase, fb, metrics, count, waitingForPerson, elapsedMs, durationMs, stageApi } = session;
   const recording = phase === "live";
   const transcript = useLiveTranscript(recording);
 
-  const [points, setPoints] = useState<Point[]>(DEFAULT_POINTS);
+  // celá obrazovka: iba záber s trénerom a tlačidlo Zastaviť
+  const [full, setFull] = useState(startFull);
+  const enterFull = () => {
+    setFull(true);
+    // kde prehliadač nevie Fullscreen API (iPhone), stačí záber cez celé okno
+    stageRef.current?.requestFullscreen?.().catch(() => {});
+  };
+  const exitFull = () => {
+    setFull(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  };
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) setFull(false);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  const stop = () => {
+    exitFull();
+    void session.finish();
+  };
+
+  const [ownPoints, setPoints] = useState<Point[]>(DEFAULT_POINTS);
+  const outlinePoints = useMemo<Point[] | null>(
+    () => (outline?.points.length ? outline.points.map((title, i) => ({ id: `osnova-${i}`, title, keywords: keywordsOf(title) })) : null),
+    [outline],
+  );
+  const points = outlinePoints ?? ownPoints;
   const [notes, setNotes] = useState("");
   const [draft, setDraft] = useState("");
   useEffect(() => {
@@ -194,7 +217,7 @@ export function PitchStudio({
     const text = draft.trim();
     if (!text) return;
     const keywords = text.split(/\s+/).filter((w) => normalize(w).length >= 3);
-    savePoints([...points, { id: `own-${Date.now()}`, title: text, keywords: keywords.length ? keywords : [text] }]);
+    savePoints([...ownPoints, { id: `own-${Date.now()}`, title: text, keywords: keywords.length ? keywords : [text] }]);
     setDraft("");
   };
 
@@ -235,13 +258,19 @@ export function PitchStudio({
 
       <main id="obsah" className="flex flex-col gap-5 p-4 md:p-6 lg:grid lg:grid-cols-[18rem_1fr] xl:grid-cols-[20rem_1fr]">
         <div className="flex min-w-0 flex-col gap-5">
-          <section className="card" style={{ padding: "20px" }} aria-label="Body pitchu">
+          <section className="card" style={{ padding: "20px" }} aria-label={outlinePoints ? "Tvoja osnova" : "Body pitchu"}>
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="h text-base">Body pitchu</h2>
+              <h2 className="h text-base">{outlinePoints ? "Tvoja osnova" : "Body pitchu"}</h2>
               <span className="text-xs text-mute">
                 pokrytých {covered.size} z {points.length}
               </span>
             </div>
+            {outline?.topic ? (
+              <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-line bg-black/20 px-3.5 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-mute">Téma</p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">{outline.topic}</p>
+              </div>
+            ) : null}
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-violet to-signal transition-[width] duration-500"
@@ -275,7 +304,7 @@ export function PitchStudio({
                     {p.id.startsWith("own-") && !now ? (
                       <button
                         type="button"
-                        onClick={() => savePoints(points.filter((x) => x.id !== p.id))}
+                        onClick={() => savePoints(ownPoints.filter((x) => x.id !== p.id))}
                         className="shrink-0 rounded-full px-2 text-mute opacity-0 transition group-hover:opacity-100 focus:opacity-100"
                         aria-label={`Odstrániť bod ${p.title}`}
                       >
@@ -286,6 +315,9 @@ export function PitchStudio({
                 );
               })}
             </ul>
+            {outlinePoints ? (
+              <p className="mt-4 text-xs text-faint">Odškrtávanie je orientačné. Presnú zhodu s osnovou a zrozumiteľnosť vyhodnotíme po nahrávaní.</p>
+            ) : (
             <form
               className="mt-4"
               onSubmit={(e) => {
@@ -309,6 +341,7 @@ export function PitchStudio({
                 </button>
               </div>
             </form>
+            )}
           </section>
 
           <section className="card" style={{ padding: "20px" }}>
@@ -331,7 +364,14 @@ export function PitchStudio({
 
         <div className="order-first flex min-w-0 flex-col gap-5 lg:order-none">
           <section className="card" style={{ padding: "12px" }}>
-            <div ref={stageRef} className="relative aspect-video overflow-hidden rounded-2xl lg:aspect-auto lg:h-[calc(100dvh-210px)] lg:min-h-[440px] bg-[#17142e]">
+            <div
+              ref={stageRef}
+              className={
+                full
+                  ? "fixed inset-0 z-50 h-dvh w-full overflow-hidden bg-[#17142e]"
+                  : "relative aspect-video overflow-hidden rounded-2xl lg:aspect-auto lg:h-[calc(100dvh-210px)] lg:min-h-[440px] bg-[#17142e]"
+              }
+            >
               <div className="absolute inset-0">
                 <CameraStage
                   ref={stageApi}
@@ -354,9 +394,34 @@ export function PitchStudio({
                     {durationMs !== null ? <span className="text-white/60"> / {fmtClock(durationMs)}</span> : null}
                   </span>
                 </Pill>
-                <span className="hidden sm:block">
-                  <Pill>{phase === "loading" ? "Zapínam kameru…" : "Kamera a mikrofón zapnuté"}</Pill>
-                </span>
+                {full ? (
+                  <button
+                    type="button"
+                    onClick={exitFull}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80"
+                    aria-label="Zmenšiť záber"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                      <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+                    </svg>
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <span className="hidden sm:block">
+                      <Pill>{phase === "loading" ? "Zapínam kameru…" : "Kamera a mikrofón zapnuté"}</Pill>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={enterFull}
+                      className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur hover:bg-black/80"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                        <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                      </svg>
+                      Celá obrazovka
+                    </button>
+                  </span>
+                )}
               </div>
 
               {prompterText ? (
@@ -381,11 +446,14 @@ export function PitchStudio({
                 </div>
               ) : null}
               {phase === "countdown" ? (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/50 px-6 text-center text-white">
-                  <p className="text-sm text-white/70">Pozeraj sa rovno do kamery</p>
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/40 px-6 text-center text-white">
+                  <p className={waitingForPerson ? "text-2xl font-bold" : "text-sm text-white/70"}>
+                    {waitingForPerson ? "Postav sa do záberu" : "Pozeraj sa rovno do kamery"}
+                  </p>
+                  {waitingForPerson ? <p className="mt-2 text-sm text-white/70">Odpočet pokračuje, keď ťa kamera uvidí.</p> : null}
                   <p
                     key={count}
-                    className="animate-pop h text-[7rem] leading-none"
+                    className={`animate-pop h leading-none transition-opacity ${full ? "text-[12rem]" : "text-[7rem]"} ${waitingForPerson ? "opacity-30" : ""}`}
                     style={{
                       background: "linear-gradient(135deg,#D2FF6B,var(--color-violet))",
                       WebkitBackgroundClip: "text",
@@ -399,7 +467,10 @@ export function PitchStudio({
               ) : null}
 
               {phase === "live" || phase === "paused" ? (
-                <div className="absolute inset-x-3 bottom-3 z-20 rounded-xl bg-black/75 px-4 py-3 text-sm text-white backdrop-blur" aria-live="off">
+                <div
+                  className={`absolute inset-x-3 z-20 rounded-xl bg-black/75 px-4 py-3 text-sm text-white backdrop-blur ${full ? "bottom-24 mx-auto max-w-3xl" : "bottom-3"}`}
+                  aria-live="off"
+                >
                   {!transcript.supported ? (
                     <span className="text-white/60">Živé titulky tento prehliadač nepodporuje. Body si odškrtni po nahrávke, prepis dostaneš v reporte.</span>
                   ) : caption.length ? (
@@ -418,6 +489,20 @@ export function PitchStudio({
                   ) : (
                     <span className="text-white/60">{phase === "paused" ? "Pozastavené. Pokračuj, keď budeš pripravený." : "Začni hovoriť, titulky sa objavia tu."}</span>
                   )}
+                </div>
+              ) : null}
+
+              {full ? (
+                <div className="absolute inset-x-0 bottom-6 z-30 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={stop}
+                    disabled={phase !== "live" && phase !== "paused"}
+                    className="flex min-h-[56px] items-center gap-3 rounded-full bg-danger px-8 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:opacity-40"
+                  >
+                    <span className="h-4 w-4 rounded-[3px] bg-white" aria-hidden="true" />
+                    Zastaviť
+                  </button>
                 </div>
               ) : null}
             </div>

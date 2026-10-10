@@ -6,7 +6,8 @@ import { Fragment, useEffect, useState, useTransition, type CSSProperties } from
 import { CoachFeedbackCard } from "@/components/coach/coach-feedback-card";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
 import { sharePitch } from "@/lib/pitch/actions";
-import { SECTION_LABELS, sectionOrder, type BodyTone, type FeedbackData, type ScoreTone } from "@/lib/pitch/feedback";
+import { SECTION_LABELS, sectionOrder, type BodyTone, type FeedbackData, type OutlineFeedback, type ScoreTone } from "@/lib/pitch/feedback";
+import type { PointStatus } from "@/lib/pitch/outline";
 
 /*
   Feedback 1:1 podľa dizajnu PitchIt („3 · Feedback“). Čísla nabehnú za 2,6 s (bez animácie
@@ -63,6 +64,152 @@ function Face({ tone }: { tone: BodyTone }) {
         <path d="M19 30a3.4 3.4 0 106.8 0a3.4 3.4 0 10-6.8 0Z" fill="#141414" stroke="#141414" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
       )}
     </svg>
+  );
+}
+
+const POINT_STATUS: Record<PointStatus, { label: string; color: string }> = {
+  covered: { label: "Odprezentované", color: "var(--color-accent)" },
+  partial: { label: "Len spomenuté", color: "var(--color-marker)" },
+  missing: { label: "Chýbalo", color: "var(--color-coral)" },
+};
+
+function StatusIcon({ status }: { status: PointStatus }) {
+  const color = POINT_STATUS[status].color;
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-label={POINT_STATUS[status].label} style={{ flex: "0 0 22px", marginTop: "2px" }}>
+      {status === "covered" ? (
+        <>
+          <circle cx="11" cy="11" r="11" fill={color} />
+          <path d="M6 11.5L9.5 15L16 8" fill="none" stroke="#141414" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : status === "partial" ? (
+        <>
+          <circle cx="11" cy="11" r="9.8" fill="none" stroke={color} strokeWidth="2.4" />
+          <path d="M11 1.2A9.8 9.8 0 0 1 11 20.8Z" fill={color} />
+        </>
+      ) : (
+        <>
+          <circle cx="11" cy="11" r="9.8" fill="none" stroke={color} strokeWidth="2.4" />
+          <path d="M7.5 7.5L14.5 14.5M14.5 7.5L7.5 14.5" stroke={color} strokeWidth="2.4" strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** Zhoda s témou a osnovou, ktorú si founder uložil pred nahrávaním. */
+function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress: (delay: number, dur: number) => number }) {
+  const m = outline.match;
+  const q = progress(200, 1500);
+  const stat = (label: string, value: string, color?: string) => (
+    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "var(--color-panel)", border: "1px solid var(--color-line)" }}>
+      <div className="muted" style={{ fontSize: "13px" }}>
+        {label}
+      </div>
+      <div className="h" style={{ fontSize: "20px", marginTop: "4px", color }}>
+        {value}
+      </div>
+    </div>
+  );
+  return (
+    <section className="card rv" style={{ animationDelay: "50ms", order: -1 }} aria-labelledby="osnova-zhoda">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
+        <h2 id="osnova-zhoda" className="h" style={{ fontSize: "26px" }}>
+          Zhoda s osnovou
+        </h2>
+      </div>
+      {outline.topic ? (
+        <div style={{ marginTop: "14px", padding: "16px 18px", borderRadius: "14px", background: "var(--color-panel)", border: "1px solid var(--color-line)" }}>
+          <div className="muted" style={{ fontSize: "13px", fontWeight: 700 }}>
+            Tvoja téma, podľa ktorej sme hodnotili
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: "16px", lineHeight: "1.55", whiteSpace: "pre-line" }}>{outline.topic}</p>
+        </div>
+      ) : null}
+
+      {!m ? (
+        <p className="muted" style={{ margin: "16px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
+          V nahrávke sme nezachytili reč, preto sme pitch s osnovou nevedeli porovnať. Pri ďalšom pokuse hovor nahlas a bližšie k mikrofónu.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", marginTop: "18px" }}>
+            <div style={{ flex: "0 1 300px" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                <span className="big" style={{ color: SCORE_COLOR[m.tone].text, whiteSpace: "nowrap" }}>
+                  {m.pct !== null ? `${Math.round(m.pct * q)} %` : "–"}
+                </span>
+                <span className="muted">{outline.points.length ? "osnovy si odprezentoval" : "pitchu sa držalo témy"}</span>
+              </div>
+              <div className="sc" style={{ margin: "14px 0 0" }}>
+                <i style={{ width: `${Math.round((m.pct ?? 0) * q)}%`, background: SCORE_COLOR[m.tone].bar }} />
+              </div>
+            </div>
+            <div style={{ flex: "1 1 420px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "10px" }}>
+              {m.onTopicPct !== null ? stat("Držal si sa témy", `${m.onTopicPct} % pitchu`, SCORE_COLOR[m.onTopicPct >= 70 ? "good" : m.onTopicPct >= 45 ? "mid" : "low"].text) : null}
+              {m.order ? stat("Poradie", m.order.label, SCORE_COLOR[m.order.tone].text) : null}
+              {m.clarity ? stat("Zrozumiteľnosť", `${m.clarity.score} / 10`, SCORE_COLOR[m.clarity.tone].text) : null}
+            </div>
+          </div>
+
+          {m.takeaway ? (
+            <div style={{ marginTop: "22px", padding: "18px 20px", borderRadius: "16px", background: "var(--pi-sel)", border: "1px solid var(--color-line)" }}>
+              <div style={{ fontWeight: 700, marginBottom: "6px" }}>Čo si poslucháč odnesie</div>
+              <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.55" }}>{m.takeaway}</p>
+            </div>
+          ) : null}
+
+          {m.points.length ? (
+            <div style={{ marginTop: "18px" }}>
+              {m.points.map((point, i) => (
+                <div key={i} style={{ display: "flex", gap: "14px", padding: "16px 0", borderTop: "1px solid var(--color-line)" }}>
+                  <StatusIcon status={point.status} />
+                  <div style={{ flex: "1", minWidth: "0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
+                      <b style={{ fontSize: "16px" }}>{point.text}</b>
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: POINT_STATUS[point.status].color }}>
+                        {POINT_STATUS[point.status].label}
+                        {point.clarity !== null && point.status !== "missing" ? ` · zrozumiteľnosť ${point.clarity}/10` : ""}
+                      </span>
+                    </div>
+                    {point.note ? (
+                      <div className="muted" style={{ fontSize: "14px", lineHeight: "1.55", marginTop: "4px" }}>
+                        {point.note}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {m.digressions.length ? (
+            <div style={{ marginTop: "16px" }}>
+              <div style={{ fontWeight: 700, marginBottom: "8px" }}>Odbočky mimo témy</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {m.digressions.map((d) => (
+                  <span key={d} className="chip">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {m.advice ? (
+            <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
+              <b>Na ďalší pokus: </b>
+              {m.advice}
+            </p>
+          ) : null}
+          {m.byKeywords ? (
+            <p className="muted" style={{ margin: "14px 0 0", fontSize: "13px" }}>
+              AI hodnotenie tentoraz nebolo dostupné, body sme porovnali len podľa kľúčových slov. Zrozumiteľnosť a odbočky preto chýbajú.
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -148,6 +295,8 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {data.outline ? <OutlineCard outline={data.outline} progress={p} /> : null}
+
           <section className="card rv" style={{ animationDelay: "100ms", order: o.tempo }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "32px" }}>
               <div style={{ flex: "1 1 440px" }}>

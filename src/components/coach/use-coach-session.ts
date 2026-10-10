@@ -13,7 +13,6 @@ import { SessionRecorder, type SessionSummary } from "@/lib/coach/pose/session";
 */
 
 const UI_INTERVAL_MS = 100;
-const COUNTDOWN = 2;
 
 export type CoachResult = {
   summary: SessionSummary;
@@ -21,6 +20,13 @@ export type CoachResult = {
   /** nahrávka kamery pre klipy chýb (len v pamäti prehliadača) */
   recording: Recording | null;
 };
+
+/** Dĺžka odpočtu pred nahrávaním v sekundách. */
+export const COUNTDOWN_OPTIONS = [5, 10, 20, 30] as const;
+export type CountdownSec = (typeof COUNTDOWN_OPTIONS)[number];
+
+/** Človek je v zábere, keď ho kamera videla za posledných toľko ms. */
+const PRESENCE_MS = 600;
 
 export type CoachPhase = "loading" | "countdown" | "live" | "paused";
 
@@ -36,6 +42,7 @@ export const INITIAL_FB: FeedbackState = {
 
 export function useCoachSession({
   mode,
+  countdown = 5,
   onLive,
   onPause,
   onResume,
@@ -44,6 +51,7 @@ export function useCoachSession({
   onUi,
 }: {
   mode: SessionMode;
+  countdown?: CountdownSec;
   /** volá sa, keď po odpočte začne nahrávanie */
   onLive?: () => void;
   onPause?: () => void;
@@ -56,7 +64,10 @@ export function useCoachSession({
   const [phase, setPhase] = useState<CoachPhase>("loading");
   const [fb, setFb] = useState<FeedbackState>(INITIAL_FB);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [count, setCount] = useState(COUNTDOWN);
+  const [count, setCount] = useState<number>(countdown);
+  /** odpočet stojí, kým sa človek nepostaví do záberu */
+  const [waitingForPerson, setWaitingForPerson] = useState(false);
+  const lastPersonAt = useRef(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [drillProgress, setDrillProgress] = useState<DrillProgress | null>(null);
 
@@ -84,6 +95,7 @@ export function useCoachSession({
   const onFrame = useCallback((f: FeedbackState, m: Metrics | null, t: number) => {
     const dt = lastT.current ? Math.min(t - lastT.current, 250) : 0;
     lastT.current = t;
+    if (m) lastPersonAt.current = performance.now();
     if (phaseRef.current === "live") {
       recorder.current?.record(t, f, m, () => stageApi.current?.snapshot() ?? null);
       drillTracker.current?.update(m, f, dt);
@@ -98,9 +110,9 @@ export function useCoachSession({
   }, []);
 
   const onReady = useCallback(() => {
-    setCount(COUNTDOWN);
+    setCount(countdown);
     setPhase("countdown");
-  }, []);
+  }, [countdown]);
 
   const onStageError = useCallback((msg: string) => callbacks.current.onError(msg), []);
 
@@ -135,26 +147,41 @@ export function useCoachSession({
     callbacks.current.onResume?.();
   }, []);
 
-  // odpočet a potom štart nahrávania
+  // odpočet beží, len keď je človek v zábere; potom štart nahrávania a hodnotenia
   useEffect(() => {
     if (phase !== "countdown") return;
-    const id = setTimeout(
-      () => {
-        if (count > 0) return setCount(count - 1);
-        recorder.current = new SessionRecorder();
-        recorder.current.begin(lastT.current || performance.now());
-        drillTracker.current = drill ? new DrillTracker(drill) : null;
-        setDrillProgress(drillTracker.current?.progress() ?? null);
-        liveStartedAt.current = performance.now();
-        stageApi.current?.startRecording();
-        setElapsedMs(0);
-        setPhase("live");
-        callbacks.current.onLive?.();
-      },
-      count > 0 ? 800 : 300,
-    );
-    return () => clearTimeout(id);
-  }, [phase, count, drill]);
+    let left = countdown;
+    // počiatočnú hodnotu nastavil onReady
+    let next = performance.now() + 1000;
+    const id = setInterval(() => {
+      const now = performance.now();
+      if (now - lastPersonAt.current > PRESENCE_MS) {
+        // kým človek nie je na mieste, sekunda sa nezapočíta
+        next = now + 1000;
+        setWaitingForPerson(true);
+        return;
+      }
+      setWaitingForPerson(false);
+      if (now < next) return;
+      left -= 1;
+      next = now + (left > 0 ? 1000 : 300);
+      if (left >= 0) {
+        setCount(left);
+        return;
+      }
+      clearInterval(id);
+      recorder.current = new SessionRecorder();
+      recorder.current.begin(lastT.current || now);
+      drillTracker.current = drill ? new DrillTracker(drill) : null;
+      setDrillProgress(drillTracker.current?.progress() ?? null);
+      liveStartedAt.current = now;
+      stageApi.current?.startRecording();
+      setElapsedMs(0);
+      setPhase("live");
+      callbacks.current.onLive?.();
+    }, 100);
+    return () => clearInterval(id);
+  }, [phase, countdown, drill]);
 
   // časomiera; pri režime s limitom sa nahrávanie na konci samo ukončí
   useEffect(() => {
@@ -172,6 +199,7 @@ export function useCoachSession({
     fb,
     metrics,
     count,
+    waitingForPerson,
     elapsedMs,
     durationMs,
     drill,

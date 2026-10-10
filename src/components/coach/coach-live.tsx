@@ -9,7 +9,7 @@ import LivePanel from "@/components/coach/LivePanel";
 import type { PrompterSetting } from "@/components/coach/SessionSetup";
 import StageMap from "@/components/coach/StageMap";
 import Teleprompter from "@/components/coach/Teleprompter";
-import { fmtClock, useCoachSession, type CoachResult } from "@/components/coach/use-coach-session";
+import { COUNTDOWN_OPTIONS, fmtClock, useCoachSession, type CoachResult, type CountdownSec } from "@/components/coach/use-coach-session";
 import { SCRIPTS, type SessionMode } from "@/lib/coach/modes";
 import type { MicHand } from "@/lib/coach/pose/metrics";
 import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
@@ -22,6 +22,7 @@ import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
 const MIC_KEY = "pitchit-coach-mic";
 const QUALITY_KEY = "pitchit-coach-quality";
 const MIC_HAND_KEY = "pitchit-coach-mic-hand";
+const COUNTDOWN_KEY = "pitchit-coach-countdown";
 /** odhad šírky bubliny, aby sme ju vedeli udržať v zábere */
 const BUBBLE_MAX_W = 900;
 
@@ -61,6 +62,7 @@ export function useCoachPrefs() {
   const [quality, setQuality] = useState<TrackingQuality>("balanced");
   const [micHand, setMicHand] = useState<MicHand>("auto");
   const [prompter, setPrompter] = useState<PrompterSetting>({ scriptId: null, customText: "", wpm: 150 });
+  const [countdown, setCountdown] = useState<CountdownSec>(5);
 
   useEffect(() => {
     const q = readPref(QUALITY_KEY);
@@ -69,6 +71,8 @@ export function useCoachPrefs() {
     setMicMode(readPref(MIC_KEY) === "1");
     setQuality(q === "fast" || q === "precise" ? q : "balanced");
     setMicHand(h === "left" || h === "right" ? h : "auto");
+    const c = Number(readPref(COUNTDOWN_KEY));
+    setCountdown(COUNTDOWN_OPTIONS.find((o) => o === c) ?? 5);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
@@ -96,6 +100,11 @@ export function useCoachPrefs() {
     prompter,
     onPrompter: setPrompter,
     prompterText,
+    countdown,
+    onCountdown: (sec: CountdownSec) => {
+      setCountdown(sec);
+      writePref(COUNTDOWN_KEY, String(sec));
+    },
   };
 }
 
@@ -131,9 +140,10 @@ export function CoachLive({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const prompterRef = useRef<HTMLDivElement>(null);
 
-  const { phase, fb, metrics, count, elapsedMs, durationMs, drill, drillProgress, stageApi, onFrame, onReady, onStageError, finish } =
+  const { phase, fb, metrics, count, waitingForPerson, elapsedMs, durationMs, drill, drillProgress, stageApi, onFrame, onReady, onStageError, finish } =
     useCoachSession({
       mode,
+      countdown: prefs.countdown,
       onLive,
       onFinish,
       onError,
@@ -232,10 +242,12 @@ export function CoachLive({
           {phase === "countdown" && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-ink/50 px-6 text-center">
               <p className="text-sm uppercase tracking-[0.4em] text-mute">Začíname o</p>
-              <p className="mt-2 text-mute">Pozeraj sa rovno do kamery, nastavujeme polohu hlavy</p>
+              <p className={waitingForPerson ? "mt-2 text-2xl font-bold text-paper" : "mt-2 text-mute"}>
+                {waitingForPerson ? "Postav sa do záberu, odpočet pokračuje, keď ťa kamera uvidí" : "Pozeraj sa rovno do kamery, nastavujeme polohu hlavy"}
+              </p>
               <p
                 key={count}
-                className="animate-pop h text-[10rem] leading-none"
+                className={`animate-pop h text-[10rem] leading-none transition-opacity ${waitingForPerson ? "opacity-30" : ""}`}
                 style={{
                   background: "linear-gradient(135deg,#D2FF6B,var(--color-violet))",
                   WebkitBackgroundClip: "text",

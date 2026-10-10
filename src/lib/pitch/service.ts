@@ -14,6 +14,7 @@ import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
 import { buildContentPrompt, CONTENT_SYSTEM, contentScoreSchema, overallScore } from "@/lib/pitch/content";
 import { buildMetrics } from "@/lib/pitch/metrics";
+import { buildOutlinePrompt, OUTLINE_SYSTEM, outlineByKeywords, outlineCheckSchema, outlineFromCheck, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
 
 export class PitchServiceError extends Error {
   constructor(
@@ -38,6 +39,8 @@ export type PitchInput = {
   focus: PitchAttemptRow["focus"];
   vision: VisionSample[] | null;
   coach?: StoredCoach | null;
+  /** téma a osnova uložená pred nahrávaním */
+  outline?: PitchOutline | null;
 };
 
 /**
@@ -97,7 +100,12 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     let score: number | null = null;
     let model: string | null = null;
     const llm = getLlmProvider();
-    if (llm && transcript) {
+    const outline = input.outline ?? null;
+    // bez prepisu sa osnova porovnať nedá, uložíme ju aspoň na zobrazenie
+    let outlineResult: OutlineResult | null = outline ? { version: 1, ...outline, check: null } : null;
+
+    const contentTask = async () => {
+      if (!llm || !transcript) return;
       try {
         const profile = await getProfile(userId);
         const result = await llm.generateStructured({
@@ -111,6 +119,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
                 audience: input.audience,
                 targetSeconds: input.targetSeconds,
                 notes: profile?.pitch_notes ?? null,
+                topic: outline?.topic || null,
+                outline: outline?.points ?? null,
               }),
             },
           ],
@@ -126,7 +136,30 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       } catch (error) {
         console.error("[pitch] obsahové skóre zlyhalo:", error instanceof LlmError ? error.code : error);
       }
-    }
+    };
+
+    const outlineTask = async () => {
+      if (!outline || !transcript) return;
+      // bez AI aspoň zhoda kľúčových slov
+      outlineResult = outlineByKeywords(outline, transcript.text);
+      if (!llm) return;
+      try {
+        const result = await llm.generateStructured({
+          purpose: "pitch_outline",
+          system: OUTLINE_SYSTEM,
+          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience }) }],
+          schema: outlineCheckSchema,
+          effort: "low",
+          maxTokens: 3_000,
+          speed: "interactive",
+        });
+        outlineResult = outlineFromCheck(outline, result.data, transcript.text);
+      } catch (error) {
+        console.error("[pitch] porovnanie s osnovou zlyhalo:", error instanceof LlmError ? error.code : error);
+      }
+    };
+
+    await Promise.all([contentTask(), outlineTask()]);
 
     const patch = {
       status: "ready" as const,
@@ -135,6 +168,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       content,
       content_score: score,
       body,
+      outline: outlineResult as Record<string, unknown> | null,
       model,
     };
     await updatePitchAttempt(attempt.id, patch);
@@ -143,6 +177,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       target: input.targetSeconds,
       camera: Boolean(body),
       content: Boolean(content),
+      outline: Boolean(outline),
     });
     return { ...attempt, ...patch } as PitchAttemptRow;
   } catch (error) {

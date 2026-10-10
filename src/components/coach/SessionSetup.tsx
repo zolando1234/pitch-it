@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SCRIPTS, type SessionMode } from "@/lib/coach/modes";
 import type { TrackingQuality } from "./CameraStage";
 import type { MicHand } from "@/lib/coach/pose/metrics";
+import { COUNTDOWN_OPTIONS, type CountdownSec } from "./use-coach-session";
 
 export type PrompterSetting = {
   /** null = bez telepromptra, "custom" = vlastný text */
@@ -31,6 +32,9 @@ type Props = {
   onPrompter: (p: PrompterSetting) => void;
   quality: TrackingQuality;
   onQuality: (q: TrackingQuality) => void;
+  /** odpočet pred štartom nahrávania */
+  countdown?: CountdownSec;
+  onCountdown?: (sec: CountdownSec) => void;
   error: string | null;
   startLabel?: string;
   canStart?: boolean;
@@ -38,6 +42,8 @@ type Props = {
   finePrint?: string;
   /** doplnok nad tlačidlom štartu (napr. stav mikrofónu) */
   children?: React.ReactNode;
+  /** výber zdroja zvuku, ukáže sa hneď po voľbe „Mikrofón v ruke“ */
+  micSource?: React.ReactNode;
   onStart: () => void;
 };
 
@@ -102,11 +108,14 @@ export default function SessionSetup({
   onPrompter,
   quality,
   onQuality,
+  countdown,
+  onCountdown,
   error,
   startLabel,
   canStart: canStartOuter = true,
   finePrint = "Video sa spracúva iba v tvojom prehliadači a nikam sa neodosiela.",
   children,
+  micSource,
   onStart,
 }: Props) {
   const drill = mode.kind === "drill" ? mode : null;
@@ -160,25 +169,11 @@ export default function SessionSetup({
         <ul className="grid gap-2 text-mute sm:grid-cols-3">
           <li>• Postav sa 2 až 3 m od kamery.</li>
           <li>• Kamera vidí trup, ideálne po kolená.</li>
-          <li>• Pri odpočte sa pozri do kamery.</li>
+          <li>• Odpočet beží, až keď ťa kamera vidí. Hodnotíme až po ňom.</li>
         </ul>
       </section>
-      <div className="flex flex-col items-start gap-3">
-        {children}
-        {error && <p className="rounded-xl bg-danger/15 p-4 text-coral">{error}</p>}
-        <button
-          type="button"
-          onClick={onStart}
-          disabled={!canStart}
-          className="rounded-full bg-signal px-10 py-5 text-xl font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40"
-        >
-          {startLabel ?? (drill ? "Spustiť cvičenie" : "Spustiť")} →
-        </button>
-        <p className="text-sm text-faint">{finePrint}</p>
-      </div>
-
-      {/* Voľby a tipy sú zbalené; s predvolenými hodnotami sa dá rovno začať. */}
-      <details className="group">
+      {/* Voľby sú hneď viditeľné; s predvolenými hodnotami sa dá rovno začať. */}
+      <details className="group" open>
         <summary className="inline-flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-mute hover:text-paper [&::-webkit-details-marker]:hidden">
           Nastavenia
           <span className="transition group-open:rotate-180">▾</span>
@@ -205,6 +200,7 @@ export default function SessionSetup({
 
             {micMode && (
               <>
+                {micSource ? <div className="mt-6">{micSource}</div> : null}
                 <p className="mb-3 mt-6 text-xs font-bold uppercase tracking-widest text-faint">V ktorej ruke držíš mikrofón?</p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Card
@@ -304,6 +300,39 @@ export default function SessionSetup({
           </section>
         </div>
       </details>
+
+      <div className="flex flex-col items-start gap-3">
+        {children}
+        {countdown && onCountdown ? (
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Odpočet pred nahrávaním">
+            <span className="mr-1 text-sm font-bold text-mute">Odpočet</span>
+            {COUNTDOWN_OPTIONS.map((sec) => (
+              <button
+                key={sec}
+                type="button"
+                role="radio"
+                aria-checked={countdown === sec}
+                onClick={() => onCountdown(sec)}
+                className={`whitespace-nowrap rounded-full border-2 px-4 py-1.5 text-sm font-bold transition ${
+                  countdown === sec ? "border-signal bg-signal/10 text-paper" : "border-line text-mute hover:border-faint"
+                }`}
+              >
+                {sec} s
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {error && <p className="rounded-xl bg-danger/15 p-4 text-coral">{error}</p>}
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={!canStart}
+          className="rounded-full bg-signal px-10 py-5 text-xl font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40"
+        >
+          {startLabel ?? (drill ? "Spustiť cvičenie" : "Spustiť")} →
+        </button>
+        <p className="text-sm text-faint">{finePrint}</p>
+      </div>
     </div>
   );
 }
