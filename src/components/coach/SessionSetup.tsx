@@ -44,6 +44,8 @@ type Props = {
   children?: React.ReactNode;
   /** výber zdroja zvuku, ukáže sa hneď po voľbe „Mikrofón v ruke“ */
   micSource?: React.ReactNode;
+  /** prvé rozhodnutie hneď pod nadpisom (napr. kamera alebo nahraté video) */
+  top?: React.ReactNode;
   onStart: () => void;
 };
 
@@ -116,6 +118,7 @@ export default function SessionSetup({
   finePrint = "Video sa spracúva iba v tvojom prehliadači a nikam sa neodosiela.",
   children,
   micSource,
+  top,
   onStart,
 }: Props) {
   const drill = mode.kind === "drill" ? mode : null;
@@ -133,6 +136,8 @@ export default function SessionSetup({
         <h1 className="h text-4xl leading-tight md:text-6xl">{heading}</h1>
         <p className="max-w-2xl text-lg text-mute">{lead}</p>
       </div>
+
+      {top}
 
       {modes ? (
         <section>

@@ -337,9 +337,9 @@ export function CameraRecordScreen({
             finePrint="Spustením súhlasíš, že nahrávku vyhodnotí AI. Video zostáva v tvojom prehliadači."
             onStart={start}
             micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
+            top={<VideoSourcePicker file={videoFile} onFile={setVideoFile} useVideo={videoMode} onUseVideo={setVideoMode} maxSeconds={maxVideoSeconds} />}
           >
             {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance)}</p> : null}
-            <VideoSourcePicker file={videoFile} onFile={setVideoFile} useVideo={videoMode} onUseVideo={setVideoMode} maxSeconds={maxVideoSeconds} />
             <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref={preview ? setupHref : "/app/nastavenia#plan"} />
             <LanguagePicker {...languageState} />
             <OutlineEditor {...outlineState} />
