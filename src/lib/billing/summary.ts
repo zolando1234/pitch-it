@@ -1,4 +1,4 @@
-import { balanceLabel, formatEur, PITCH_PACK, type PitchBalance } from "@/lib/billing/pitch-pack";
+import { balanceLabel, formatEur, PITCH_PACK, PITCH_PROMO, type PitchBalance } from "@/lib/billing/pitch-pack";
 import { remainingRealtimeSeconds, type Plan, type UsageTotals } from "@/lib/billing/plans";
 import { formatDate, plural } from "@/lib/format";
 
@@ -17,7 +17,7 @@ export type PlanSummary = {
 export function pitchSummary(balance: PitchBalance): PlanSummary {
   const buy = { label: `Kúpiť ${PITCH_PACK.credits} pitchov`, href: PLAN_HREF };
   if (!balance.canPitch) {
-    return { title: "Pitche sú minuté", detail: `Balík ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)}`, action: { ...buy, emphasis: "primary" } };
+    return { title: "Pitche sú minuté", detail: `Balík ${PITCH_PACK.credits} pitchov: ${formatEur(PITCH_PROMO.priceCents)} s kódom ${PITCH_PROMO.code} (inak ${formatEur(PITCH_PACK.priceCents)})`, action: { ...buy, emphasis: "primary" } };
   }
   return { title: "Tvoje pitche", detail: balanceLabel(balance), action: { ...buy, emphasis: "secondary" } };
 }

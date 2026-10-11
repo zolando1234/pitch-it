@@ -13,6 +13,9 @@ export const PITCH_PACK = {
   name: "PitchIt: 10 pitchov",
 } as const;
 
+/** Zľavový kód zo Startup Weekendu Žilina (kupón v Stripe: −18,99 €). Zákazník ho zadá v Stripe Checkoute. */
+export const PITCH_PROMO = { code: "SWZA", priceCents: 100 } as const;
+
 export const formatEur = (cents: number) => `${(cents / 100).toFixed(2).replace(".", ",")} €`;
 
 export type PitchWallet = { free_used: number; credits: number };

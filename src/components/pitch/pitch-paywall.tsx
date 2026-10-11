@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FREE_PITCHES, PITCH_PACK, formatEur, type PitchBalance } from "@/lib/billing/pitch-pack";
+import { FREE_PITCHES, PITCH_PACK, PITCH_PROMO, formatEur, type PitchBalance } from "@/lib/billing/pitch-pack";
 
 export { balanceLabel } from "@/lib/billing/pitch-pack";
 
@@ -52,6 +52,15 @@ export function usePitchBalance(initial: PitchBalance | null, waitingForPayment:
   return { balance, paymentsEnabled, confirming, reload };
 }
 
+/** Cena v tlačidle: pôvodná prečiarknutá a cena s kódom. */
+function PromoPrice() {
+  return (
+    <span className="whitespace-nowrap">
+      <s className="opacity-60">{formatEur(PITCH_PACK.priceCents)}</s> {formatEur(PITCH_PROMO.priceCents)} s kódom {PITCH_PROMO.code}
+    </span>
+  );
+}
+
 /** Otvorí Stripe Checkout pre balík pitchov. */
 export function useBuyPitchPack() {
   const [pending, setPending] = useState(false);
@@ -86,9 +95,17 @@ export function BuyPitchPackButton() {
         disabled={pending}
         className="rounded-full bg-signal px-7 py-3.5 text-base font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-50"
       >
-        {pending ? "Otváram platbu…" : `Kúpiť ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)}`}
+        {pending ? (
+          "Otváram platbu…"
+        ) : (
+          <>
+            Kúpiť {PITCH_PACK.credits} pitchov · <PromoPrice />
+          </>
+        )}
       </button>
-      <p className="mt-2 text-[13px] text-faint">Jednorazovo, bez predplatného. Zľavový kód zadáš pri platbe.</p>
+      <p className="mt-2 text-[13px] text-faint">
+        Jednorazovo, bez predplatného. Kód <b>{PITCH_PROMO.code}</b> zadaj pri platbe do poľa „Pridať propagačný kód“.
+      </p>
       {error ? (
         <p role="alert" className="mt-2 text-[14px] text-coral">
           {error}
@@ -121,8 +138,12 @@ export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled:
       </p>
       <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-4">
         <div>
-          <p className="h text-5xl">{formatEur(PITCH_PACK.priceCents)}</p>
-          <p className="mt-1 text-sm text-mute">jednorazovo za {PITCH_PACK.credits} pitchov, bez predplatného</p>
+          <p className="h text-5xl">
+            <s className="text-3xl text-mute">{formatEur(PITCH_PACK.priceCents)}</s> {formatEur(PITCH_PROMO.priceCents)}
+          </p>
+          <p className="mt-1 text-sm text-mute">
+            s kódom <b className="text-paper">{PITCH_PROMO.code}</b> · jednorazovo za {PITCH_PACK.credits} pitchov, bez predplatného
+          </p>
         </div>
         <button
           type="button"
@@ -130,10 +151,18 @@ export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled:
           disabled={pending || !paymentsEnabled}
           className="rounded-full bg-signal px-10 py-5 text-xl font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40"
         >
-          {pending ? "Otváram platbu…" : `Kúpiť ${PITCH_PACK.credits} pitchov →`}
+          {pending ? (
+            "Otváram platbu…"
+          ) : (
+            <>
+              Kúpiť {PITCH_PACK.credits} pitchov · <PromoPrice /> →
+            </>
+          )}
         </button>
       </div>
-      <p className="mt-4 text-sm text-faint">Máš zľavový kód? Zadáš ho v ďalšom kroku pri platbe. Platbu spracúva Stripe.</p>
+      <p className="mt-4 text-sm text-faint">
+        Kód <b>{PITCH_PROMO.code}</b> zadaj v ďalšom kroku pri platbe do poľa „Pridať propagačný kód“. Platbu spracúva Stripe.
+      </p>
       {!paymentsEnabled ? <p className="mt-3 text-sm text-marker">Platby zatiaľ nie sú zapnuté.</p> : null}
       {error ? (
         <p role="alert" className="mt-3 text-coral">
