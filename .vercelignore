@@ -1,0 +1,7 @@
+# kľúče a lokálne dáta sa na Vercel nenahrávajú (premenné prostredia sú nastavené vo Verceli)
+.env*
+.data
+# pomôcky pre AI agentov, appka ich nepotrebuje
+.agents
+.claude
+skills-lock.json
