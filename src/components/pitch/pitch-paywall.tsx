@@ -13,8 +13,11 @@ export { balanceLabel } from "@/lib/billing/pitch-pack";
 export function usePitchBalance(initial: PitchBalance | null, waitingForPayment: boolean) {
   const [balance, setBalance] = useState(initial);
   const [paymentsEnabled, setPaymentsEnabled] = useState(true);
-  const [confirming, setConfirming] = useState(waitingForPayment);
+  // Hlášku „Pripisujeme…“ ukážeme, len kým nie je z čoho pitchovať. Webhook býva rýchlejší
+  // ako návrat zo Stripe, vtedy sú pitche pripísané už pri načítaní a netreba čakať.
+  const [confirming, setConfirming] = useState(waitingForPayment && !(initial?.canPitch ?? false));
   const startCredits = useRef(initial?.credits ?? 0);
+  const blocking = !(initial?.canPitch ?? false);
 
   const reload = useCallback(async () => {
     try {
@@ -41,13 +44,15 @@ export function usePitchBalance(initial: PitchBalance | null, waitingForPayment:
     const id = setInterval(async () => {
       tries++;
       const next = await reload();
-      if ((next && next.credits > startCredits.current) || tries >= 20) {
+      // bez pitchov stačí, že sa dá pitchovať; inak (nákup z Nastavení) čakáme na nové kredity
+      const credited = !!next && (blocking ? next.canPitch : next.credits > startCredits.current);
+      if (credited || tries >= 20) {
         clearInterval(id);
         setConfirming(false);
       }
     }, 2000);
     return () => clearInterval(id);
-  }, [waitingForPayment, initial, reload]);
+  }, [waitingForPayment, initial, reload, blocking]);
 
   return { balance, paymentsEnabled, confirming, reload };
 }
