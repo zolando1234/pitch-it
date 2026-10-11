@@ -28,7 +28,8 @@ export type CountdownSec = (typeof COUNTDOWN_OPTIONS)[number];
 /** Človek je v zábere, keď ho kamera videla za posledných toľko ms. */
 const PRESENCE_MS = 600;
 
-export type CoachPhase = "loading" | "countdown" | "live" | "paused";
+/** armed = nahraté video je pripravené, čaká sa na kliknutie „Spustiť analýzu“ */
+export type CoachPhase = "loading" | "armed" | "countdown" | "live" | "paused";
 
 export const INITIAL_FB: FeedbackState = {
   status: "idle",
@@ -43,6 +44,7 @@ export const INITIAL_FB: FeedbackState = {
 export function useCoachSession({
   mode,
   countdown = 5,
+  manualStart = false,
   onLive,
   onPause,
   onResume,
@@ -52,6 +54,8 @@ export function useCoachSession({
 }: {
   mode: SessionMode;
   countdown?: CountdownSec;
+  /** bez odpočtu: nahrávanie spustí až begin() (nahraté video) */
+  manualStart?: boolean;
   /** volá sa, keď po odpočte začne nahrávanie */
   onLive?: () => void;
   onPause?: () => void;
@@ -110,9 +114,33 @@ export function useCoachSession({
   }, []);
 
   const onReady = useCallback(() => {
+    if (manualStart) return setPhase("armed");
     setCount(countdown);
     setPhase("countdown");
-  }, [countdown]);
+  }, [countdown, manualStart]);
+
+  /** Začiatok nahrávania a hodnotenia (po odpočte alebo hneď pri nahratom videu). */
+  const startLive = useCallback(
+    (now: number) => {
+      recorder.current = new SessionRecorder();
+      recorder.current.begin(lastT.current || now);
+      drillTracker.current = drill ? new DrillTracker(drill) : null;
+      setDrillProgress(drillTracker.current?.progress() ?? null);
+      liveStartedAt.current = now;
+      stageApi.current?.startRecording();
+      setElapsedMs(0);
+      phaseRef.current = "live";
+      setPhase("live");
+      callbacks.current.onLive?.();
+    },
+    [drill],
+  );
+
+  /** Nahraté video: spustí hodnotenie po kliknutí (video už hrá). */
+  const begin = useCallback(() => {
+    if (phaseRef.current !== "armed") return;
+    startLive(performance.now());
+  }, [startLive]);
 
   const onStageError = useCallback((msg: string) => callbacks.current.onError(msg), []);
 
@@ -170,18 +198,10 @@ export function useCoachSession({
         return;
       }
       clearInterval(id);
-      recorder.current = new SessionRecorder();
-      recorder.current.begin(lastT.current || now);
-      drillTracker.current = drill ? new DrillTracker(drill) : null;
-      setDrillProgress(drillTracker.current?.progress() ?? null);
-      liveStartedAt.current = now;
-      stageApi.current?.startRecording();
-      setElapsedMs(0);
-      setPhase("live");
-      callbacks.current.onLive?.();
+      startLive(now);
     }, 100);
     return () => clearInterval(id);
-  }, [phase, countdown, drill]);
+  }, [phase, countdown, startLive]);
 
   // časomiera; pri režime s limitom sa nahrávanie na konci samo ukončí
   useEffect(() => {
@@ -211,6 +231,7 @@ export function useCoachSession({
     finish,
     pause,
     resume,
+    begin,
   };
 }
 

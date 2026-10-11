@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseStoredCoach } from "@/lib/coach/stored";
+import { parseStoredCoach, storedCoachSchema } from "@/lib/coach/stored";
 import { outlineInputSchema } from "@/lib/pitch/outline";
 import { parseLanguage } from "@/lib/pitch/language";
 import { analyzePitch, MAX_PITCH_AUDIO_BYTES, PitchServiceError } from "@/lib/pitch/service";
@@ -40,6 +40,12 @@ const visionSchema = z
   )
   .max(5_000);
 
+/** Odmietnutie s dôvodom v logu (bez osobných údajov), aby sa dalo dohľadať, prečo nahrávka neprešla. */
+function reject(status: number, code: string, message: string, detail: Record<string, unknown>) {
+  console.warn(`[pitch] odmietnuté ${status} ${code}:`, JSON.stringify(detail));
+  return apiError(status, code, message);
+}
+
 /** Nahraný pitch (multipart): audio + nastavenie + voliteľné signály z kamery. */
 export async function POST(request: Request) {
   const user = await requireApiUser();
@@ -48,16 +54,19 @@ export async function POST(request: Request) {
   if (limited) return limited;
 
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_PITCH_AUDIO_BYTES + 1024 * 1024) return apiError(413, "too_large", "Nahrávka je príliš dlhá.");
+  if (contentLength > MAX_PITCH_AUDIO_BYTES + 1024 * 1024) return reject(413, "too_large", "Nahrávka je príliš dlhá.", { contentLength });
 
   try {
     const form = await request.formData();
     const audio = form.get("audio");
-    if (!(audio instanceof Blob)) return apiError(400, "invalid_request", "Chýba nahrávka.");
+    if (!(audio instanceof Blob)) return reject(400, "invalid_request", "Chýba nahrávka.", { audio: typeof audio });
     const baseType = audio.type.split(";")[0];
-    if (!AUDIO_TYPES.has(baseType)) return apiError(415, "unsupported", "Nepodporovaný formát nahrávky.");
-    const meta = metaSchema.safeParse(Object.fromEntries(["durationMs", "audience", "targetSeconds", "focus"].map((k) => [k, form.get(k)])));
-    if (!meta.success) return apiError(400, "invalid_request", "Neplatné nastavenie nahrávky.");
+    if (!AUDIO_TYPES.has(baseType)) return reject(415, "unsupported", "Nepodporovaný formát nahrávky.", { type: audio.type });
+    const rawMeta = Object.fromEntries(["durationMs", "audience", "targetSeconds", "focus"].map((k) => [k, form.get(k)]));
+    const meta = metaSchema.safeParse(rawMeta);
+    if (!meta.success) {
+      return reject(400, "invalid_request", "Neplatné nastavenie nahrávky.", { meta: rawMeta, issues: meta.error.issues.map((i) => i.path.join(".")) });
+    }
 
     let vision = null;
     const rawVision = form.get("vision");
@@ -74,10 +83,18 @@ export async function POST(request: Request) {
     const rawCoach = form.get("coach");
     if (typeof rawCoach === "string" && rawCoach && rawCoach.length < 200_000) {
       try {
-        coach = parseStoredCoach(JSON.parse(rawCoach));
+        const json = JSON.parse(rawCoach);
+        coach = parseStoredCoach(json);
+        if (!coach) {
+          const issues = storedCoachSchema.safeParse(json).error?.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`);
+          console.warn("[pitch] súhrn reči tela sa nedal prečítať:", JSON.stringify(issues));
+        }
       } catch {
+        console.warn("[pitch] súhrn reči tela nie je platný JSON");
         coach = null;
       }
+    } else if (typeof rawCoach === "string" && rawCoach.length >= 200_000) {
+      console.warn("[pitch] súhrn reči tela je príliš veľký:", rawCoach.length);
     }
 
     let outline = null;
@@ -107,7 +124,7 @@ export async function POST(request: Request) {
     // celý výsledok ide aj klientovi, feedback sa tak zobrazí aj bez trvalého úložiska
     return apiOk({ attemptId: attempt.id, attempt }, 201);
   } catch (error) {
-    if (error instanceof PitchServiceError) return apiError(error.status, error.code, error.message);
+    if (error instanceof PitchServiceError) return reject(error.status, error.code, error.message, { reason: error.message });
     return handleRouteError(error, "pitch.analyze");
   }
 }

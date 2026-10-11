@@ -9,6 +9,7 @@ import { preloadCoachModels } from "@/components/coach/CameraStage";
 import SessionSetup from "@/components/coach/SessionSetup";
 import { LanguagePicker, usePitchLanguage } from "@/components/pitch/language-picker";
 import { LengthPicker, usePitchLength } from "@/components/pitch/length-picker";
+import { VideoSourcePicker } from "@/components/pitch/video-source-picker";
 import { OutlineEditor, usePitchOutline } from "@/components/pitch/outline-editor";
 import { PhoneMicPanel } from "@/components/pitch/phone-mic-panel";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
@@ -21,7 +22,7 @@ import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
 import type { SessionSummary } from "@/lib/coach/pose/session";
 import { toStoredCoach, type StoredCoach } from "@/lib/coach/stored";
 import { AUDIENCE_LABELS, FOCUS_GOALS } from "@/lib/onboarding/plan";
-import { canUseLength, type PitchBalance } from "@/lib/billing/pitch-pack";
+import { canUseLength, PAID_LENGTH, type PitchBalance } from "@/lib/billing/pitch-pack";
 
 /*
   Nahrávanie pitchu s kamerou: živý tréner reči tela (silueta, rady nad hlavou, teleprompter)
@@ -78,6 +79,10 @@ export function CameraRecordScreen({
     [setup, targetSeconds, languageState.language],
   );
   const { outline } = outlineState;
+  // nahraté video namiesto kamery; analyzuje sa najviac do limitu plánu (4 min len s kúpenými pitchami)
+  const [videoMode, setVideoMode] = useState(false);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const maxVideoSeconds = canUseLength(PAID_LENGTH, wallet.balance) ? PAID_LENGTH : 180;
   const recorder = usePitchRecorder();
   const { open, attach, release } = recorder;
   const phone = usePhoneMic();
@@ -110,8 +115,15 @@ export function CameraRecordScreen({
   };
 
   const mode: TalkMode = useMemo(
-    () => ({ kind: "talk", id: "pitch", title: `Pitch · ${targetSeconds} s`, subtitle: AUDIENCE_LABELS[setup.audience], durationMs: targetSeconds * 1000 }),
-    [targetSeconds, setup.audience],
+    () => ({
+      kind: "talk",
+      id: "pitch",
+      title: `Pitch · ${targetSeconds} s`,
+      subtitle: AUDIENCE_LABELS[setup.audience],
+      // video sa analyzuje celé (do limitu plánu), živé nahrávanie končí cieľovou dĺžkou
+      durationMs: (videoFile ? maxVideoSeconds : targetSeconds) * 1000,
+    }),
+    [targetSeconds, setup.audience, videoFile, maxVideoSeconds],
   );
   const ruleFilter = useMemo(() => ruleFilterFor(mode, !!prefs.prompterText), [mode, prefs.prompterText]);
 
@@ -142,7 +154,9 @@ export function CameraRecordScreen({
   }, [phase, error, attemptId, preview]);
 
   const phoneSelected = phone.state !== "idle";
-  const micReady = preview || (phoneSelected ? phone.state === "connected" : recorder.media === "ready");
+  // pri nahratom videe sa mikrofón nepoužíva, zvuk je z videa
+  const micReady = preview || videoMode || (phoneSelected ? phone.state === "connected" : recorder.media === "ready");
+  const sourceReady = !videoMode || !!videoFile;
   const micText =
     preview || micReady
       ? null
@@ -155,7 +169,7 @@ export function CameraRecordScreen({
           : "Zapínam mikrofón…";
 
   const start = () => {
-    if (!micReady) return;
+    if (!micReady || !sourceReady) return;
     // celú obrazovku smie prehliadač zapnúť len priamo po kliknutí
     if (fullscreen && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
     setError(null);
@@ -163,8 +177,11 @@ export function CameraRecordScreen({
     setPhase("live");
   };
 
-  const onLive = () => {
-    if (!preview) audioStarted.current = recorder.start();
+  const onLive = (sourceAudio: MediaStream | null) => {
+    if (preview) return;
+    // nahraté video: nahráva sa zvuk videa namiesto mikrofónu
+    if (videoFile && sourceAudio) attach(sourceAudio);
+    audioStarted.current = recorder.start();
   };
 
   // posledná nahrávka čaká v pamäti, kým ju server neprijme (dá sa poslať znova bez nového nahrávania)
@@ -264,11 +281,12 @@ export function CameraRecordScreen({
       <PitchStudio
         key={take}
         mode={mode}
-        title="Tréning pitchu"
+        title={videoFile ? "Analýza videa" : "Tréning pitchu"}
         subtitle={`Pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()} · cieľ ${fmtTarget(targetSeconds)}`}
         prefs={prefs}
         outline={outline}
         startFull={fullscreen}
+        file={videoFile}
         language={languageState.language}
         ruleFilter={ruleFilter}
         onLive={onLive}
@@ -314,13 +332,14 @@ export function CameraRecordScreen({
               if (!on) phone.stop();
             }}
             error={error}
-            startLabel="Spustiť nahrávanie"
-            canStart={micReady}
+            startLabel={videoMode ? "Analyzovať video" : "Spustiť nahrávanie"}
+            canStart={micReady && sourceReady}
             finePrint="Spustením súhlasíš, že nahrávku vyhodnotí AI. Video zostáva v tvojom prehliadači."
             onStart={start}
             micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
           >
             {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance)}</p> : null}
+            <VideoSourcePicker file={videoFile} onFile={setVideoFile} useVideo={videoMode} onUseVideo={setVideoMode} maxSeconds={maxVideoSeconds} />
             <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref={preview ? setupHref : "/app/nastavenia#plan"} />
             <LanguagePicker {...languageState} />
             <OutlineEditor {...outlineState} />

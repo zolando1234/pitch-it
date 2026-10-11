@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { HandLandmarker, NormalizedLandmark, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { FeedbackEngine, type FeedbackState } from "@/lib/coach/pose/feedback";
 import { analyzeHands, type Hands } from "@/lib/coach/pose/hands";
@@ -50,6 +50,11 @@ export type StageApi = {
   snapshot: () => string | null;
   /** bod nad hlavou rečníka v pixeloch voči plátnu (pre bublinu s feedbackom) */
   headAnchor: (m: Metrics) => { x: number; y: number } | null;
+  /**
+   * Nahraté video: spustí prehrávanie od začiatku a vráti zvuk videa ako MediaStream
+   * (nahráva sa rovnako ako mikrofón). Volať priamo z kliknutia, inak prehliadač zvuk nepustí.
+   */
+  playSource: () => Promise<MediaStream | null>;
 };
 
 type Props = {
@@ -62,6 +67,10 @@ type Props = {
   quality?: TrackingQuality;
   /** ktoré pravidlá sa ozývajú (cvičenia sa sústredia len na jednu tému) */
   ruleFilter?: ((id: string) => boolean) | null;
+  /** nahraté video namiesto kamery (analyzuje sa počas prehrávania) */
+  file?: File | null;
+  /** nahraté video dohralo do konca */
+  onSourceEnded?: () => void;
   ref?: Ref<StageApi>;
 };
 
@@ -181,8 +190,16 @@ export default function CameraStage({
   micHand = "auto",
   quality = "balanced",
   ruleFilter = null,
+  file = null,
+  onSourceEnded,
   ref,
 }: Props) {
+  // súbor sa počas jedného štúdia nemení; video zo súboru sa nezrkadlí (kamera áno, ako v zrkadle)
+  const [source] = useState(file);
+  const mirrored = !source;
+  const fileUrlRef = useRef<string | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioOutRef = useRef<MediaStream | null>(null);
   const qualityRef = useRef(quality);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -207,7 +224,33 @@ export default function CameraStage({
   }, [micMode, micHand]);
 
   useImperativeHandle(ref, () => ({
+    async playSource() {
+      const video = videoRef.current;
+      if (!source || !video) return null;
+      try {
+        if (!audioCtxRef.current) {
+          // zvuk videa ide do nahrávania aj do reproduktorov (počuješ svoj pitch)
+          const ctx = new AudioContext();
+          const source = ctx.createMediaElementSource(video);
+          const out = ctx.createMediaStreamDestination();
+          source.connect(out);
+          source.connect(ctx.destination);
+          audioCtxRef.current = ctx;
+          audioOutRef.current = out.stream;
+        }
+        video.muted = false;
+        video.currentTime = 0;
+        const playing = video.play();
+        await Promise.all([playing, audioCtxRef.current.resume()]);
+        return audioOutRef.current;
+      } catch (e) {
+        console.error(e);
+        return null;
+      }
+    },
     startRecording() {
+      // nahraté video netreba nahrávať znova: klipy chýb sa prehrajú priamo z neho
+      if (source) return true;
       const stream = streamRef.current;
       if (!stream || typeof MediaRecorder === "undefined" || recRef.current) return false;
       const mimeType = RECORDING_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
@@ -227,12 +270,19 @@ export default function CameraStage({
       }
     },
     pauseRecording() {
-      if (recRef.current?.rec.state === "recording") recRef.current.rec.pause();
+      if (source) videoRef.current?.pause();
+      else if (recRef.current?.rec.state === "recording") recRef.current.rec.pause();
     },
     resumeRecording() {
-      if (recRef.current?.rec.state === "paused") recRef.current.rec.resume();
+      if (source) void videoRef.current?.play().catch(() => {});
+      else if (recRef.current?.rec.state === "paused") recRef.current.rec.resume();
     },
     stopRecording() {
+      if (source) {
+        videoRef.current?.pause();
+        const url = fileUrlRef.current;
+        return Promise.resolve(url ? { url, mimeType: source.type || "video/mp4" } : null);
+      }
       const r = recRef.current;
       recRef.current = null;
       if (!r) return Promise.resolve(null);
@@ -254,8 +304,10 @@ export default function CameraStage({
       thumb.width = SNAPSHOT_WIDTH;
       thumb.height = Math.round((SNAPSHOT_WIDTH * canvas.height) / canvas.width);
       const tctx = thumb.getContext("2d")!;
-      tctx.translate(thumb.width, 0);
-      tctx.scale(-1, 1);
+      if (mirrored) {
+        tctx.translate(thumb.width, 0);
+        tctx.scale(-1, 1);
+      }
       // video + stlmenie + vrstva so siluetou, ako to rečník videl
       tctx.drawImage(video, 0, 0, thumb.width, thumb.height);
       tctx.fillStyle = `rgba(0,0,0,${1 - VIDEO_DIM})`;
@@ -266,22 +318,22 @@ export default function CameraStage({
     headAnchor(m) {
       const canvas = canvasRef.current;
       if (!canvas || !canvas.width) return null;
-      // plátno je zobrazené cez object-contain a zrkadlovo
+      // plátno je zobrazené cez object-contain a pri kamere zrkadlovo
       const cw = canvas.clientWidth;
       const ch = canvas.clientHeight;
       const s = Math.min(cw / canvas.width, ch / canvas.height);
       const ox = (cw - canvas.width * s) / 2;
       const oy = (ch - canvas.height * s) / 2;
       return {
-        x: ox + (canvas.width - m.nose.x) * s,
+        x: ox + (mirrored ? canvas.width - m.nose.x : m.nose.x) * s,
         y: oy + (m.nose.y - m.sw * 0.75) * s,
       };
     },
   }));
 
-  const callbacks = useRef({ onFrame, onReady, onError });
+  const callbacks = useRef({ onFrame, onReady, onError, onSourceEnded });
   useEffect(() => {
-    callbacks.current = { onFrame, onReady, onError };
+    callbacks.current = { onFrame, onReady, onError, onSourceEnded };
   });
 
   useEffect(() => {
@@ -327,7 +379,52 @@ export default function CameraStage({
       models = null;
     };
 
+    /** Nahraté video: načíta súbor a čaká na prvý snímok; prehrávanie spustí až playSource(). */
+    async function startFromFile(source: File) {
+      const modelsReady = createModels(variant);
+      modelsReady.catch(() => {});
+      const video = videoRef.current!;
+      const url = URL.createObjectURL(source);
+      fileUrlRef.current = url;
+      video.src = url;
+      video.muted = true;
+      video.preload = "auto";
+      video.addEventListener("ended", () => {
+        if (!cancelled) callbacks.current.onSourceEnded?.();
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          if (video.readyState >= 2) return resolve();
+          video.addEventListener("loadeddata", () => resolve(), { once: true });
+          video.addEventListener("error", () => reject(new Error("video")), { once: true });
+        });
+      } catch {
+        callbacks.current.onError("Video sa nepodarilo otvoriť. Skús MP4 (H.264) alebo WebM.");
+        return;
+      }
+      try {
+        models = await modelsReady;
+      } catch (e) {
+        console.error(e);
+        callbacks.current.onError("Nepodarilo sa načítať model na sledovanie tela.");
+        return;
+      }
+      if (cancelled) return closeModels();
+      const canvas = canvasRef.current!;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      detectCanvas.width = DETECT_WIDTH;
+      detectCanvas.height = Math.round((DETECT_WIDTH * video.videoHeight) / video.videoWidth);
+      roi = new RoiTracker(video.videoWidth, video.videoHeight);
+      smoother = new LandmarkSmoother(video.videoWidth, video.videoHeight);
+      tracker.resetAll();
+      lastResultAt = stableSince = performance.now();
+      callbacks.current.onReady();
+      schedule();
+    }
+
     async function start() {
+      if (source) return startFromFile(source);
       if (!navigator.mediaDevices?.getUserMedia) {
         callbacks.current.onError(
           "Prehliadač tu kameru nepovoľuje. Otvor stránku cez zabezpečené pripojenie (https) v Chrome alebo Safari.",
@@ -460,6 +557,8 @@ export default function CameraStage({
         if (recovering) callbacks.current.onFrame(RECOVERING_FB, null, now);
         return;
       }
+      // pri zastavenom videu (pred štartom, pauza) nie sú nové snímky a to nie je pád
+      if (video.paused) lastResultAt = now;
       if (now - lastResultAt > WATCHDOG_MS && !video.paused) {
         reload("watchdog: no result", true);
         return;
@@ -568,22 +667,26 @@ export default function CameraStage({
       recRef.current = null;
       stream?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      if (videoEl && source) videoEl.pause();
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") void audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+      // URL súboru ostáva platná: report z nej prehráva klipy chýb
       closeModels();
     };
-  }, []);
+  }, [source]);
 
   return (
     <div className="relative h-full w-full">
       {/* živé video ide priamo na obrazovku bez čakania na model, zrkadlovo */}
       <video
         ref={videoRef}
-        className="absolute inset-0 h-full w-full -scale-x-100 object-contain"
+        className={`absolute inset-0 h-full w-full object-contain ${mirrored ? "-scale-x-100" : ""}`}
         style={{ filter: `brightness(${VIDEO_DIM}) saturate(0.5)` }}
         playsInline
         muted
       />
       {/* priehľadná vrstva so siluetou, kostrou a power zónou */}
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full -scale-x-100 object-contain" />
+      <canvas ref={canvasRef} className={`absolute inset-0 h-full w-full object-contain ${mirrored ? "-scale-x-100" : ""}`} />
       <div
         ref={hudRef}
         className="pointer-events-none absolute right-3 top-3 rounded bg-black/60 px-2 py-1 font-mono text-[11px] text-white/70"

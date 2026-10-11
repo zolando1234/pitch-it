@@ -117,6 +117,7 @@ export function PitchStudio({
   outline = null,
   startFull = false,
   language = "sk",
+  file = null,
   ruleFilter,
   onLive,
   onPause,
@@ -136,8 +137,11 @@ export function PitchStudio({
   startFull?: boolean;
   /** jazyk živých titulkov */
   language?: PitchLanguage;
+  /** nahraté video namiesto kamery */
+  file?: File | null;
   ruleFilter: (id: string) => boolean;
-  onLive?: () => void;
+  /** začiatok nahrávania; pri nahratom videe dostane zvuk videa */
+  onLive?: (sourceAudio: MediaStream | null) => void;
   onPause?: () => void;
   onResume?: () => void;
   onFinish: (result: CoachResult) => void;
@@ -152,10 +156,13 @@ export function PitchStudio({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const prompterRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const sourceAudio = useRef<MediaStream | null>(null);
+  const [starting, setStarting] = useState(false);
   const session = useCoachSession({
     mode,
     countdown: prefs.countdown,
-    onLive,
+    manualStart: !!file,
+    onLive: () => onLive?.(sourceAudio.current),
     onPause,
     onResume,
     onFinish,
@@ -169,7 +176,22 @@ export function PitchStudio({
   });
   const { phase, fb, metrics, count, waitingForPerson, elapsedMs, durationMs, stageApi } = session;
   const recording = phase === "live";
-  const transcript = useLiveTranscript(recording, LANGUAGE_INFO[language].bcp47);
+  // živé titulky počúvajú mikrofón v miestnosti, pri nahratom videe by nesedeli
+  const transcript = useLiveTranscript(recording && !file, LANGUAGE_INFO[language].bcp47);
+
+  /** Nahraté video: prehrávanie a hodnotenie sa spustia naraz, priamo z kliknutia. */
+  const startVideo = async () => {
+    if (starting) return;
+    setStarting(true);
+    const audio = (await stageApi.current?.playSource()) ?? null;
+    if (!audio) {
+      setStarting(false);
+      onError("Video sa nepodarilo prehrať so zvukom. Skús iný prehliadač (Chrome) alebo video vo formáte MP4.");
+      return;
+    }
+    sourceAudio.current = audio;
+    session.begin();
+  };
 
   // celá obrazovka: iba záber s trénerom a tlačidlo Zastaviť
   const [full, setFull] = useState(startFull);
@@ -232,7 +254,17 @@ export function PitchStudio({
   const chips = bodyChips(fb, metrics);
 
   const status =
-    phase === "live" ? "Nahrávam" : phase === "paused" ? "Pozastavené" : phase === "countdown" ? "Začíname" : "Pripravujem";
+    phase === "live"
+      ? file
+        ? "Analyzujem"
+        : "Nahrávam"
+      : phase === "paused"
+        ? "Pozastavené"
+        : phase === "countdown"
+          ? "Začíname"
+          : phase === "armed"
+            ? "Pripravené"
+            : "Pripravujem";
 
   return (
     <div className="pi-rec min-h-dvh text-paper" style={{ background: PI_BACKGROUND }}>
@@ -386,6 +418,8 @@ export function PitchStudio({
                   onFrame={session.onFrame}
                   onReady={session.onReady}
                   onError={session.onStageError}
+                  file={file}
+                  onSourceEnded={() => void session.finish()}
                 />
               </div>
 
@@ -412,7 +446,7 @@ export function PitchStudio({
                 ) : (
                   <span className="flex items-center gap-2">
                     <span className="hidden sm:block">
-                      <Pill>{phase === "loading" ? "Zapínam kameru…" : "Kamera a mikrofón zapnuté"}</Pill>
+                      <Pill>{phase === "loading" ? (file ? "Načítavam video…" : "Zapínam kameru…") : file ? `Video: ${file.name}` : "Kamera a mikrofón zapnuté"}</Pill>
                     </span>
                     <button
                       type="button"
@@ -446,10 +480,23 @@ export function PitchStudio({
 
               {phase === "loading" ? (
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
-                  <p className="animate-pulse text-lg text-white/70">Načítavam kameru a model…</p>
+                  <p className="animate-pulse text-lg text-white/70">{file ? "Načítavam video a model…" : "Načítavam kameru a model…"}</p>
                 </div>
               ) : null}
-              {phase === "countdown" ? (
+              {phase === "armed" ? (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/55 px-6 text-center text-white">
+                  <p className="max-w-md text-sm text-white/80">Tréner pozrie celé video tak, ako ho uvidí publikum. Analýza trvá rovnako dlho ako video.</p>
+                  <button
+                    type="button"
+                    onClick={() => void startVideo()}
+                    disabled={starting}
+                    className="flex min-h-[64px] items-center gap-3 rounded-full bg-signal px-10 text-xl font-bold text-on-signal shadow-lg transition hover:brightness-105 disabled:opacity-60"
+                  >
+                    <span aria-hidden="true">▶</span> {starting ? "Spúšťam…" : "Spustiť analýzu"}
+                  </button>
+                </div>
+              ) : null}
+                            {phase === "countdown" ? (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/40 px-6 text-center text-white">
                   <p className={waitingForPerson ? "text-2xl font-bold" : "text-sm text-white/70"}>
                     {waitingForPerson ? "Postav sa do záberu" : "Pozeraj sa rovno do kamery"}
@@ -475,7 +522,9 @@ export function PitchStudio({
                   className={`absolute inset-x-3 z-20 rounded-xl bg-black/75 px-4 py-3 text-sm text-white backdrop-blur ${full ? "bottom-24 mx-auto max-w-3xl" : "bottom-3"}`}
                   aria-live="off"
                 >
-                  {!transcript.supported ? (
+                  {file ? (
+                    <span className="text-white/70">Pri nahratom videe sa živé titulky nezobrazujú. Celý prepis dostaneš v reporte.</span>
+                  ) : !transcript.supported ? (
                     <span className="text-white/60">Živé titulky tento prehliadač nepodporuje. Body si odškrtni po nahrávke, prepis dostaneš v reporte.</span>
                   ) : caption.length ? (
                     <span>
