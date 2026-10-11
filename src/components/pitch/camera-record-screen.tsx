@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCoachPrefs, type CoachResult } from "@/components/coach/coach-live";
 import { preloadCoachModels } from "@/components/coach/CameraStage";
 import SessionSetup from "@/components/coach/SessionSetup";
+import { LanguagePicker, usePitchLanguage } from "@/components/pitch/language-picker";
 import { OutlineEditor, usePitchOutline } from "@/components/pitch/outline-editor";
 import { PhoneMicPanel } from "@/components/pitch/phone-mic-panel";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
@@ -67,6 +68,8 @@ export function CameraRecordScreen({
   const wallet = usePitchBalance(initialBalance, paid);
   const blocked = !!wallet.balance && !wallet.balance.canPitch;
   const outlineState = usePitchOutline();
+  const languageState = usePitchLanguage();
+  const pitchSetup = useMemo(() => ({ ...setup, language: languageState.language }), [setup, languageState.language]);
   const { outline } = outlineState;
   const recorder = usePitchRecorder();
   const { open, attach, release } = recorder;
@@ -190,7 +193,7 @@ export function CameraRecordScreen({
     setError(null);
     setCanResend(false);
     setK(1);
-    const uploaded = await uploadPitchWithRetry(p.audio, setup, null, p.coach, p.outline);
+    const uploaded = await uploadPitchWithRetry(p.audio, pitchSetup, null, p.coach, p.outline);
     if (uploaded.ok) {
       pending.current = null;
       keepLocalSession(uploaded.attemptId, { summary: p.summary, videoUrl: p.videoUrl });
@@ -259,6 +262,7 @@ export function CameraRecordScreen({
         prefs={prefs}
         outline={outline}
         startFull={fullscreen}
+        language={languageState.language}
         ruleFilter={ruleFilter}
         onLive={onLive}
         onPause={recorder.pause}
@@ -310,6 +314,7 @@ export function CameraRecordScreen({
             micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
           >
             {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance)}</p> : null}
+            <LanguagePicker {...languageState} />
             <OutlineEditor {...outlineState} />
             <button
               type="button"

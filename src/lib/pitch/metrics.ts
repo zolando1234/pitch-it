@@ -1,4 +1,5 @@
-import { countFillers, tokenizeWords } from "@/lib/analytics/speech/text-metrics";
+import { countFillers, fillerWordsFor, tokenizeWords } from "@/lib/analytics/speech/text-metrics";
+import type { PitchLanguage } from "@/lib/pitch/language";
 
 /*
   Merania nahraného pitchu z prepisu so slovnými časmi (Whisper).
@@ -40,14 +41,30 @@ export type PitchMetrics = {
   tokens: TranscriptToken[];
 };
 
-const VOWELS = "aáäeéiíoóôuúyý";
+const VOWELS = "aáäeéěiíoóôuúůyý";
 const SYLLABIC = "rlŕĺ";
 const DIPHTHONGS = ["ia", "ie", "iu", "ô"];
 
-/** Počet slabík slovenského slova (samohlásky, dvojhlásky, slabikotvorné r/l). */
-export function countSyllables(word: string): number {
+/** Samohlásky jazykov bez vlastných pravidiel: slabika = skupina samohlások za sebou. */
+const VOWEL_GROUPS: Partial<Record<PitchLanguage, string>> = {
+  en: "aeiouy",
+  de: "aeiouyäöü",
+  pl: "aeiouyąęó",
+  hu: "aáeéiíoóöőuúüű",
+};
+
+/** Počet slabík slova. Slovenčina a čeština: samohlásky, dvojhlásky, slabikotvorné r/l; ostatné jazyky: skupiny samohlások. */
+export function countSyllables(word: string, language: PitchLanguage = "sk"): number {
   const w = word.toLowerCase().replace(/[^\p{L}]/gu, "");
   if (!w) return 0;
+  const groups = VOWEL_GROUPS[language];
+  if (groups) {
+    let n = 0;
+    for (let i = 0; i < w.length; i++) if (groups.includes(w[i]) && (i === 0 || !groups.includes(w[i - 1]))) n++;
+    // anglické nemé -e na konci (make, code)
+    if (language === "en" && n > 1 && w.endsWith("e") && !w.endsWith("le") && !groups.includes(w[w.length - 2])) n--;
+    return Math.max(1, n);
+  }
   let count = 0;
   for (let i = 0; i < w.length; i++) {
     const c = w[i];
@@ -68,11 +85,12 @@ export function countSyllables(word: string): number {
   return Math.max(1, count);
 }
 
-const FILLER_WORDS = new Set(["ehm", "hm", "hmm", "eee", "ee", "eh", "em", "emm", "mmm", "akože", "proste", "vlastne", "jakoby", "tak", "teda", "no"]);
+const FILLER_WORDS = new Set(["ehm", "ehem", "hm", "hmm", "eee", "ee", "eh", "em", "emm", "mmm", "akože", "proste", "vlastne", "jakoby", "tak", "teda", "no"]);
 
 /** Výrazy, ktoré sa vo feedbacku zvýraznia ako vypĺňacie (iba istejšie z nich). */
-export function isFillerWord(word: string): boolean {
+export function isFillerWord(word: string, language: PitchLanguage = "sk"): boolean {
   const w = word.toLowerCase().replace(/[^\p{L}]/gu, "");
+  if (language !== "sk") return fillerWordsFor(language).has(w) && !["hát", "like"].includes(w);
   return FILLER_WORDS.has(w) && !["tak", "teda", "no"].includes(w);
 }
 
@@ -84,7 +102,8 @@ function sentenceEnds(text: string, wordCount: number): boolean[] {
   return ends;
 }
 
-export function buildMetrics(input: { text: string; words: TimedWord[]; durationMs: number }): PitchMetrics {
+export function buildMetrics(input: { text: string; words: TimedWord[]; durationMs: number; language?: PitchLanguage }): PitchMetrics {
+  const language = input.language ?? "sk";
   const words = input.words.filter((w) => w.word.trim());
   const ends = sentenceEnds(input.text, words.length);
   const pauses: Pause[] = [];
@@ -98,16 +117,16 @@ export function buildMetrics(input: { text: string; words: TimedWord[]; duration
   }
 
   const spokenWords = words.length > 0 ? words : tokenizeWords(input.text).map((word) => ({ word, start: 0, end: 0 }));
-  const syllables = spokenWords.reduce((sum, w) => sum + countSyllables(w.word), 0);
+  const syllables = spokenWords.reduce((sum, w) => sum + countSyllables(w.word, language), 0);
   const span = words.length > 1 ? Math.round((words[words.length - 1].end - words[0].start) * 1000) : input.durationMs;
   const speechMs = Math.max(0, span - pausedMs);
   const tempo = speechMs >= 4_000 ? Math.round((syllables / (speechMs / 1000)) * 10) / 10 : null;
 
-  const fillers = countFillers(input.text);
+  const fillers = countFillers(input.text, language);
   const tokens: TranscriptToken[] = [];
   const display = (input.text.match(/\S+/g) ?? []).length === words.length ? (input.text.match(/\S+/g) as string[]) : words.map((w) => w.word);
   display.forEach((text, i) => {
-    tokens.push({ type: "word", text, filler: isFillerWord(text) });
+    tokens.push({ type: "word", text, filler: isFillerWord(text, language) });
     const pause = pauses.find((p) => p.afterWord === i);
     if (pause) tokens.push({ type: "pause", ms: pause.ms, kind: pause.kind });
   });

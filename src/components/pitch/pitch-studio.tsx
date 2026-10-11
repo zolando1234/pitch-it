@@ -15,6 +15,7 @@ import type { FeedbackState, Status } from "@/lib/coach/pose/feedback";
 import type { Metrics } from "@/lib/coach/pose/metrics";
 import { STATUS_COLOR, STATUS_TEXT } from "@/lib/coach/pose/renderer";
 import { RULE_BY_ID } from "@/lib/coach/pose/rules";
+import { LANGUAGE_INFO, type PitchLanguage } from "@/lib/pitch/language";
 import { keywordsOf, matchesStem as matches, normalize, stemOf, tokenize, type PitchOutline } from "@/lib/pitch/outline";
 
 /*
@@ -115,6 +116,7 @@ export function PitchStudio({
   prefs,
   outline = null,
   startFull = false,
+  language = "sk",
   ruleFilter,
   onLive,
   onPause,
@@ -132,6 +134,8 @@ export function PitchStudio({
   outline?: PitchOutline | null;
   /** začať na celej obrazovke (prehliadač ju zapína už pri kliknutí na štart) */
   startFull?: boolean;
+  /** jazyk živých titulkov */
+  language?: PitchLanguage;
   ruleFilter: (id: string) => boolean;
   onLive?: () => void;
   onPause?: () => void;
@@ -165,7 +169,7 @@ export function PitchStudio({
   });
   const { phase, fb, metrics, count, waitingForPerson, elapsedMs, durationMs, stageApi } = session;
   const recording = phase === "live";
-  const transcript = useLiveTranscript(recording);
+  const transcript = useLiveTranscript(recording, LANGUAGE_INFO[language].bcp47);
 
   // celá obrazovka: iba záber s trénerom a tlačidlo Zastaviť
   const [full, setFull] = useState(startFull);
@@ -368,8 +372,8 @@ export function PitchStudio({
               ref={stageRef}
               className={
                 full
-                  ? "fixed inset-0 z-50 h-dvh w-full overflow-hidden bg-[#17142e]"
-                  : "relative aspect-video overflow-hidden rounded-2xl lg:aspect-auto lg:h-[calc(100dvh-210px)] lg:min-h-[440px] bg-[#17142e]"
+                  ? "stage-dark fixed inset-0 z-50 h-dvh w-full overflow-hidden bg-[#17142e]"
+                  : "stage-dark relative aspect-video overflow-hidden rounded-2xl lg:aspect-auto lg:h-[calc(100dvh-210px)] lg:min-h-[440px] bg-[#17142e]"
               }
             >
               <div className="absolute inset-0">

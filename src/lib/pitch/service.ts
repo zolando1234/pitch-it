@@ -14,6 +14,7 @@ import { recordUsage } from "@/lib/db/usage";
 import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
 import { buildContentPrompt, CONTENT_SYSTEM, contentScoreSchema, overallScore } from "@/lib/pitch/content";
+import { LANGUAGE_INFO, type PitchLanguage } from "@/lib/pitch/language";
 import { buildMetrics } from "@/lib/pitch/metrics";
 import { buildOutlinePrompt, OUTLINE_SYSTEM, outlineByKeywords, outlineCheckSchema, outlineFromCheck, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
 
@@ -42,6 +43,8 @@ export type PitchInput = {
   coach?: StoredCoach | null;
   /** téma a osnova uložená pred nahrávaním */
   outline?: PitchOutline | null;
+  /** jazyk, v ktorom founder pitchuje (výber modelu prepisu) */
+  language?: PitchLanguage;
 };
 
 /**
@@ -49,6 +52,7 @@ export type PitchInput = {
  * obsahové skóre (LLM) → reč tela. Nahrávka sa neukladá, pošle sa na prepis a zahodí sa.
  */
 export async function analyzePitch(userId: string, input: PitchInput): Promise<PitchAttemptRow> {
+  const language = input.language ?? "sk";
   const hasBody = Boolean(input.vision?.length || input.coach);
   // pokus s kamerou má reč tela aj bez zvuku, prázdny zvuk ho preto nezastaví
   if ((input.audio.size === 0 && !hasBody) || input.audio.size > MAX_PITCH_AUDIO_BYTES) {
@@ -76,7 +80,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
 
     let transcript: Awaited<ReturnType<typeof transcribeWithWords>> | null = null;
     try {
-      if (input.audio.size > 0) transcript = await transcribeWithWords(input.audio, input.fileName, "sk");
+      if (input.audio.size > 0) transcript = await transcribeWithWords(input.audio, input.fileName, language);
     } catch (error) {
       const notConfigured = error instanceof TranscriptionError && error.code === "not_configured";
       if (!body) {
@@ -98,7 +102,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     }
     if (transcript) await recordUsage(userId, "transcription_seconds", Math.ceil(input.durationMs / 1000), null);
 
-    const metrics = transcript ? buildMetrics({ text: transcript.text, words: transcript.words, durationMs: input.durationMs }) : null;
+    const metrics = transcript ? buildMetrics({ text: transcript.text, words: transcript.words, durationMs: input.durationMs, language }) : null;
 
     let content = null;
     let score: number | null = null;
@@ -125,6 +129,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
                 notes: profile?.pitch_notes ?? null,
                 topic: outline?.topic || null,
                 outline: outline?.points ?? null,
+                language: LANGUAGE_INFO[language].adjective,
               }),
             },
           ],
@@ -151,7 +156,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
         const result = await llm.generateStructured({
           purpose: "pitch_outline",
           system: OUTLINE_SYSTEM,
-          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience }) }],
+          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience, language: LANGUAGE_INFO[language].adjective }) }],
           schema: outlineCheckSchema,
           effort: "low",
           maxTokens: 3_000,
@@ -173,6 +178,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       content_score: score,
       body,
       outline: outlineResult as Record<string, unknown> | null,
+      language,
+      stt_model: transcript?.provider ?? null,
       model,
     };
     await updatePitchAttempt(attempt.id, patch);

@@ -306,6 +306,25 @@
   }
 }
 
+/* Obraz z kamery je vždy tmavý: texty nad ním (rada, teleprompter, titulky) majú tmavú paletu v oboch témach. */
+.stage-dark {
+  --color-ink: #141414;
+  --color-panel: #1e1e22;
+  --color-panel-2: #222228;
+  --color-line: #333333;
+  --color-line-strong: #4a4a52;
+  --color-paper: #f5f5f7;
+  --color-mute: #b4b4be;
+  --color-faint: #7a7a86;
+  --color-signal: #aaff00;
+  --color-accent: #aaff00;
+  --color-on-signal: #141414;
+  --color-marker: #ffc94d;
+  --color-coral: #ff7a59;
+  --color-danger: #ff5c5c;
+  color: var(--color-paper);
+}
+
 /* Úvodná karta prehľadu je tmavá v oboch témach (ilustrácia je navrhnutá na tmavé pozadie). */
 .dash-hero {
   /* prekrytie fotky (from-ink) musí byť tmavé aj vo svetlej téme, inak svetlý text zanikne */

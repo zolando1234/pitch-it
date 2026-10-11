@@ -5,6 +5,7 @@ import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
 import type { PitchAttemptRow } from "@/lib/db/types";
 import { keepLocalAttempt } from "@/lib/pitch/local-attempt";
+import type { PitchLanguage } from "@/lib/pitch/language";
 import type { PitchOutline } from "@/lib/pitch/outline";
 
 /*
@@ -16,6 +17,8 @@ export type RecorderSetup = {
   audience: "investor" | "jury" | "customer" | "team";
   targetSeconds: 30 | 60 | 180;
   focus: "tempo" | "fillery" | "obsah";
+  /** jazyk pitchu; bez neho slovenčina */
+  language?: PitchLanguage;
 };
 
 export type MediaState = "idle" | "requesting" | "ready" | "denied" | "unsupported";
@@ -181,6 +184,7 @@ export async function uploadPitch(
   form.set("audience", setup.audience);
   form.set("targetSeconds", String(setup.targetSeconds));
   form.set("focus", setup.focus);
+  form.set("language", setup.language ?? "sk");
   if (vision?.length) form.set("vision", JSON.stringify(vision));
   if (coach) form.set("coach", JSON.stringify(coach));
   if (outline) form.set("outline", JSON.stringify(outline));

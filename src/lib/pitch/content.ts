@@ -81,11 +81,14 @@ export function buildContentPrompt(input: {
   notes: string | null;
   topic?: string | null;
   outline?: string[] | null;
+  /** jazyk pitchu v lokáli, napr. „angličtine“ */
+  language?: string | null;
 }): string {
   const audience = AUDIENCE_BRIEF[input.audience];
   return [
     `Publikum: ${audience}.`,
     `Cieľová dĺžka: ${input.targetSeconds} sekúnd.`,
+    input.language && input.language !== "slovenčine" ? `Pitch je v ${input.language}. Hodnoť ho v tomto jazyku, spätnú väzbu (advice) však píš po slovensky.` : null,
     input.topic ? `Téma pitchu (záväzné zadanie od zakladateľa):\n"""${input.topic.slice(0, 1500)}"""` : null,
     input.outline?.length ? `Osnova, ktorú si zakladateľ pripravil:\n${input.outline.map((p) => `- ${p}`).join("\n")}` : null,
     input.notes ? `Poznámky, ktoré si zakladateľ pripravil (porovnaj, čo z nich naozaj povedal):\n"""${input.notes.slice(0, 4000)}"""` : null,

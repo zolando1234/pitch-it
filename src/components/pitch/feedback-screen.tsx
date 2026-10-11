@@ -280,7 +280,7 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span className="chip">{data.audienceLabel}</span>
               <span className="chip">{data.targetSeconds} s</span>
-              <span className="chip">Slovenčina</span>
+              <span className="chip">{data.languageLabel}</span>
               <span className="chip">Poradie podľa tvojej odpovede: {SECTION_LABELS[data.focus]} najprv</span>
             </div>
           </div>

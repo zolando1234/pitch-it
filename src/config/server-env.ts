@@ -47,6 +47,12 @@ export function getOpenAiRealtimeConfig(): OpenAiRealtimeConfig | null {
   };
 }
 
+/** ElevenLabs Scribe: prepis so zadaným jazykom aj časmi slov (slovenčina, čeština, …). */
+export function getElevenLabsSttConfig(): { apiKey: string; model: string } | null {
+  const apiKey = read("ELEVENLABS_API_KEY");
+  return apiKey ? { apiKey, model: read("ELEVENLABS_STT_MODEL") ?? "scribe_v2" } : null;
+}
+
 /** Mistral (Voxtral): náhradný prepis, keď chýba OPENAI_API_KEY. */
 export function getMistralTranscriptionConfig(): { apiKey: string; model: string } | null {
   const apiKey = read("MISTRAL_API_KEY");

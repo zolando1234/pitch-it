@@ -17,6 +17,9 @@ export function countWords(text: string): number {
 
 export type FillerKind = "hesitation" | "discourse";
 
+/** Jazyky s vlastným zoznamom výplňových slov (rovnaké kódy ako jazyk pitchu). */
+export type FillerLanguage = "sk" | "cs" | "en" | "de" | "pl" | "hu";
+
 type FillerEntry = { phrase: string[]; kind: FillerKind };
 
 /**
@@ -26,6 +29,7 @@ type FillerEntry = { phrase: string[]; kind: FillerKind };
  */
 const FILLERS: FillerEntry[] = [
   { phrase: ["ehm"], kind: "hesitation" },
+  { phrase: ["ehem"], kind: "hesitation" },
   { phrase: ["hm"], kind: "hesitation" },
   { phrase: ["hmm"], kind: "hesitation" },
   { phrase: ["eee"], kind: "hesitation" },
@@ -48,6 +52,41 @@ const FILLERS: FillerEntry[] = [
   { phrase: ["vieš"], kind: "discourse" },
 ];
 
+const HESITATIONS: FillerEntry[] = ["ehm", "ehem", "hm", "hmm", "eee", "ee", "eh", "em", "emm", "mmm"].map((w) => ({ phrase: [w], kind: "hesitation" as const }));
+
+const discourse = (...phrases: string[]): FillerEntry[] => phrases.map((p) => ({ phrase: p.split(" "), kind: "discourse" as const }));
+
+/** Výplňové slová podľa jazyka. Slovenčina je pôvodný zoznam vyššie. */
+const FILLERS_BY_LANGUAGE: Record<FillerLanguage, FillerEntry[]> = {
+  sk: FILLERS,
+  cs: [...HESITATIONS, ...discourse("jakoby", "prostě", "vlastně", "v podstatě", "jako", "nějak", "že jo", "víte", "víš")],
+  en: [
+    ...HESITATIONS,
+    ...["um", "umm", "uh", "uhh", "erm", "er"].map((w) => ({ phrase: [w], kind: "hesitation" as const })),
+    ...discourse("like", "you know", "basically", "actually", "i mean", "kind of", "sort of", "literally"),
+  ],
+  de: [
+    ...HESITATIONS,
+    ...["äh", "ähm", "öh", "öhm"].map((w) => ({ phrase: [w], kind: "hesitation" as const })),
+    ...discourse("halt", "quasi", "sozusagen", "irgendwie", "eigentlich", "weißt du"),
+  ],
+  pl: [
+    ...HESITATIONS,
+    ...["yyy", "yy", "eee"].map((w) => ({ phrase: [w], kind: "hesitation" as const })),
+    ...discourse("jakby", "w sumie", "generalnie", "właściwie", "wiesz", "tak jakby"),
+  ],
+  hu: [
+    ...HESITATIONS,
+    ...["ööö", "öö", "ő"].map((w) => ({ phrase: [w], kind: "hesitation" as const })),
+    ...discourse("izé", "szóval", "ugye", "tulajdonképpen", "hát", "mondjuk"),
+  ],
+};
+
+/** Jednoslovné výplne jazyka (na zvýraznenie v prepise). */
+export function fillerWordsFor(language: FillerLanguage = "sk"): Set<string> {
+  return new Set(FILLERS_BY_LANGUAGE[language].filter((f) => f.phrase.length === 1).map((f) => f.phrase[0]));
+}
+
 export type FillerCount = {
   total: number;
   hesitation: number;
@@ -56,14 +95,14 @@ export type FillerCount = {
   byPhrase: Record<string, number>;
 };
 
-export function countFillers(text: string): FillerCount {
+export function countFillers(text: string, language: FillerLanguage = "sk"): FillerCount {
   const words = tokenizeWords(text);
   const byPhrase: Record<string, number> = {};
   let hesitation = 0;
   let discourse = 0;
 
   // Najprv dlhšie frázy, aby „v podstate“ nezapočítalo „v“ samostatne.
-  const entries = [...FILLERS].sort((a, b) => b.phrase.length - a.phrase.length);
+  const entries = [...FILLERS_BY_LANGUAGE[language]].sort((a, b) => b.phrase.length - a.phrase.length);
   let index = 0;
   while (index < words.length) {
     const match = entries.find((entry) =>

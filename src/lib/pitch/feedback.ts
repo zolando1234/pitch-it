@@ -4,6 +4,7 @@ import { PREVIEW_COACH } from "@/lib/preview/coach";
 import { BODY_EVENT_LABELS, bodyNarrative, clock, type BodySummary } from "@/lib/pitch/body";
 import { CATEGORY_LABELS, orderedCategories, type ContentScore } from "@/lib/pitch/content";
 import { decimal, pausesLabel, TEMPO_ADVICE, tempoPosition, tempoVerdict, type PitchMetrics, type TranscriptToken } from "@/lib/pitch/metrics";
+import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
 import type { PitchAttemptRow } from "@/lib/db/types";
 
@@ -20,6 +21,8 @@ export type FeedbackData = {
   attemptId: string;
   number: number;
   audienceLabel: string;
+  /** jazyk pitchu, napr. „Slovenčina“ */
+  languageLabel: string;
   audience: "investor" | "jury" | "customer" | "team";
   targetSeconds: number;
   focus: FeedbackSection;
@@ -158,6 +161,7 @@ export function buildFeedback(
     number: extra.number,
     audience: attempt.audience,
     audienceLabel: AUDIENCE_LABELS[attempt.audience],
+    languageLabel: LANGUAGE_INFO[parseLanguage(attempt.language)].label,
     targetSeconds: attempt.target_seconds,
     focus: attempt.focus,
     retryHref: extra.retryHref,
@@ -203,6 +207,7 @@ export const FEEDBACK_FIXTURE: FeedbackData = {
   number: 1,
   audience: "investor",
   audienceLabel: "Investorovi",
+  languageLabel: "Slovenčina",
   targetSeconds: 60,
   focus: "tempo",
   retryHref: "/ukazka/nahravka/kamera",

@@ -296,6 +296,10 @@ export type PitchAttemptRow = {
   body: Record<string, unknown> | null;
   /** Tvar `OutlineResult` (src/lib/pitch/outline.ts): téma, osnova a zhoda s pitchom. */
   outline: Record<string, unknown> | null;
+  /** jazyk pitchu (src/lib/pitch/language.ts) */
+  language: "sk" | "cs" | "en" | "de" | "pl" | "hu";
+  /** model, ktorý pitch prepísal (napr. „elevenlabs“) */
+  stt_model: string | null;
   model: string | null;
   event_id: string | null;
   share_name: string | null;

@@ -204,7 +204,7 @@ export function CoachLive({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <section ref={stageRef} className="relative min-h-0 flex-1 overflow-hidden">
+        <section ref={stageRef} className="stage-dark relative min-h-0 flex-1 overflow-hidden">
           {/* „reflektor“: okraj záberu svieti farbou stavu */}
           <div
             className="pointer-events-none absolute inset-0 z-10 transition-[box-shadow] duration-500"
