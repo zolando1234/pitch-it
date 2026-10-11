@@ -21,8 +21,8 @@ export default function FeedbackBubble({ fb }: { fb: FeedbackState }) {
         {ICON[fb.status]}
       </span>
       <div className="min-w-0">
-        <p className="text-4xl font-black leading-[1.05] text-paper md:text-5xl xl:text-6xl">{fb.title}</p>
-        <p className="mt-2 text-lg leading-snug text-paper md:text-xl xl:text-2xl">{fb.tip}</p>
+        <p className="text-4xl font-black leading-[1.05] text-white md:text-5xl xl:text-6xl">{fb.title}</p>
+        <p className="mt-2 text-lg leading-snug text-white/90 md:text-xl xl:text-2xl">{fb.tip}</p>
       </div>
     </div>
   );

@@ -99,7 +99,7 @@ export default function Teleprompter({ text, wpm, onWpmChange, running }: Props)
       >
         <div ref={contentRef} className="will-change-transform" style={{ transform: "translateY(30%)" }}>
           {paragraphs.map((p, i) => (
-            <p key={i} className="mb-6 text-2xl font-semibold leading-snug text-paper md:text-3xl xl:text-4xl">
+            <p key={i} className="mb-6 text-2xl font-semibold leading-snug text-white md:text-3xl xl:text-4xl">
               {p.split(CUE).map((part, j) =>
                 CUE.test(part) ? (
                   <span key={j} className="mx-1 align-middle text-base font-bold uppercase tracking-wider text-signal md:text-lg">
@@ -117,7 +117,7 @@ export default function Teleprompter({ text, wpm, onWpmChange, running }: Props)
       {/* čítacia linka */}
       <div className="pointer-events-none absolute inset-x-0 top-[30%] border-t border-signal/40" />
 
-      <div className="absolute bottom-2 right-3 flex items-center gap-2 text-xs text-mute">
+      <div className="absolute bottom-2 right-3 flex items-center gap-2 text-xs text-white/70">
         {paused && <span className="font-bold uppercase tracking-widest text-marker">Pozastavené · medzerník</span>}
         <button onClick={() => changeWpm(wpm - 10)} className="rounded bg-line px-2 py-1 hover:bg-line-strong" aria-label="Pomalšie">
           −

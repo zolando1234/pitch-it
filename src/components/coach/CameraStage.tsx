@@ -586,7 +586,7 @@ export default function CameraStage({
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full -scale-x-100 object-contain" />
       <div
         ref={hudRef}
-        className="pointer-events-none absolute right-3 top-3 rounded bg-black/60 px-2 py-1 font-mono text-[11px] text-mute"
+        className="pointer-events-none absolute right-3 top-3 rounded bg-black/60 px-2 py-1 font-mono text-[11px] text-white/70"
       />
     </div>
   );

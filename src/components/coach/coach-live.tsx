@@ -235,14 +235,14 @@ export function CoachLive({
           )}
 
           {phase === "loading" && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-ink/80">
-              <p className="animate-pulse text-xl text-mute">Načítavam kameru a model…</p>
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
+              <p className="animate-pulse text-xl text-white/70">Načítavam kameru a model…</p>
             </div>
           )}
           {phase === "countdown" && (
-            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-ink/50 px-6 text-center">
-              <p className="text-sm uppercase tracking-[0.4em] text-mute">Začíname o</p>
-              <p className={waitingForPerson ? "mt-2 text-2xl font-bold text-paper" : "mt-2 text-mute"}>
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/50 px-6 text-center text-white">
+              <p className="text-sm uppercase tracking-[0.4em] text-white/70">Začíname o</p>
+              <p className={waitingForPerson ? "mt-2 text-2xl font-bold text-white" : "mt-2 text-white/70"}>
                 {waitingForPerson ? "Postav sa do záberu, odpočet pokračuje, keď ťa kamera uvidí" : "Pozeraj sa rovno do kamery, nastavujeme polohu hlavy"}
               </p>
               <p
