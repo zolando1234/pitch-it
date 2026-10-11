@@ -12,9 +12,9 @@ export const maxDuration = 120;
 const AUDIO_TYPES = new Set(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-m4a", "video/webm"]);
 
 const metaSchema = z.object({
-  durationMs: z.coerce.number().int().min(1_000).max(4 * 60 * 1000),
+  durationMs: z.coerce.number().int().min(1_000).max(5 * 60 * 1000),
   audience: z.enum(AUDIENCES),
-  targetSeconds: z.coerce.number().pipe(z.union([z.literal(30), z.literal(60), z.literal(180)])),
+  targetSeconds: z.coerce.number().pipe(z.union([z.literal(30), z.literal(60), z.literal(180), z.literal(240)])),
   focus: z.enum(["tempo", "fillery", "obsah"]),
 });
 

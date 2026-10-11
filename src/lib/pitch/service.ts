@@ -5,7 +5,7 @@ import { LlmError } from "@/lib/ai/llm/types";
 import { TranscriptionError, transcribeWithWords } from "@/lib/ai/transcription";
 import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
-import { FREE_PITCHES, PITCH_PACK, formatEur } from "@/lib/billing/pitch-pack";
+import { canUseLength, FREE_PITCHES, PITCH_PACK, formatEur } from "@/lib/billing/pitch-pack";
 import { getProfile } from "@/lib/db/profile";
 import { insertPitchAttempt, updatePitchAttempt } from "@/lib/db/pitch";
 import type { PitchAttemptRow } from "@/lib/db/types";
@@ -29,7 +29,7 @@ export class PitchServiceError extends Error {
   }
 }
 
-/** Najviac ~3,5 minúty audia (webm/opus pri ~128 kb/s). */
+/** Rezerva nad 4 minúty audia (nahráva sa pri 64 kb/s, teda ~2 MB). */
 export const MAX_PITCH_AUDIO_BYTES = 8 * 1024 * 1024;
 
 export type PitchInput = {
@@ -56,9 +56,13 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
   const hasBody = Boolean(input.vision?.length || input.coach);
   // pokus s kamerou má reč tela aj bez zvuku, prázdny zvuk ho preto nezastaví
   if ((input.audio.size === 0 && !hasBody) || input.audio.size > MAX_PITCH_AUDIO_BYTES) {
-    throw new PitchServiceError("invalid", "Nahrávka je prázdna alebo príliš dlhá (najviac 3 minúty).");
+    throw new PitchServiceError("invalid", "Nahrávka je prázdna alebo príliš dlhá (najviac 4 minúty).");
   }
-  if (!(await getPitchBalance(userId)).canPitch) {
+  const balance = await getPitchBalance(userId);
+  if (!canUseLength(input.targetSeconds, balance)) {
+    throw new PitchServiceError("limit_reached", "4-minútový pitch je v platenej verzii. Kúp si balík pitchov alebo nahraj kratší pitch.", 402);
+  }
+  if (!balance.canPitch) {
     throw new PitchServiceError(
       "limit_reached",
       `Využil si ${FREE_PITCHES} pitche zadarmo. Kúp si balík ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)} a trénuj ďalej.`,

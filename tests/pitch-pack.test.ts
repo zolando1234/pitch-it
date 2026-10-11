@@ -25,3 +25,15 @@ describe("paywall pitchov", () => {
     assert.equal(formatEur(PITCH_PACK.priceCents), "19,99 €");
   });
 });
+
+describe("dĺžka pitchu", () => {
+  test("4 minúty len s kúpenými pitchami", async () => {
+    const { canUseLength, lengthLabel } = await import("../src/lib/billing/pitch-pack.ts");
+    assert.equal(canUseLength(240, { freeLeft: 3, credits: 0, canPitch: true }), false);
+    assert.equal(canUseLength(240, { freeLeft: 0, credits: 5, canPitch: true }), true);
+    assert.equal(canUseLength(180, { freeLeft: 1, credits: 0, canPitch: true }), true);
+    assert.equal(canUseLength(240, null), true);
+    assert.equal(lengthLabel(240), "4 min");
+    assert.equal(lengthLabel(30), "30 s");
+  });
+});

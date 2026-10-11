@@ -8,6 +8,7 @@ import { useCoachPrefs, type CoachResult } from "@/components/coach/coach-live";
 import { preloadCoachModels } from "@/components/coach/CameraStage";
 import SessionSetup from "@/components/coach/SessionSetup";
 import { LanguagePicker, usePitchLanguage } from "@/components/pitch/language-picker";
+import { LengthPicker, usePitchLength } from "@/components/pitch/length-picker";
 import { OutlineEditor, usePitchOutline } from "@/components/pitch/outline-editor";
 import { PhoneMicPanel } from "@/components/pitch/phone-mic-panel";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
@@ -20,7 +21,7 @@ import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
 import type { SessionSummary } from "@/lib/coach/pose/session";
 import { toStoredCoach, type StoredCoach } from "@/lib/coach/stored";
 import { AUDIENCE_LABELS, FOCUS_GOALS } from "@/lib/onboarding/plan";
-import type { PitchBalance } from "@/lib/billing/pitch-pack";
+import { canUseLength, type PitchBalance } from "@/lib/billing/pitch-pack";
 
 /*
   Nahrávanie pitchu s kamerou: živý tréner reči tela (silueta, rady nad hlavou, teleprompter)
@@ -69,7 +70,13 @@ export function CameraRecordScreen({
   const blocked = !!wallet.balance && !wallet.balance.canPitch;
   const outlineState = usePitchOutline();
   const languageState = usePitchLanguage();
-  const pitchSetup = useMemo(() => ({ ...setup, language: languageState.language }), [setup, languageState.language]);
+  const lengthState = usePitchLength(setup.targetSeconds);
+  // 4 minúty len s kúpenými pitchami; inak sa nahráva najdlhšia dostupná dĺžka
+  const targetSeconds = canUseLength(lengthState.length, wallet.balance) ? lengthState.length : 180;
+  const pitchSetup = useMemo(
+    () => ({ ...setup, targetSeconds, language: languageState.language }),
+    [setup, targetSeconds, languageState.language],
+  );
   const { outline } = outlineState;
   const recorder = usePitchRecorder();
   const { open, attach, release } = recorder;
@@ -103,8 +110,8 @@ export function CameraRecordScreen({
   };
 
   const mode: TalkMode = useMemo(
-    () => ({ kind: "talk", id: "pitch", title: `Pitch · ${setup.targetSeconds} s`, subtitle: AUDIENCE_LABELS[setup.audience], durationMs: setup.targetSeconds * 1000 }),
-    [setup.targetSeconds, setup.audience],
+    () => ({ kind: "talk", id: "pitch", title: `Pitch · ${targetSeconds} s`, subtitle: AUDIENCE_LABELS[setup.audience], durationMs: targetSeconds * 1000 }),
+    [targetSeconds, setup.audience],
   );
   const ruleFilter = useMemo(() => ruleFilterFor(mode, !!prefs.prompterText), [mode, prefs.prompterText]);
 
@@ -258,7 +265,7 @@ export function CameraRecordScreen({
         key={take}
         mode={mode}
         title="Tréning pitchu"
-        subtitle={`Pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()} · cieľ ${fmtTarget(setup.targetSeconds)}`}
+        subtitle={`Pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()} · cieľ ${fmtTarget(targetSeconds)}`}
         prefs={prefs}
         outline={outline}
         startFull={fullscreen}
@@ -295,7 +302,7 @@ export function CameraRecordScreen({
         <main id="obsah">
           <SessionSetup
             heading="Pitch pred kamerou"
-            lead={`${setup.targetSeconds >= 60 ? `${setup.targetSeconds / 60} min` : `${setup.targetSeconds} s`} pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()}. ${FOCUS_GOALS[setup.focus]} Tréner ti počas pitchu radí, na konci dostaneš spätnú väzbu.`}
+            lead={`${targetSeconds >= 60 ? `${targetSeconds / 60} min` : `${targetSeconds} s`} pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()}. ${FOCUS_GOALS[setup.focus]} Tréner ti počas pitchu radí, na konci dostaneš spätnú väzbu.`}
             backHref={homeHref}
             backLabel="Prehľad"
             modes={null}
@@ -314,6 +321,7 @@ export function CameraRecordScreen({
             micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
           >
             {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance)}</p> : null}
+            <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref={preview ? setupHref : "/app/nastavenia#plan"} />
             <LanguagePicker {...languageState} />
             <OutlineEditor {...outlineState} />
             <button
@@ -336,7 +344,7 @@ export function CameraRecordScreen({
             </button>
             <p className="text-sm text-mute">
               <Link href={setupHref} className="font-bold text-accent">
-                Zmeniť publikum a dĺžku
+                Zmeniť publikum
               </Link>
             </p>
             {micText ? (

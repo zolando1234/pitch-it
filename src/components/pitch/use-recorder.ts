@@ -15,7 +15,7 @@ import type { PitchOutline } from "@/lib/pitch/outline";
 
 export type RecorderSetup = {
   audience: "investor" | "jury" | "customer" | "team";
-  targetSeconds: 30 | 60 | 180;
+  targetSeconds: 30 | 60 | 180 | 240;
   focus: "tempo" | "fillery" | "obsah";
   /** jazyk pitchu; bez neho slovenčina */
   language?: PitchLanguage;
@@ -116,7 +116,8 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     chunksRef.current = [];
     let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(audioOnly, mimeType ? { mimeType } : undefined);
+      // 64 kb/s stačí na reč a 4-minútový pitch ostane pod limitom požiadavky na Verceli (4,5 MB)
+      recorder = new MediaRecorder(audioOnly, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 64_000 });
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };

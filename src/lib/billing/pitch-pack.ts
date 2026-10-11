@@ -47,3 +47,17 @@ export function balanceLabel(balance: PitchBalance): string {
   if (balance.credits > 0) parts.push(`${balance.credits} zakúpených`);
   return parts.length ? `Zostáva ti ${parts.join(" a ")}.` : "Nemáš žiadne pitche.";
 }
+
+/** Dĺžky nahrávania pitchu (sekundy). Najdlhšia je len pre platiacich (kúpený balík). */
+export const RECORD_LENGTHS = [30, 60, 180, 240] as const;
+export type RecordLength = (typeof RECORD_LENGTHS)[number];
+export const PAID_LENGTH: RecordLength = 240;
+
+export function lengthLabel(seconds: number): string {
+  return seconds >= 60 ? `${seconds / 60} min` : `${seconds} s`;
+}
+
+/** 4-minútový pitch smie nahrať, kto má kúpené pitche (null = bez paywallu, napr. ukážka). */
+export function canUseLength(seconds: number, balance: PitchBalance | null): boolean {
+  return seconds !== PAID_LENGTH || balance === null || balance.credits > 0;
+}

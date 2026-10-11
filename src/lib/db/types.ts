@@ -281,7 +281,7 @@ export type PitchAttemptRow = {
   id: string;
   user_id: string;
   audience: "investor" | "jury" | "customer" | "team";
-  target_seconds: 30 | 60 | 180;
+  target_seconds: 30 | 60 | 180 | 240;
   focus: "tempo" | "fillery" | "obsah";
   with_camera: boolean;
   duration_ms: number | null;
