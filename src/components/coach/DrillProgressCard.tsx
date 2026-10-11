@@ -5,13 +5,13 @@ export default function DrillProgressCard({ drill, progress }: { drill: Drill; p
   const color = progress.passed ? "#aaff00" : "#7d51fe";
   return (
     <div className="w-72 rounded-2xl border border-line bg-black/75 p-4 backdrop-blur-md md:w-80">
-      <p className="text-xs font-bold uppercase tracking-[0.25em] text-signal">Cvičenie · {drill.title}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.25em] text-accent">Cvičenie · {drill.title}</p>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-5xl font-black" style={{ color }}>
           {progress.text}
         </span>
         <span className="text-lg text-mute">/ {progress.targetText}</span>
-        {progress.passed && <span className="ml-auto text-2xl font-black text-signal">✓</span>}
+        {progress.passed && <span className="ml-auto text-2xl font-black text-accent">✓</span>}
       </div>
       <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-line">
         <div

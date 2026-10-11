@@ -171,7 +171,7 @@ export function CoachLive({
       <header className="relative flex items-center justify-between gap-4 border-b border-line px-6 py-3">
         <div className="flex min-w-0 items-center gap-4">
           <span className="h text-lg">
-            Pitch<span className="text-signal">It</span>
+            Pitch<span className="text-accent">It</span>
           </span>
           <span className="hidden truncate rounded-full bg-panel px-3 py-1 text-xs font-bold uppercase tracking-widest text-mute sm:inline">
             {label}

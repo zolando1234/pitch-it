@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { SessionSummary } from "@/lib/coach/pose/session";
-import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
+import { STATUS_COLOR, STATUS_TEXT } from "@/lib/coach/pose/renderer";
 import type { Highlight } from "@/lib/coach/pose/metrics";
 import { HIGHLIGHTS, RULE_BY_ID } from "@/lib/coach/pose/rules";
 import { ScoreRing, SideShare } from "./LivePanel";
@@ -24,6 +24,10 @@ function downsample<T>(arr: T[], max: number): T[] {
 export const scoreColor = (v: number | null) =>
   v === null ? "#525252" : v >= 85 ? STATUS_COLOR.good : v >= 65 ? STATUS_COLOR.warn : STATUS_COLOR.bad;
 
+/** Ako scoreColor, ale pre text (čísla a známka): tokeny témy namiesto žiarivých farieb. */
+const scoreTextColor = (v: number | null) =>
+  v === null ? STATUS_TEXT.idle : v >= 85 ? STATUS_TEXT.good : v >= 65 ? STATUS_TEXT.warn : STATUS_TEXT.bad;
+
 /** Rozpis skóre: kategórie, stropy a konkrétne stratené body. */
 function ScoreBreakdown({ score }: { score: FinalScore }) {
   const deductions = score.categories
@@ -42,7 +46,7 @@ function ScoreBreakdown({ score }: { score: FinalScore }) {
                 <span className="font-semibold">
                   {c.title} <span className="text-xs text-faint">· {Math.round(c.weight * 100)} % skóre</span>
                 </span>
-                <span className="font-mono text-lg font-bold" style={{ color: scoreColor(c.score) }}>
+                <span className="font-mono text-lg font-bold" style={{ color: scoreTextColor(c.score) }}>
                   {c.score ?? "—"}
                 </span>
               </div>
@@ -107,7 +111,7 @@ export function CoachReport({
         <ScoreRing score={final.total ?? 0} color={scoreColor(final.total)} size={180} />
         <div className="flex flex-col gap-3">
           <div className="flex items-baseline gap-4">
-            <span className="h text-6xl" style={{ color: scoreColor(final.total) }}>
+            <span className="h text-6xl" style={{ color: scoreTextColor(final.total) }}>
               {final.grade}
             </span>
             <span className="text-2xl font-bold uppercase tracking-widest text-mute">{final.label}</span>
@@ -131,7 +135,7 @@ export function CoachReport({
         </div>
         <div className="mt-3 flex flex-wrap gap-5 text-sm text-mute">
           <span>
-            <b className="text-signal">{Math.round(summary.cleanShare * 100)} %</b> bez chyby
+            <b className="text-accent">{Math.round(summary.cleanShare * 100)} %</b> bez chyby
           </span>
           <span>
             <b className="text-marker">{Math.round(share.warn * 100)} %</b> mohlo byť lepšie
@@ -161,7 +165,7 @@ export function CoachReport({
             {(Object.keys(HIGHLIGHTS) as Highlight[]).map((h) => (
               <li key={h} className="flex items-center justify-between">
                 <span className="text-mute">{HIGHLIGHTS[h].label}</span>
-                <span className="text-2xl font-black text-signal">{summary.highlights[h] ?? 0}×</span>
+                <span className="text-2xl font-black text-accent">{summary.highlights[h] ?? 0}×</span>
               </li>
             ))}
           </ul>
@@ -221,7 +225,7 @@ export default function SessionSummaryView({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-10">
       <div>
-        <p className="text-sm font-bold uppercase tracking-[0.3em] text-signal">
+        <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">
           Vyhodnotenie · {mode.kind === "drill" ? `Cvičenie: ${mode.title}` : mode.title}
         </p>
         <h1 className="h mt-2 text-4xl md:text-6xl">Ako ti to išlo</h1>
@@ -233,7 +237,7 @@ export default function SessionSummaryView({
             drill.passed ? "border-signal bg-signal/10" : "border-danger bg-danger/10"
           }`}
         >
-          <span className={`text-6xl font-black ${drill.passed ? "text-signal" : "text-danger"}`}>{drill.passed ? "✓" : "✕"}</span>
+          <span className={`text-6xl font-black ${drill.passed ? "text-accent" : "text-danger"}`}>{drill.passed ? "✓" : "✕"}</span>
           <div className="flex-1">
             <p className="text-3xl font-black">{drill.passed ? "Cvičenie splnené!" : "Ešte to nie je ono"}</p>
             <p className="mt-1 text-lg text-mute">{mode.goal}</p>

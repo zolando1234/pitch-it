@@ -149,7 +149,7 @@ export function PhoneMic({ code }: { code: string }) {
       </header>
       <main id="obsah" className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 pb-16">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.3em] text-signal">Mobil ako mikrofón</p>
+          <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">Mobil ako mikrofón</p>
           <h1 className="h mt-3 text-4xl leading-tight">
             {live ? "Mikrofón je zapnutý." : state === "connecting" ? "Pripájam k počítaču…" : "Zapni mikrofón."}
           </h1>

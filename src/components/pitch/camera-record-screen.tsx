@@ -318,7 +318,7 @@ export function CameraRecordScreen({
               onClick={toggleFullscreen}
               className={`flex w-full items-center gap-4 rounded-3xl border-2 p-5 text-left transition md:p-6 ${fullscreen ? "border-signal bg-signal/10" : "border-line hover:border-faint"}`}
             >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0 text-signal">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0 text-accent">
                 <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
               </svg>
               <span className="min-w-0 flex-1">
@@ -330,7 +330,7 @@ export function CameraRecordScreen({
               </span>
             </button>
             <p className="text-sm text-mute">
-              <Link href={setupHref} className="font-bold text-signal">
+              <Link href={setupHref} className="font-bold text-accent">
                 Zmeniť publikum a dĺžku
               </Link>
             </p>

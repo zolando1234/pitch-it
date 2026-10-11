@@ -1,5 +1,4 @@
-import { PLANS, emptyUsage } from "@/lib/billing/plans";
-import { planSummary } from "@/lib/billing/summary";
+import { pitchSummary } from "@/lib/billing/summary";
 import type { DashboardStartup, DashboardViewData } from "@/components/dashboard/dashboard-view";
 import { buildNotifications } from "@/lib/dashboard/notifications";
 import {
@@ -138,13 +137,6 @@ export function previewNotifications(now: Date) {
   );
 }
 
-export function previewPlanSummary(now: Date) {
-  return planSummary(
-    {
-      plan: PLANS.pro,
-      usage: { ...emptyUsage(), realtime_seconds: 46 * 60 },
-      subscription: { plan: "pro", status: "trialing", current_period_end: new Date(now.getTime() + 11.5 * 24 * HOUR).toISOString(), cancel_at_period_end: false },
-    },
-    now,
-  );
+export function previewPlanSummary() {
+  return pitchSummary({ freeLeft: 1, credits: 0, canPitch: true });
 }

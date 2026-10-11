@@ -13,7 +13,7 @@ import { Wordmark } from "@/components/wordmark";
 import type { TalkMode } from "@/lib/coach/modes";
 import type { FeedbackState, Status } from "@/lib/coach/pose/feedback";
 import type { Metrics } from "@/lib/coach/pose/metrics";
-import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
+import { STATUS_COLOR, STATUS_TEXT } from "@/lib/coach/pose/renderer";
 import { RULE_BY_ID } from "@/lib/coach/pose/rules";
 import { keywordsOf, matchesStem as matches, normalize, stemOf, tokenize, type PitchOutline } from "@/lib/pitch/outline";
 
@@ -538,7 +538,7 @@ export function PitchStudio({
                     <Face status={c.status} />
                     <span>
                       <b className="block text-[13px]">{c.label}</b>
-                      <span className="block text-[10px] font-bold uppercase tracking-wider" style={{ color: c.now ? undefined : STATUS_COLOR[c.status] }}>
+                      <span className="block text-[10px] font-bold uppercase tracking-wider" style={{ color: c.now ? undefined : STATUS_TEXT[c.status] }}>
                         {c.now ? <span className="text-accent">Teraz</span> : CHIP_SUB[c.status]}
                       </span>
                     </span>

@@ -127,7 +127,7 @@ export default function SessionSetup({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-10 md:px-8">
       <div className="flex flex-col gap-3">
-        <Link href={backHref} className="text-sm font-bold uppercase tracking-[0.3em] text-signal">
+        <Link href={backHref} className="text-sm font-bold uppercase tracking-[0.3em] text-accent">
           ← {backLabel}
         </Link>
         <h1 className="h text-4xl leading-tight md:text-6xl">{heading}</h1>

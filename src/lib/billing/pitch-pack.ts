@@ -37,3 +37,10 @@ export function afterPitch(wallet: PitchWallet | null): PitchWallet {
   if (w.free_used < FREE_PITCHES) return { ...w, free_used: w.free_used + 1 };
   return { ...w, credits: Math.max(0, w.credits - 1) };
 }
+
+export function balanceLabel(balance: PitchBalance): string {
+  const parts: string[] = [];
+  if (balance.freeLeft > 0) parts.push(`${balance.freeLeft} ${balance.freeLeft === 1 ? "pitch" : "pitche"} zadarmo`);
+  if (balance.credits > 0) parts.push(`${balance.credits} zakúpených`);
+  return parts.length ? `Zostáva ti ${parts.join(" a ")}.` : "Nemáš žiadne pitche.";
+}

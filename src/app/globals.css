@@ -308,6 +308,8 @@
 
 /* Úvodná karta prehľadu je tmavá v oboch témach (ilustrácia je navrhnutá na tmavé pozadie). */
 .dash-hero {
+  /* prekrytie fotky (from-ink) musí byť tmavé aj vo svetlej téme, inak svetlý text zanikne */
+  --color-ink: #0b0e19;
   --color-paper: #f3f4f9;
   --color-slide: #d6d9ea;
   --color-periwinkle: #8f97d6;

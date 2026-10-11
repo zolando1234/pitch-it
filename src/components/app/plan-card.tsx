@@ -2,8 +2,8 @@ import Link from "next/link";
 import { cache } from "react";
 import { Icon } from "@/components/app/icons";
 import { getCurrentUser } from "@/lib/auth/session";
-import { planSummary, type PlanSummary } from "@/lib/billing/summary";
-import { getBillingContext } from "@/lib/db/usage";
+import { pitchSummary, type PlanSummary } from "@/lib/billing/summary";
+import { getPitchBalance } from "@/lib/db/pitch-wallet";
 
 /** Karta plánu v spodnej časti bočného panelu (desktop aj mobilné menu). */
 export function PlanCard({ summary }: { summary: PlanSummary }) {
@@ -32,7 +32,7 @@ export function PlanCard({ summary }: { summary: PlanSummary }) {
 const loadSummary = cache(async (): Promise<PlanSummary | null> => {
   const user = await getCurrentUser();
   if (!user) return null;
-  return planSummary(await getBillingContext(user.id));
+  return pitchSummary(await getPitchBalance(user.id));
 });
 
 /** Číta reláciu, preto je vždy vo vnútri <Suspense>. */

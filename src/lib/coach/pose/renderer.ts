@@ -11,6 +11,14 @@ export const STATUS_COLOR: Record<Status, string> = {
   idle: "#7a7a86",
 };
 
+/** Farby stavu pre text na stránke: tokeny témy, čitateľné na tmavom aj svetlom pozadí. */
+export const STATUS_TEXT: Record<Status, string> = {
+  good: "var(--color-accent)",
+  warn: "var(--color-marker)",
+  bad: "var(--color-danger)",
+  idle: "var(--color-mute)",
+};
+
 const STATUS_RGB: Record<Status, [number, number, number]> = {
   good: [34, 197, 94],
   warn: [245, 158, 11],

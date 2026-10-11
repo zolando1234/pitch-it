@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FREE_PITCHES, PITCH_PACK, formatEur, type PitchBalance } from "@/lib/billing/pitch-pack";
 
+export { balanceLabel } from "@/lib/billing/pitch-pack";
+
 /*
   Paywall nahrávania: zostatok pitchov a nákup balíka cez Stripe Checkout.
 */
@@ -50,17 +52,10 @@ export function usePitchBalance(initial: PitchBalance | null, waitingForPayment:
   return { balance, paymentsEnabled, confirming, reload };
 }
 
-export function balanceLabel(balance: PitchBalance): string {
-  const parts: string[] = [];
-  if (balance.freeLeft > 0) parts.push(`${balance.freeLeft} ${balance.freeLeft === 1 ? "pitch" : "pitche"} zadarmo`);
-  if (balance.credits > 0) parts.push(`${balance.credits} zakúpených`);
-  return parts.length ? `Zostáva ti ${parts.join(" a ")}.` : "Nemáš žiadne pitche.";
-}
-
-export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled: boolean; confirming: boolean }) {
+/** Otvorí Stripe Checkout pre balík pitchov. */
+export function useBuyPitchPack() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const buy = async () => {
     setPending(true);
     setError(null);
@@ -77,6 +72,34 @@ export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled:
     }
     setPending(false);
   };
+  return { buy, pending, error };
+}
+
+/** Samostatné tlačidlo nákupu (napr. v Nastaveniach). */
+export function BuyPitchPackButton() {
+  const { buy, pending, error } = useBuyPitchPack();
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => void buy()}
+        disabled={pending}
+        className="rounded-full bg-signal px-7 py-3.5 text-base font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-50"
+      >
+        {pending ? "Otváram platbu…" : `Kúpiť ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)}`}
+      </button>
+      <p className="mt-2 text-[13px] text-faint">Jednorazovo, bez predplatného. Zľavový kód zadáš pri platbe.</p>
+      {error ? (
+        <p role="alert" className="mt-2 text-[14px] text-coral">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled: boolean; confirming: boolean }) {
+  const { buy, pending, error } = useBuyPitchPack();
 
   if (confirming) {
     return (
@@ -89,7 +112,7 @@ export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled:
 
   return (
     <section className="rounded-3xl border-2 border-signal p-6 md:p-8" aria-labelledby="paywall-nadpis">
-      <p className="text-sm font-bold uppercase tracking-[0.3em] text-signal">Pitche zadarmo sú minuté</p>
+      <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">Pitche zadarmo sú minuté</p>
       <h2 id="paywall-nadpis" className="h mt-3 text-3xl leading-tight md:text-4xl">
         Trénuj ďalej s balíkom {PITCH_PACK.credits} pitchov.
       </h2>

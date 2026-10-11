@@ -41,7 +41,7 @@ function Meter({ label, value, ok, hint }: { label: string; value: number; ok: b
     <div>
       <div className="mb-1 flex justify-between text-xs uppercase tracking-wider text-mute">
         <span>{label}</span>
-        <span className={ok ? "text-signal" : "text-marker"}>{hint}</span>
+        <span className={ok ? "text-accent" : "text-marker"}>{hint}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-line">
         <div

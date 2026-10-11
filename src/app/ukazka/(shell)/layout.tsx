@@ -11,7 +11,7 @@ import { PREVIEW_ACCOUNT, previewNotifications, previewPlanSummary } from "@/lib
 /** Ukážkové dáta sú relatívne k aktuálnemu času, preto sa čítajú až pri požiadavke. */
 async function PreviewPlanCard() {
   await connection();
-  return <PlanCard summary={previewPlanSummary(new Date())} />;
+  return <PlanCard summary={previewPlanSummary()} />;
 }
 
 async function PreviewTopBar() {

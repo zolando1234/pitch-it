@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import { ConsentToggle, ForgetDevicesButton, SettingsForm, UpgradeButton } from "@/components/settings/settings-forms";
-import { UsageMeter } from "@/components/app/usage-meter";
+import { ConsentToggle, ForgetDevicesButton, SettingsForm } from "@/components/settings/settings-forms";
+import { BuyPitchPackButton } from "@/components/pitch/pitch-paywall";
 import { buttonClasses } from "@/components/ui/button";
 import { ConfirmAction } from "@/components/ui/confirm-action";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { isStripeConfigured } from "@/lib/billing/stripe";
-import { PLANS } from "@/lib/billing/plans";
+import { balanceLabel, FREE_PITCHES } from "@/lib/billing/pitch-pack";
 import { getCurrentConsents, getProfile, getSettings } from "@/lib/db/profile";
-import { getBillingContext } from "@/lib/db/usage";
-import { formatDate } from "@/lib/format";
+import { getPitchBalance } from "@/lib/db/pitch-wallet";
 import { MEDIA_CONSENT_VERSION } from "@/lib/privacy/consent-texts";
 import { deleteAccountAction, deleteAllSessionsAction } from "@/lib/privacy/settings-actions";
 
@@ -36,15 +35,13 @@ function Section({ id, title, children, description }: { id: string; title: stri
 export default async function SettingsPage({ searchParams }: PageProps<"/app/nastavenia">) {
   const user = await requireUser("/app/nastavenia");
   const params = await searchParams;
-  const [profile, settings, consents, billing] = await Promise.all([
+  const [profile, settings, consents, balance] = await Promise.all([
     getProfile(user.id),
     getSettings(user.id),
     getCurrentConsents(user.id),
-    getBillingContext(user.id),
+    getPitchBalance(user.id),
   ]);
   const stripe = isStripeConfigured();
-  const subscription = billing.subscription;
-  const isPro = billing.plan.id === "pro";
   const media = (kind: "microphone_processing" | "camera_analysis") =>
     consents[kind]?.granted === true && consents[kind]?.version === MEDIA_CONSENT_VERSION;
 
@@ -53,7 +50,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/app/nas
       <PageHeader title="Nastavenia" description={user.email ?? undefined} />
       {params.platba === "ok" ? (
         <Notice tone="success" className="mb-6">
-          Platba prebehla. Plán Pro sa aktivuje do minúty, hneď ako ju potvrdí platobná brána.
+          Platba prebehla. Pitche sa pripíšu do minúty, hneď ako ju potvrdí platobná brána.
         </Notice>
       ) : null}
 
@@ -72,31 +69,10 @@ export default async function SettingsPage({ searchParams }: PageProps<"/app/nas
         <ForgetDevicesButton />
       </Section>
 
-      <Section id="plan" title="Plán a čerpanie" description="Čerpanie sa počíta za kalendárny mesiac.">
-        <p className="text-[15px] text-paper">
-          Aktuálny plán: <span className="font-semibold">{billing.plan.name}</span>
-          {subscription?.cancel_at_period_end && subscription.current_period_end
-            ? `, skončí ${formatDate(subscription.current_period_end)}`
-            : subscription?.current_period_end && isPro
-              ? `, obnoví sa ${formatDate(subscription.current_period_end)}`
-              : ""}
-        </p>
-        {subscription?.status === "past_due" ? (
-          <Notice tone="attention" className="mt-4">
-            Poslednú platbu sa nepodarilo strhnúť. Kým ju neopravíš, platia limity plánu Free.
-          </Notice>
-        ) : null}
-        <div className="mt-6 max-w-[28rem] space-y-5">
-          <UsageMeter label="Hlasový tréning" used={Math.ceil(billing.usage.realtime_seconds / 60)} limit={billing.plan.limits.realtimeMinutes} unit="min" />
-          <UsageMeter label="Reporty" used={billing.usage.report} limit={billing.plan.limits.reports} unit="" />
-          <UsageMeter label="Analýzy podkladov" used={billing.usage.deck_analysis} limit={billing.plan.limits.deckAnalyses} unit="" />
-        </div>
-        <div className="mt-8">
-          {stripe ? (
-            <UpgradeButton label={isPro ? "Spravovať predplatné" : `Prejsť na Pro za ${PLANS.pro.priceMonthlyEur} € mesačne`} />
-          ) : (
-            <p className="text-[14.5px] text-mute">Platby zatiaľ nie sú zapnuté. Ak potrebuješ viac minút, napíš nám.</p>
-          )}
+      <Section id="plan" title="Pitche" description={`Prvé ${FREE_PITCHES} pitche sú zadarmo. Ďalšie si dokúpiš v balíku, bez predplatného.`}>
+        <p className="text-[15px] text-paper">{balanceLabel(balance)}</p>
+        <div className="mt-6">
+          {stripe ? <BuyPitchPackButton /> : <p className="text-[14.5px] text-mute">Platby zatiaľ nie sú zapnuté.</p>}
         </div>
       </Section>
 
