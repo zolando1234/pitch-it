@@ -45,6 +45,8 @@ export type PitchInput = {
   outline?: PitchOutline | null;
   /** jazyk, v ktorom founder pitchuje (výber modelu prepisu) */
   language?: PitchLanguage;
+  /** jazyk rozhrania: v ňom sú chybové hlášky aj spätná väzba od AI */
+  uiLocale?: "sk" | "en";
 };
 
 /**
@@ -53,19 +55,28 @@ export type PitchInput = {
  */
 export async function analyzePitch(userId: string, input: PitchInput): Promise<PitchAttemptRow> {
   const language = input.language ?? "sk";
+  const ui = input.uiLocale ?? "sk";
+  const L = (sk: string, en: string) => (ui === "en" ? en : sk);
   const hasBody = Boolean(input.vision?.length || input.coach);
   // pokus s kamerou má reč tela aj bez zvuku, prázdny zvuk ho preto nezastaví
   if ((input.audio.size === 0 && !hasBody) || input.audio.size > MAX_PITCH_AUDIO_BYTES) {
-    throw new PitchServiceError("invalid", "Nahrávka je prázdna alebo príliš dlhá (najviac 4 minúty).");
+    throw new PitchServiceError("invalid", L("Nahrávka je prázdna alebo príliš dlhá (najviac 4 minúty).", "The recording is empty or too long (4 minutes at most)."));
   }
   const balance = await getPitchBalance(userId);
   if (!canUseLength(input.targetSeconds, balance)) {
-    throw new PitchServiceError("limit_reached", "4-minútový pitch je v platenej verzii. Kúp si balík pitchov alebo nahraj kratší pitch.", 402);
+    throw new PitchServiceError(
+      "limit_reached",
+      L("4-minútový pitch je v platenej verzii. Kúp si balík pitchov alebo nahraj kratší pitch.", "A 4-minute pitch is in the paid version. Buy a pitch pack or record a shorter pitch."),
+      402,
+    );
   }
   if (!balance.canPitch) {
     throw new PitchServiceError(
       "limit_reached",
-      `Využil si ${FREE_PITCHES} pitche zadarmo. Kúp si balík ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)} a trénuj ďalej.`,
+      L(
+        `Využil si ${FREE_PITCHES} pitche zadarmo. Kúp si balík ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)} a trénuj ďalej.`,
+        `You've used your ${FREE_PITCHES} free pitches. Buy a pack of ${PITCH_PACK.credits} pitches for ${formatEur(PITCH_PACK.priceCents, "en")} and keep training.`,
+      ),
       402,
     );
   }
@@ -89,7 +100,9 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       const notConfigured = error instanceof TranscriptionError && error.code === "not_configured";
       if (!body) {
         await updatePitchAttempt(attempt.id, { status: "failed" });
-        const message = notConfigured ? "Prepis reči nie je nakonfigurovaný (chýba OPENAI_API_KEY alebo MISTRAL_API_KEY)." : "Nahrávku sa nepodarilo prepísať. Skús to znova.";
+        const message = notConfigured
+          ? L("Prepis reči nie je nakonfigurovaný.", "Speech transcription is not configured.")
+          : L("Nahrávku sa nepodarilo prepísať. Skús to znova.", "The recording could not be transcribed. Try again.");
         throw new PitchServiceError("transcription_failed", message, 503);
       }
       // pokus s kamerou sa dokončí aj bez prepisu: skóre z reči tela
@@ -98,7 +111,10 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     if (transcript && !transcript.text.trim()) {
       if (!body) {
         await updatePitchAttempt(attempt.id, { status: "failed" });
-        throw new PitchServiceError("transcription_failed", "V nahrávke sme nezachytili reč. Skús to znova bližšie k mikrofónu.");
+        throw new PitchServiceError(
+          "transcription_failed",
+          L("V nahrávke sme nezachytili reč. Skús to znova bližšie k mikrofónu.", "We didn't catch any speech in the recording. Try again closer to the microphone."),
+        );
       }
       // s kamerou dáme aspoň spätnú väzbu k reči tela
       console.warn("[pitch] v nahrávke nie je reč, vyhodnocujem len reč tela");
@@ -134,6 +150,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
                 topic: outline?.topic || null,
                 outline: outline?.points ?? null,
                 language: LANGUAGE_INFO[language].adjective,
+                feedbackLocale: ui,
               }),
             },
           ],
@@ -160,7 +177,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
         const result = await llm.generateStructured({
           purpose: "pitch_outline",
           system: OUTLINE_SYSTEM,
-          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience, language: LANGUAGE_INFO[language].adjective }) }],
+          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience, language: LANGUAGE_INFO[language].adjective, feedbackLocale: ui }) }],
           schema: outlineCheckSchema,
           effort: "low",
           maxTokens: 3_000,

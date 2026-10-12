@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element -- záložný obrázok z dizajnu, ak nie je dostupné WebGL */
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import {
   AdditiveBlending,
   BufferAttribute,
@@ -543,7 +543,7 @@ function bezier(e: Edge, nodes: Float32Array, t: number, out: Vector3) {
 /* --------------------------------- komponent --------------------------------- */
 
 export type BrainLabel = {
-  text: string;
+  text: ReactNode;
   /** kotva v súradniciach mozgu (x ±1.9, y ±1.3, z > 0 = privrátená strana) */
   at: [number, number, number];
   /** posun štítka od kotvy v CSS px */
@@ -1055,7 +1055,7 @@ export function BrainScene({ labels = [], style }: { labels?: BrainLabel[]; styl
       />
       {labels.map((l, i) => (
         <div
-          key={l.text}
+          key={i}
           ref={(el) => {
             labelRefs.current[i] = el;
           }}

@@ -66,8 +66,8 @@ export function fromStoredCoach(stored: StoredCoach): SessionSummary {
 }
 
 /** Výsledné skóre pitchu: hodnotia sa všetky pravidlá ako pri bežnom prejave. */
-export function finalScoreFor(stored: StoredCoach): FinalScore {
-  return computeFinalScore(fromStoredCoach(stored), ruleFilterFor(TALK_MODES[0], stored.teleprompter));
+export function finalScoreFor(stored: StoredCoach, locale: "sk" | "en" = "sk"): FinalScore {
+  return computeFinalScore(fromStoredCoach(stored), ruleFilterFor(TALK_MODES[0], stored.teleprompter), locale);
 }
 
 export function parseStoredCoach(value: unknown): StoredCoach | null {

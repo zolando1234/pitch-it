@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LanguageSwitch, useLocale } from "@/components/i18n/locale-provider";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { Icon } from "@/components/app/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -75,6 +76,7 @@ function markSeen(at: string) {
 }
 
 export function NotificationsMenu({ items }: { items: NotificationItem[] }) {
+  const en = useLocale() === "en";
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -98,7 +100,7 @@ export function NotificationsMenu({ items }: { items: NotificationItem[] }) {
         onClick={toggle}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={unread ? "Upozornenia, máš nové" : "Upozornenia"}
+        aria-label={en ? (unread ? "Notifications, you have new ones" : "Notifications") : unread ? "Upozornenia, máš nové" : "Upozornenia"}
         className="relative inline-flex size-10 items-center justify-center rounded-full border border-header-line text-paper transition-colors hover:bg-panel-2 lg:size-11"
       >
         <Icon name="bell" className="size-[21px]" strokeWidth={1.6} />
@@ -107,11 +109,11 @@ export function NotificationsMenu({ items }: { items: NotificationItem[] }) {
         ) : null}
       </button>
       {open ? (
-        <MenuPanel id={panelId} label="Upozornenia" className="w-[min(22rem,calc(100vw-2rem))]">
-          <p className="px-3 pt-2 pb-1.5 text-[13px] font-semibold text-paper">Upozornenia</p>
+        <MenuPanel id={panelId} label={en ? "Notifications" : "Upozornenia"} className="w-[min(22rem,calc(100vw-2rem))]">
+          <p className="px-3 pt-2 pb-1.5 text-[13px] font-semibold text-paper">{en ? "Notifications" : "Upozornenia"}</p>
           {items.length === 0 ? (
             <p className="px-3 pb-3 text-[13.5px] leading-relaxed text-mute">
-              Zatiaľ nič nové. Keď bude rozbor tréningu hotový, nájdeš ho tu.
+              {en ? "Nothing new yet. When a review is ready, you'll find it here." : "Zatiaľ nič nové. Keď bude rozbor tréningu hotový, nájdeš ho tu."}
             </p>
           ) : (
             <ul>
@@ -150,6 +152,7 @@ export function NotificationsMenu({ items }: { items: NotificationItem[] }) {
 export type AccountSummary = { name: string; email: string | null; initials: string; role: string };
 
 export function AccountMenu({ account, compact = false, variant = "app" }: { account: AccountSummary; compact?: boolean; variant?: "app" | "preview" }) {
+  const en = useLocale() === "en";
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -166,7 +169,7 @@ export function AccountMenu({ account, compact = false, variant = "app" }: { acc
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={compact ? `Účet: ${account.name}` : undefined}
+        aria-label={compact ? `${en ? "Account" : "Účet"}: ${account.name}` : undefined}
         className="flex items-center gap-4 rounded-full text-left transition-opacity hover:opacity-90"
       >
         <span
@@ -186,7 +189,7 @@ export function AccountMenu({ account, compact = false, variant = "app" }: { acc
         )}
       </button>
       {open ? (
-        <MenuPanel id={panelId} label="Účet" className="w-64">
+        <MenuPanel id={panelId} label={en ? "Account" : "Účet"} className="w-64">
           <div className="border-b border-line px-3 pt-2 pb-2.5">
             <p className="truncate text-[14px] font-semibold text-paper">{account.name}</p>
             {account.email ? (
@@ -198,22 +201,28 @@ export function AccountMenu({ account, compact = false, variant = "app" }: { acc
           <div className="px-2 pt-2.5 pb-1">
             <ThemeToggle />
           </div>
+          <div className="flex items-center justify-between px-3 pt-1 pb-2">
+            <span className="text-[13px] text-mute">{en ? "Language" : "Jazyk"}</span>
+            <LanguageSwitch />
+          </div>
           {variant === "preview" ? (
-            <p className="px-3 py-3 text-[13px] leading-relaxed text-mute">Ukážkový účet. Nastavenia a odhlásenie fungujú iba v aplikácii.</p>
+            <p className="px-3 py-3 text-[13px] leading-relaxed text-mute">
+              {en ? "Demo account. Settings and sign-out only work in the app." : "Ukážkový účet. Nastavenia a odhlásenie fungujú iba v aplikácii."}
+            </p>
           ) : (
             <div className="pt-1">
               <Link href="/app/nastavenia" onClick={() => setOpen(false)} className={linkClass}>
                 <Icon name="user" className="size-[18px] text-mute" />
-                Nastavenia účtu
+                {en ? "Account settings" : "Nastavenia účtu"}
               </Link>
               <Link href="/app/nastavenia#plan" onClick={() => setOpen(false)} className={linkClass}>
                 <Icon name="card" className="size-[18px] text-mute" />
-                Plán a platby
+                {en ? "Pitches and payments" : "Pitche a platby"}
               </Link>
               <form action={signOut}>
                 <button type="submit" className={`${linkClass} w-full text-left`}>
                   <Icon name="logout" className="size-[18px] text-mute" />
-                  Odhlásiť sa
+                  {en ? "Sign out" : "Odhlásiť sa"}
                 </button>
               </form>
             </div>

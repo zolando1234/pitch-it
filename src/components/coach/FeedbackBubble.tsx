@@ -1,11 +1,16 @@
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { FeedbackState } from "@/lib/coach/pose/feedback";
 import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
 
-const LABEL = { good: "Dobre", warn: "Pozor", bad: "Oprav", idle: "Čakám" } as const;
+const LABEL = {
+  sk: { good: "Dobre", warn: "Pozor", bad: "Oprav", idle: "Čakám" },
+  en: { good: "Good", warn: "Watch out", bad: "Fix", idle: "Waiting" },
+} as const;
 const ICON = { good: "✓", warn: "!", bad: "✕", idle: "…" } as const;
 
 /** Veľká bublina, ktorá sa dá prečítať aj z 3 metrov. */
 export default function FeedbackBubble({ fb }: { fb: FeedbackState }) {
+  const locale = useLocale();
   const color = STATUS_COLOR[fb.status];
   return (
     <div
@@ -16,7 +21,7 @@ export default function FeedbackBubble({ fb }: { fb: FeedbackState }) {
       <span
         className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-4xl font-black text-black md:h-20 md:w-20 md:text-5xl"
         style={{ background: color }}
-        aria-label={LABEL[fb.status]}
+        aria-label={LABEL[locale][fb.status]}
       >
         {ICON[fb.status]}
       </span>

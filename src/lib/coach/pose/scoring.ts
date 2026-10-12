@@ -1,4 +1,6 @@
+import type { Locale } from "@/lib/i18n/locale";
 import { CONFIG } from "./config";
+import { groupTitle, ruleCopy } from "./copy";
 import { RULES, type GroupId } from "./rules";
 import type { SessionSummary } from "./session";
 
@@ -61,11 +63,12 @@ const SKILL_REQUIREMENTS: {
   maxPoints: number;
   minPersonMs: number;
   label: string;
+  labelEn: string;
 }[] = [
-  { category: "gestures", highlight: "hold", rule: "no-hold", perMin: 3, maxPoints: 15, minPersonMs: 30_000, label: "podržaných gest" },
-  { category: "gestures", highlight: "wide", rule: "closed", perMin: 1, maxPoints: 10, minPersonMs: 30_000, label: "širokých, otvorených gest" },
-  { category: "head", highlight: "sweep", rule: "gaze-stuck", perMin: 2, maxPoints: 20, minPersonMs: 30_000, label: "prechodov pohľadu cez miestnosť" },
-  { category: "stage", highlight: "planted", rule: "rooted", perMin: 1, maxPoints: 25, minPersonMs: 60_000, label: "zámerných presunov so zastavením" },
+  { category: "gestures", highlight: "hold", rule: "no-hold", perMin: 3, maxPoints: 15, minPersonMs: 30_000, label: "podržaných gest", labelEn: "held gestures" },
+  { category: "gestures", highlight: "wide", rule: "closed", perMin: 1, maxPoints: 10, minPersonMs: 30_000, label: "širokých, otvorených gest", labelEn: "wide, open gestures" },
+  { category: "head", highlight: "sweep", rule: "gaze-stuck", perMin: 2, maxPoints: 20, minPersonMs: 30_000, label: "prechodov pohľadu cez miestnosť", labelEn: "gaze sweeps across the room" },
+  { category: "stage", highlight: "planted", rule: "rooted", perMin: 1, maxPoints: 25, minPersonMs: 60_000, label: "zámerných presunov so zastavením", labelEn: "deliberate moves with a stop" },
 ];
 
 /** celková prísnosť: všetky strhnuté body sa násobia týmto číslom (1 = najprísnejšie) */
@@ -77,7 +80,22 @@ const SHORT_SESSION_MS = 55_000;
 const pct = (v: number) => `${Math.round(v * 100)} %`;
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-export function gradeFor(total: number): { grade: string; label: string; verdict: string } {
+const GRADES_EN: Record<string, { label: string; verdict: string }> = {
+  "A+": { label: "Ready for the stage", verdict: "Exceptional. Your body language is on par with the best TED speakers." },
+  A: { label: "Ready for the stage", verdict: "Excellent. Only small details stand between you and a flawless delivery." },
+  B: { label: "Almost ready", verdict: "A strong delivery, but a professional audience would still notice a few habits." },
+  C: { label: "Confident", verdict: "Decent, but several habits pull attention away from your message. Not stage-ready yet." },
+  D: { label: "Developing", verdict: "Your body language sometimes works against you. Fix the biggest deductions below." },
+  E: { label: "Beginner", verdict: "Your body doesn't support your message yet. Train the main problems one exercise at a time." },
+  F: { label: "Needs work", verdict: "Strong habits weaken your delivery. Go through the exercises before your next full pitch." },
+};
+
+export function gradeFor(total: number, locale: Locale = "sk"): { grade: string; label: string; verdict: string } {
+  const sk = gradeForSk(total);
+  return locale === "en" ? { grade: sk.grade, ...GRADES_EN[sk.grade] } : sk;
+}
+
+function gradeForSk(total: number): { grade: string; label: string; verdict: string } {
   if (total >= 97) return { grade: "A+", label: "Pripravený na pódium", verdict: "Výnimočné. Reč tela máš na úrovni najlepších TED rečníkov." };
   if (total >= 93) return { grade: "A", label: "Pripravený na pódium", verdict: "Výborne. Od bezchybného výstupu ťa delia len drobnosti." };
   if (total >= 85) return { grade: "B", label: "Takmer pripravený", verdict: "Silný výstup, no profesionálne publikum by si ešte všimlo pár zlozvykov." };
@@ -90,7 +108,11 @@ export function gradeFor(total: number): { grade: string; label: string; verdict
 export function computeFinalScore(
   s: SessionSummary,
   isEnabled: (ruleId: string) => boolean = () => true,
+  locale: Locale = "sk",
 ): FinalScore {
+  const L = (sk: string, en: string) => (locale === "en" ? en : sk);
+  const dec = (v: number) => (locale === "en" ? v.toFixed(1) : v.toFixed(1).replace(".", ","));
+  const title = (id: string) => ruleCopy(id, locale).title;
   const person = s.personMs;
   const issueById = new Map(s.issues.map((i) => [i.id, i]));
   const share = (id: string) => (person ? (issueById.get(id)?.ms ?? 0) / person : 0);
@@ -120,7 +142,7 @@ export function computeFinalScore(
     if (c.id === "gestures") {
       if (isEnabled("hands-low") && s.zoneShare < ZONE_TARGET) {
         deductions.push({
-          reason: `Ruky v power zóne len ${pct(s.zoneShare)} času (cieľ ${pct(ZONE_TARGET)}+)`,
+          reason: L(`Ruky v power zóne len ${pct(s.zoneShare)} času (cieľ ${pct(ZONE_TARGET)}+)`, `Hands in the power zone only ${pct(s.zoneShare)} of the time (target ${pct(ZONE_TARGET)}+)`),
           points: round1((ZONE_TARGET - s.zoneShare) * 80),
         });
       }
@@ -128,12 +150,12 @@ export function computeFinalScore(
       if (isEnabled("few-gestures") && g !== null) {
         if (g < GESTURE_RATE_TARGET) {
           deductions.push({
-            reason: `${g} gest za minútu (najlepší TED rečníci ~25)`,
+            reason: L(`${g} gest za minútu (najlepší TED rečníci ~25)`, `${g} gestures per minute (top TED speakers ~25)`),
             points: round1(Math.min(40, (GESTURE_RATE_TARGET - g) * 2)),
           });
         } else if (g > GESTURE_RATE_MAX) {
           deductions.push({
-            reason: `${g} gest za minútu je nepokojných (drž sa pod ${GESTURE_RATE_MAX})`,
+            reason: L(`${g} gest za minútu je nepokojných (drž sa pod ${GESTURE_RATE_MAX})`, `${g} gestures per minute is restless (stay below ${GESTURE_RATE_MAX})`),
             points: round1(Math.min(15, g - GESTURE_RATE_MAX)),
           });
         }
@@ -144,7 +166,7 @@ export function computeFinalScore(
         const v = s.gazeShare[side];
         if (v < GAZE_SIDE_MIN) {
           deductions.push({
-            reason: `Pohľad ${side === "left" ? "doľava" : "doprava"} len ${pct(v)} času`,
+            reason: L(`Pohľad ${side === "left" ? "doľava" : "doprava"} len ${pct(v)} času`, `Looking ${side} only ${pct(v)} of the time`),
             points: round1(Math.min(15, (GAZE_SIDE_MIN - v) * 120)),
           });
         }
@@ -158,7 +180,7 @@ export function computeFinalScore(
       const rate = (s.highlights[req.highlight] ?? 0) / minutes;
       if (rate < req.perMin) {
         deductions.push({
-          reason: `Len ${rate.toFixed(1).replace(".", ",")} ${req.label} za minútu (cieľ ${req.perMin}+)`,
+          reason: L(`Len ${dec(rate)} ${req.label} za minútu (cieľ ${req.perMin}+)`, `Only ${dec(rate)} ${req.labelEn} per minute (target ${req.perMin}+)`),
           points: round1(req.maxPoints * (1 - rate / req.perMin)),
         });
       }
@@ -167,7 +189,7 @@ export function computeFinalScore(
     for (const d of deductions) d.points = round1(d.points * STRICTNESS);
     deductions.sort((a, b) => b.points - a.points);
     const score = Math.max(0, Math.round(100 - deductions.reduce((a, d) => a + d.points, 0)));
-    return { ...c, score, deductions };
+    return { ...c, title: groupTitle(c.id, locale), score, deductions };
   });
 
   if (person < MIN_PERSON_MS) {
@@ -175,8 +197,11 @@ export function computeFinalScore(
       total: null,
       raw: null,
       grade: "–",
-      label: "Málo údajov",
-      verdict: "V zábere si bol menej ako 10 sekúnd. Postav sa pred kameru a skús to znova.",
+      label: L("Málo údajov", "Not enough data"),
+      verdict: L(
+        "V zábere si bol menej ako 10 sekúnd. Postav sa pred kameru a skús to znova.",
+        "You were in frame for less than 10 seconds. Step in front of the camera and try again.",
+      ),
       categories,
       caps: [],
     };
@@ -194,35 +219,38 @@ export function computeFinalScore(
     const f = share(r.id);
     const n = issueById.get(r.id)?.count ?? 0;
     if (r.severity === "bad" && f > 0.15) {
-      caps.push({ limit: 69, reason: `„${r.title}“ počas ${pct(f)} tréningu` });
+      caps.push({ limit: 69, reason: L(`„${title(r.id)}“ počas ${pct(f)} tréningu`, `“${title(r.id)}” for ${pct(f)} of the session`) });
     } else if (r.severity === "bad" && n > 0) {
       // jediná závažná chyba = žiadne A
-      caps.push({ limit: 89, reason: `„${r.title}“ sa stalo ${n}×. Každá vážna chyba vylučuje známku A` });
+      caps.push({
+        limit: 89,
+        reason: L(`„${title(r.id)}“ sa stalo ${n}×. Každá vážna chyba vylučuje známku A`, `“${title(r.id)}” happened ${n}×. Any serious mistake rules out an A`),
+      });
     } else if (r.severity === "warn" && (r.scoreWeight ?? 1) >= 1 && f > 0.36) {
-      caps.push({ limit: 74, reason: `„${r.title}“ počas ${pct(f)} tréningu` });
+      caps.push({ limit: 74, reason: L(`„${title(r.id)}“ počas ${pct(f)} tréningu`, `“${title(r.id)}” for ${pct(f)} of the session`) });
     }
   }
   // rečník, ktorý sa celý prejav nepohne z miesta, nemôže dostať A
   if (isEnabled("rooted") && person >= CONFIG.rootedMs * 2) {
     const rooted = share("rooted");
-    if (rooted > 0.5) caps.push({ limit: 89, reason: `${pct(rooted)} prejavu bez pohybu v priestore` });
+    if (rooted > 0.5) caps.push({ limit: 89, reason: L(`${pct(rooted)} prejavu bez pohybu v priestore`, `${pct(rooted)} of the talk without moving in the space`) });
   }
   const clean = s.cleanShare;
-  if (clean < 0.5) caps.push({ limit: 74, reason: `Bez chyby len ${pct(clean)} času` });
-  else if (clean < 0.7) caps.push({ limit: 84, reason: `Bez chyby len ${pct(clean)} času (cieľ 85 %+)` });
-  else if (clean < 0.85) caps.push({ limit: 92, reason: `${pct(clean)} času bez chyby. Na A treba 85 %+` });
+  if (clean < 0.5) caps.push({ limit: 74, reason: L(`Bez chyby len ${pct(clean)} času`, `Mistake-free only ${pct(clean)} of the time`) });
+  else if (clean < 0.7) caps.push({ limit: 84, reason: L(`Bez chyby len ${pct(clean)} času (cieľ 85 %+)`, `Mistake-free only ${pct(clean)} of the time (target 85 %+)`) });
+  else if (clean < 0.85) caps.push({ limit: 92, reason: L(`${pct(clean)} času bez chyby. Na A treba 85 %+`, `${pct(clean)} of the time mistake-free. An A needs 85 %+`) });
   const inFrame = s.durationMs ? person / s.durationMs : 1;
-  if (inFrame < 0.8) caps.push({ limit: 79, reason: `Mimo záberu si bol ${pct(1 - inFrame)} tréningu` });
+  if (inFrame < 0.8) caps.push({ limit: 79, reason: L(`Mimo záberu si bol ${pct(1 - inFrame)} tréningu`, `You were out of frame ${pct(1 - inFrame)} of the session`) });
   const setupShare = share("too-close") + share("too-far");
-  if (setupShare > 0.3) caps.push({ limit: 75, reason: `Záber kamery nesedel ${pct(setupShare)} času` });
-  if (person < SHORT_SESSION_MS) caps.push({ limit: 85, reason: "Menej ako minúta je príliš málo na preukázanie stálosti" });
+  if (setupShare > 0.3) caps.push({ limit: 75, reason: L(`Záber kamery nesedel ${pct(setupShare)} času`, `Camera framing was off ${pct(setupShare)} of the time`) });
+  if (person < SHORT_SESSION_MS) caps.push({ limit: 85, reason: L("Menej ako minúta je príliš málo na preukázanie stálosti", "Less than a minute is too short to show consistency") });
 
   const limit = Math.min(100, ...caps.map((c) => c.limit));
   const total = Math.min(raw, limit);
   return {
     total,
     raw,
-    ...gradeFor(total),
+    ...gradeFor(total, locale),
     categories,
     // zobrazíme len stropy, ktoré skóre naozaj znížili
     caps: caps.filter((c) => c.limit < raw).sort((a, b) => a.limit - b.limit),

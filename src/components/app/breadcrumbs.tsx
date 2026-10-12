@@ -3,6 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useLocale } from "@/components/i18n/locale-provider";
+
+const LABELS_EN: Record<string, string> = {
+  projekty: "Projects",
+  novy: "New",
+  podklady: "Materials",
+  trening: "Training",
+  cvicenia: "Exercises",
+  historia: "Reports",
+  porovnanie: "Comparison",
+  nastavenia: "Settings",
+  progres: "Progress",
+};
+const DETAIL_LABELS_EN: Record<string, string> = { projekty: "Project", trening: "Review", cvicenia: "Exercise" };
+
 const LABELS: Record<string, string> = {
   projekty: "Projekty",
   novy: "Nový",
@@ -29,24 +44,28 @@ const SECTION_HREF: Record<string, string> = {
 
 export type Crumb = { href: string; label: string };
 
-export function crumbsFor(pathname: string): Crumb[] {
+export function crumbsFor(pathname: string, locale: "sk" | "en" = "sk"): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   if (segments[0] !== "app") return [];
-  const crumbs: Crumb[] = [{ href: "/app", label: "Prehľad" }];
+  const en = locale === "en";
+  const labels = en ? LABELS_EN : LABELS;
+  const details = en ? DETAIL_LABELS_EN : DETAIL_LABELS;
+  const crumbs: Crumb[] = [{ href: "/app", label: en ? "Overview" : "Prehľad" }];
   let href = "/app";
   segments.slice(1).forEach((segment, index, rest) => {
     href += `/${segment}`;
-    const label = LABELS[segment] ?? DETAIL_LABELS[rest[index - 1] ?? ""] ?? "Detail";
+    const label = labels[segment] ?? details[rest[index - 1] ?? ""] ?? "Detail";
     crumbs.push({ href: SECTION_HREF[href] ?? href, label });
   });
   return crumbs;
 }
 
 export function Breadcrumbs() {
-  const crumbs = crumbsFor(usePathname());
+  const locale = useLocale();
+  const crumbs = crumbsFor(usePathname(), locale);
   if (crumbs.length === 0) return null;
   return (
-    <nav aria-label="Omrvinky" className="min-w-0">
+    <nav aria-label={locale === "en" ? "Breadcrumbs" : "Omrvinky"} className="min-w-0">
       <ol className="flex min-w-0 items-center gap-1.5 text-sm">
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1;

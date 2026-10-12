@@ -21,7 +21,8 @@ import { keepLocalSession } from "@/lib/coach/local-session";
 import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
 import type { SessionSummary } from "@/lib/coach/pose/session";
 import { toStoredCoach, type StoredCoach } from "@/lib/coach/stored";
-import { AUDIENCE_LABELS, FOCUS_GOALS } from "@/lib/onboarding/plan";
+import { audienceLabel, focusGoal } from "@/lib/onboarding/plan";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { canUseLength, PAID_LENGTH, type PitchBalance } from "@/lib/billing/pitch-pack";
 
 /*
@@ -31,14 +32,72 @@ import { canUseLength, PAID_LENGTH, type PitchBalance } from "@/lib/billing/pitc
 
 type Phase = "setup" | "live" | "analyze";
 
-const STEPS = [
-  ["Reč tela", "Gestá, pohľad, postoj a záznam chýb"],
-  ["Prepis reči", "Whisper, vrátane časových značiek"],
-  ["Tempo a vypĺňacie slová", "Slabiky za sekundu, pauzy, akože a ehm"],
-  ["Obsahové skóre", "Problém, Riešenie, Trh, Traction a Ask"],
-] as const;
-
-const OUTLINE_STEP = ["Obsah a zhoda s osnovou", "Rubrika pitchu, pokryté body, odbočky a zrozumiteľnosť"] as const;
+const RECORD = {
+  sk: {
+    steps: [
+      ["Reč tela", "Gestá, pohľad, postoj a záznam chýb"],
+      ["Prepis reči", "Prepis vrátane časových značiek"],
+      ["Tempo a vypĺňacie slová", "Slabiky za sekundu, pauzy, akože a ehm"],
+      ["Obsahové skóre", "Problém, Riešenie, Trh, Traction a Ask"],
+    ],
+    outlineStep: ["Obsah a zhoda s osnovou", "Rubrika pitchu, pokryté body, odbočky a zrozumiteľnosť"],
+    phoneFirst: "Najprv pripoj mobil cez odkaz vyššie, alebo prepni na mikrofón počítača.",
+    micDenied: "Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a obnov stránku.",
+    noRecorder: "Tento prehliadač nevie nahrávať. Skús Chrome, Edge alebo Safari.",
+    micStarting: "Zapínam mikrofón…",
+    videoTitle: "Analýza videa",
+    pitchTitle: "Tréning pitchu",
+    subtitle: (aud: string, target: string) => `Pitch ${aud.toLowerCase()} · cieľ ${target}`,
+    heading: "Pitch pred kamerou",
+    lead: (len: string, aud: string, goal: string) => `${len} pitch ${aud.toLowerCase()}. ${goal} Tréner ti počas pitchu radí, na konci dostaneš spätnú väzbu.`,
+    back: "Prehľad",
+    analyzeVideo: "Analyzovať video",
+    startRecording: "Spustiť nahrávanie",
+    consent: "Spustením súhlasíš, že nahrávku vyhodnotí AI. Video zostáva v tvojom prehliadači.",
+    fullscreen: "Spustiť na celú obrazovku",
+    fullscreenNote: "Veľký záber, ktorý uvidíš aj z diaľky. Na obrazovke bude len tlačidlo Zastaviť.",
+    changeAudience: "Zmeniť publikum",
+    analyzing: "Analyzujem tvoj pitch.",
+    eta: "Výsledok bude hotový približne za 15 sekúnd.",
+    done: "Hotovo",
+    resend: "Odoslať nahrávku znova",
+    recordAgain: "Nahrať odznova",
+    tryAgain: "Skús znova",
+    showFeedback: "Zobraziť feedback",
+  },
+  en: {
+    steps: [
+      ["Body language", "Gestures, gaze, posture and mistake log"],
+      ["Transcript", "Speech to text with timestamps"],
+      ["Pace and filler words", "Syllables per second, pauses, um and like"],
+      ["Content score", "Problem, solution, market, traction and ask"],
+    ],
+    outlineStep: ["Content and outline match", "Pitch rubric, covered points, digressions and clarity"],
+    phoneFirst: "Connect your phone using the link above first, or switch to the computer microphone.",
+    micDenied: "Microphone access is denied. Allow it in your browser settings and reload the page.",
+    noRecorder: "This browser can't record. Try Chrome, Edge or Safari.",
+    micStarting: "Starting the microphone…",
+    videoTitle: "Video analysis",
+    pitchTitle: "Pitch training",
+    subtitle: (aud: string, target: string) => `Pitch ${aud.toLowerCase()} · target ${target}`,
+    heading: "Pitch on camera",
+    lead: (len: string, aud: string, goal: string) => `${len} pitch ${aud.toLowerCase()}. ${goal} The coach gives you tips while you pitch and you get feedback at the end.`,
+    back: "Overview",
+    analyzeVideo: "Analyze video",
+    startRecording: "Start recording",
+    consent: "By starting you agree that the recording is evaluated by AI. The video stays in your browser.",
+    fullscreen: "Start in full screen",
+    fullscreenNote: "A big view you can see from a distance. Only the Stop button stays on screen.",
+    changeAudience: "Change audience",
+    analyzing: "Analyzing your pitch.",
+    eta: "The result will be ready in about 15 seconds.",
+    done: "Done",
+    resend: "Send the recording again",
+    recordAgain: "Record again",
+    tryAgain: "Try again",
+    showFeedback: "Show feedback",
+  },
+};
 
 const FULLSCREEN_KEY = "pitchit-pitch-fullscreen";
 
@@ -67,6 +126,9 @@ export function CameraRecordScreen({
   preview?: boolean;
 }) {
   const prefs = useCoachPrefs();
+  const locale = useLocale();
+  const tx = RECORD[locale];
+  const audience = audienceLabel(setup.audience, locale);
   const wallet = usePitchBalance(initialBalance, paid);
   const blocked = !!wallet.balance && !wallet.balance.canPitch;
   const outlineState = usePitchOutline();
@@ -75,8 +137,8 @@ export function CameraRecordScreen({
   // 4 minúty len s kúpenými pitchami; inak sa nahráva najdlhšia dostupná dĺžka
   const targetSeconds = canUseLength(lengthState.length, wallet.balance) ? lengthState.length : 180;
   const pitchSetup = useMemo(
-    () => ({ ...setup, targetSeconds, language: languageState.language }),
-    [setup, targetSeconds, languageState.language],
+    () => ({ ...setup, targetSeconds, language: languageState.language, uiLocale: locale }),
+    [setup, targetSeconds, languageState.language, locale],
   );
   const { outline } = outlineState;
   // nahraté video namiesto kamery; analyzuje sa najviac do limitu plánu (4 min len s kúpenými pitchami)
@@ -119,11 +181,11 @@ export function CameraRecordScreen({
       kind: "talk",
       id: "pitch",
       title: `Pitch · ${targetSeconds} s`,
-      subtitle: AUDIENCE_LABELS[setup.audience],
+      subtitle: audience,
       // video sa analyzuje celé (do limitu plánu), živé nahrávanie končí cieľovou dĺžkou
       durationMs: (videoFile ? maxVideoSeconds : targetSeconds) * 1000,
     }),
-    [targetSeconds, setup.audience, videoFile, maxVideoSeconds],
+    [targetSeconds, audience, videoFile, maxVideoSeconds],
   );
   const ruleFilter = useMemo(() => ruleFilterFor(mode, !!prefs.prompterText), [mode, prefs.prompterText]);
 
@@ -161,12 +223,12 @@ export function CameraRecordScreen({
     preview || micReady
       ? null
       : phoneSelected
-        ? "Najprv pripoj mobil cez odkaz vyššie, alebo prepni na mikrofón počítača."
+        ? tx.phoneFirst
         : recorder.media === "denied"
-        ? "Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a obnov stránku."
+        ? tx.micDenied
         : recorder.media === "unsupported"
-          ? "Tento prehliadač nevie nahrávať. Skús Chrome, Edge alebo Safari."
-          : "Zapínam mikrofón…";
+          ? tx.noRecorder
+          : tx.micStarting;
 
   const start = () => {
     if (!micReady || !sourceReady) return;
@@ -281,8 +343,8 @@ export function CameraRecordScreen({
       <PitchStudio
         key={take}
         mode={mode}
-        title={videoFile ? "Analýza videa" : "Tréning pitchu"}
-        subtitle={`Pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()} · cieľ ${fmtTarget(targetSeconds)}`}
+        title={videoFile ? tx.videoTitle : tx.pitchTitle}
+        subtitle={tx.subtitle(audience, fmtTarget(targetSeconds))}
         prefs={prefs}
         outline={outline}
         startFull={fullscreen}
@@ -313,16 +375,16 @@ export function CameraRecordScreen({
       <PiTopbar href={homeHref} />
       {phase === "setup" && (blocked || wallet.confirming) ? (
         <main id="obsah" className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10 md:px-8">
-          <h1 className="h text-4xl leading-tight md:text-6xl">Pitch pred kamerou</h1>
+          <h1 className="h text-4xl leading-tight md:text-6xl">{tx.heading}</h1>
           <PitchPaywall paymentsEnabled={wallet.paymentsEnabled} confirming={wallet.confirming} />
         </main>
       ) : phase === "setup" ? (
         <main id="obsah">
           <SessionSetup
-            heading="Pitch pred kamerou"
-            lead={`${targetSeconds >= 60 ? `${targetSeconds / 60} min` : `${targetSeconds} s`} pitch ${AUDIENCE_LABELS[setup.audience].toLowerCase()}. ${FOCUS_GOALS[setup.focus]} Tréner ti počas pitchu radí, na konci dostaneš spätnú väzbu.`}
+            heading={tx.heading}
+            lead={tx.lead(targetSeconds >= 60 ? `${targetSeconds / 60} min` : `${targetSeconds} s`, audience, focusGoal(setup.focus, locale))}
             backHref={homeHref}
-            backLabel="Prehľad"
+            backLabel={tx.back}
             modes={null}
             mode={mode}
             onMode={() => {}}
@@ -332,14 +394,14 @@ export function CameraRecordScreen({
               if (!on) phone.stop();
             }}
             error={error}
-            startLabel={videoMode ? "Analyzovať video" : "Spustiť nahrávanie"}
+            startLabel={videoMode ? tx.analyzeVideo : tx.startRecording}
             canStart={micReady && sourceReady}
-            finePrint="Spustením súhlasíš, že nahrávku vyhodnotí AI. Video zostáva v tvojom prehliadači."
+            finePrint={tx.consent}
             onStart={start}
             micSource={<PhoneMicPanel phone={phone} level={recorder.level} />}
             top={<VideoSourcePicker file={videoFile} onFile={setVideoFile} useVideo={videoMode} onUseVideo={setVideoMode} maxSeconds={maxVideoSeconds} />}
           >
-            {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance)}</p> : null}
+            {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance, locale)}</p> : null}
             <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref={preview ? setupHref : "/app/nastavenia#plan"} />
             <LanguagePicker {...languageState} />
             <OutlineEditor {...outlineState} />
@@ -354,8 +416,8 @@ export function CameraRecordScreen({
                 <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
               </svg>
               <span className="min-w-0 flex-1">
-                <span className="block text-lg font-bold">Spustiť na celú obrazovku</span>
-                <span className="block text-sm leading-snug text-mute">Veľký záber, ktorý uvidíš aj z diaľky. Na obrazovke bude len tlačidlo Zastaviť.</span>
+                <span className="block text-lg font-bold">{tx.fullscreen}</span>
+                <span className="block text-sm leading-snug text-mute">{tx.fullscreenNote}</span>
               </span>
               <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${fullscreen ? "bg-signal" : "bg-line"}`} aria-hidden="true">
                 <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${fullscreen ? "left-6" : "left-1"}`} />
@@ -363,7 +425,7 @@ export function CameraRecordScreen({
             </button>
             <p className="text-sm text-mute">
               <Link href={setupHref} className="font-bold text-accent">
-                Zmeniť publikum
+                {tx.changeAudience}
               </Link>
             </p>
             {micText ? (
@@ -377,13 +439,13 @@ export function CameraRecordScreen({
         <main id="obsah" style={{ display: "flex", justifyContent: "center", padding: "40px 32px" }}>
           <div className="card" style={{ flex: "1 1 640px", maxWidth: "860px", minWidth: "0", padding: "32px" }}>
             <h1 className="h" style={{ fontSize: "36px", margin: "8px 0 8px" }}>
-              Analyzujem tvoj pitch.
+              {tx.analyzing}
             </h1>
             <p className="muted" style={{ margin: "0 0 24px", fontSize: "16px" }}>
-              Výsledok bude hotový približne za 15 sekúnd.
+              {tx.eta}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }} aria-live="polite">
-              {(outline ? [...STEPS.slice(0, 3), OUTLINE_STEP] : STEPS).map(([title, detail], i) => (
+              {(outline ? [...tx.steps.slice(0, 3), tx.outlineStep] : tx.steps).map(([title, detail], i) => (
                 <div
                   key={title}
                   className="stp"
@@ -391,7 +453,7 @@ export function CameraRecordScreen({
                 >
                   <span style={{ display: "inline-flex", width: "24px", height: "24px" }}>
                     {k > i ? (
-                      <svg width="24" height="24" viewBox="0 0 22 22" aria-label="Hotovo">
+                      <svg width="24" height="24" viewBox="0 0 22 22" aria-label={tx.done}>
                         <circle cx="11" cy="11" r="11" fill="var(--color-signal)" />
                         <path d="M6 11.5L9.5 15L16 8" fill="none" stroke="#141414" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
@@ -417,11 +479,11 @@ export function CameraRecordScreen({
                 </p>
                 {canResend ? (
                   <button type="button" className="btn btn-p" onClick={() => void send()} style={{ width: "100%", minHeight: "54px", marginBottom: "10px" }}>
-                    Odoslať nahrávku znova
+                    {tx.resend}
                   </button>
                 ) : null}
                 <button type="button" className="btn" onClick={retry} style={{ width: "100%", minHeight: "54px" }}>
-                  {canResend ? "Nahrať odznova" : "Skús znova"}
+                  {canResend ? tx.recordAgain : tx.tryAgain}
                 </button>
               </div>
             ) : null}
@@ -432,7 +494,7 @@ export function CameraRecordScreen({
                   href={feedbackHref.replace("{id}", attemptId ?? "")}
                   style={{ width: "100%", boxSizing: "border-box", minHeight: "54px" }}
                 >
-                  Zobraziť feedback
+                  {tx.showFeedback}
                 </Link>
               </div>
             ) : null}

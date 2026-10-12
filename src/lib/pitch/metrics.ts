@@ -165,6 +165,12 @@ export const TEMPO_ADVICE: Record<TempoVerdict, string> = {
   fast: "Hovoríš rýchlejšie, ako je cieľ. Po každej kľúčovej vete sa nadýchni a pri číslach spomaľ.",
 };
 
+export const TEMPO_ADVICE_EN: Record<TempoVerdict, string> = {
+  slow: "You speak slower than the target. Shorten the pauses between sentences and let the pace flow, keep the slow parts for numbers.",
+  target: "Your pace is in the target window. Slow down on the market number so the investor can catch it.",
+  fast: "You speak faster than the target. Take a breath after every key sentence and slow down on numbers.",
+};
+
 /** Slovenský tvar pre „pauza“ podľa počtu. */
 export function pausesLabel(n: number): string {
   if (n === 1) return "pauza nad 1 sekundu";

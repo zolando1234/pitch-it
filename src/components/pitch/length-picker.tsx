@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { canUseLength, lengthLabel, PAID_LENGTH, RECORD_LENGTHS, type PitchBalance, type RecordLength } from "@/lib/billing/pitch-pack";
 
 /*
@@ -40,11 +41,12 @@ export function LengthPicker({
   buyHref,
 }: ReturnType<typeof usePitchLength> & { balance: PitchBalance | null; buyHref: string }) {
   const [lockedTried, setLockedTried] = useState(false);
+  const en = useLocale() === "en";
   const paidLocked = !canUseLength(PAID_LENGTH, balance);
   return (
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="dlzka-nadpis">
       <h2 id="dlzka-nadpis" className="text-sm font-bold uppercase tracking-widest text-mute">
-        Dĺžka pitchu
+        {en ? "Pitch length" : "Dĺžka pitchu"}
       </h2>
       <div className="mt-4 flex flex-wrap gap-2" role="radiogroup" aria-labelledby="dlzka-nadpis">
         {RECORD_LENGTHS.map((l) => {
@@ -64,7 +66,7 @@ export function LengthPicker({
               {lengthLabel(l)}
               {l === PAID_LENGTH ? (
                 <span className="rounded-full bg-violet/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-violet">
-                  {locked ? "🔒 Platená" : "Platená"}
+                  {locked ? (en ? "🔒 Paid" : "🔒 Platená") : en ? "Paid" : "Platená"}
                 </span>
               ) : null}
             </button>
@@ -73,9 +75,9 @@ export function LengthPicker({
       </div>
       {paidLocked ? (
         <p className={`mt-3 text-xs ${lockedTried ? "text-marker" : "text-faint"}`} role={lockedTried ? "status" : undefined}>
-          4-minútový pitch (napr. demo day) je v platenej verzii.{" "}
+          {en ? "A 4-minute pitch (e.g. demo day) is in the paid version." : "4-minútový pitch (napr. demo day) je v platenej verzii."}{" "}
           <Link href={buyHref} className="font-bold text-accent">
-            Kúpiť balík pitchov
+            {en ? "Buy a pitch pack" : "Kúpiť balík pitchov"}
           </Link>
         </p>
       ) : null}

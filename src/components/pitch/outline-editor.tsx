@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { OUTLINE_MAX_POINTS, parseOutlinePoints, TOPIC_MAX_LENGTH, toOutline, type PitchOutline } from "@/lib/pitch/outline";
 
 /*
@@ -51,16 +52,19 @@ export type PitchOutlineState = ReturnType<typeof usePitchOutline>;
 
 export function OutlineEditor({ topic, text, onTopic, onText }: PitchOutlineState) {
   const count = parseOutlinePoints(text).length;
+  const en = useLocale() === "en";
   return (
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="osnova-nadpis">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="osnova-nadpis" className="text-sm font-bold uppercase tracking-widest text-mute">
-          O čom chceš pitchovať
+          {en ? "What do you want to pitch about" : "O čom chceš pitchovať"}
         </h2>
-        <span className="text-xs text-faint">Nepovinné. Na konci uvidíš, koľko z témy a osnovy si odprezentoval.</span>
+        <span className="text-xs text-faint">
+          {en ? "Optional. At the end you see how much of the topic and outline you covered." : "Nepovinné. Na konci uvidíš, koľko z témy a osnovy si odprezentoval."}
+        </span>
       </div>
       <label htmlFor="pitch-tema" className="mt-4 block text-sm font-bold">
-        Téma <span className="font-normal text-mute">(podľa nej sa pitch hodnotí)</span>
+        {en ? "Topic" : "Téma"} <span className="font-normal text-mute">{en ? "(your pitch is scored against it)" : "(podľa nej sa pitch hodnotí)"}</span>
       </label>
       <textarea
         id="pitch-tema"
@@ -68,27 +72,39 @@ export function OutlineEditor({ topic, text, onTopic, onText }: PitchOutlineStat
         onChange={(e) => onTopic(e.target.value)}
         maxLength={TOPIC_MAX_LENGTH}
         rows={5}
-        placeholder="Napríklad: Predstavujem PitchIt, AI trénera, ktorý founderov pripraví na stretnutie s investorom. Chcem, aby investor pochopil problém, ako to funguje a že hľadáme 150 000 € na rast."
+        placeholder={
+          en
+            ? "For example: I'm presenting PitchIt, an AI coach that prepares founders for investor meetings. I want the investor to understand the problem, how it works and that we're raising €150,000 for growth."
+            : "Napríklad: Predstavujem PitchIt, AI trénera, ktorý founderov pripraví na stretnutie s investorom. Chcem, aby investor pochopil problém, ako to funguje a že hľadáme 150 000 € na rast."
+        }
         className="mt-2 min-h-40 w-full resize-y rounded-2xl border border-line bg-transparent px-5 py-4 text-lg leading-relaxed text-paper placeholder:text-faint focus:border-signal focus:outline-none"
       />
       <p className="mt-1 text-right text-xs text-faint">
         {topic.length} / {TOPIC_MAX_LENGTH}
       </p>
       <label htmlFor="pitch-osnova" className="mt-4 block text-sm font-bold">
-        Osnova <span className="font-normal text-mute">(jeden bod na riadok)</span>
+        {en ? "Outline" : "Osnova"} <span className="font-normal text-mute">{en ? "(one point per line)" : "(jeden bod na riadok)"}</span>
       </label>
       <textarea
         id="pitch-osnova"
         value={text}
         onChange={(e) => onText(e.target.value)}
         rows={5}
-        placeholder={"Problém: founderi pitchujú bez spätnej väzby\nRiešenie: nahráš pitch a AI ti povie, čo zlepšiť\nTrh a konkurencia\nPrvé výsledky z pilotu\nČo od vás chceme"}
+        placeholder={
+          en
+            ? "Problem: founders pitch without feedback\nSolution: record your pitch and AI tells you what to improve\nMarket and competition\nFirst results from the pilot\nWhat we want from you"
+            : "Problém: founderi pitchujú bez spätnej väzby\nRiešenie: nahráš pitch a AI ti povie, čo zlepšiť\nTrh a konkurencia\nPrvé výsledky z pilotu\nČo od vás chceme"
+        }
         className="mt-2 w-full resize-y rounded-2xl border border-line bg-transparent px-5 py-4 text-base leading-relaxed text-paper placeholder:text-faint focus:border-signal focus:outline-none"
       />
       <p className={`mt-2 text-xs ${count > OUTLINE_MAX_POINTS ? "text-marker" : "text-faint"}`}>
         {count === 0
-          ? "Bez osnovy porovnáme pitch len s témou."
-          : `${Math.min(count, OUTLINE_MAX_POINTS)} ${count === 1 ? "bod" : count < 5 ? "body" : "bodov"} osnovy${count > OUTLINE_MAX_POINTS ? `, použijeme prvých ${OUTLINE_MAX_POINTS}` : ""}`}
+          ? en
+            ? "Without an outline we compare the pitch with the topic only."
+            : "Bez osnovy porovnáme pitch len s témou."
+          : en
+            ? `${Math.min(count, OUTLINE_MAX_POINTS)} outline ${count === 1 ? "point" : "points"}${count > OUTLINE_MAX_POINTS ? `, we use the first ${OUTLINE_MAX_POINTS}` : ""}`
+            : `${Math.min(count, OUTLINE_MAX_POINTS)} ${count === 1 ? "bod" : count < 5 ? "body" : "bodov"} osnovy${count > OUTLINE_MAX_POINTS ? `, použijeme prvých ${OUTLINE_MAX_POINTS}` : ""}`}
       </p>
     </section>
   );

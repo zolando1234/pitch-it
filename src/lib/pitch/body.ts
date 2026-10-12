@@ -59,9 +59,29 @@ export function summarizeBody(samples: VisionSample[]): BodySummary {
 }
 
 /** Krátky popis do karty Reč tela. */
-export function bodyNarrative(body: BodySummary): string {
+export const BODY_EVENT_LABELS_EN: Record<BodyEventKind, string> = {
+  restless_hands: "Restless hands",
+  looking_away: "Looking away",
+  steady_eye_contact: "Good eye contact",
+  calm_hands: "Calm hands",
+};
+
+export function bodyNarrative(body: BodySummary, locale: "sk" | "en" = "sk"): string {
   const warn = body.events.filter((e) => BODY_EVENT_LABELS[e.kind].tone === "warn").length;
   const parts: string[] = [];
+  if (locale === "en") {
+    if (body.eyeContactPct !== null) {
+      parts.push(
+        body.eyeContactPct >= 70
+          ? "You keep eye contact with the camera most of the time."
+          : body.eyeContactPct >= 45
+            ? "Your eye contact comes and goes. Try to look straight into the camera on key sentences."
+            : "Your gaze often leaves the camera. Put your notes closer to the lens.",
+      );
+    }
+    parts.push(warn === 0 ? "Your posture is calm and your hands don't distract." : "A few moments are worth a look, they are marked below.");
+    return parts.join(" ");
+  }
   if (body.eyeContactPct !== null) {
     parts.push(
       body.eyeContactPct >= 70

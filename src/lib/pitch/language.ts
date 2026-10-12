@@ -22,13 +22,13 @@ export const STT_LABELS: Record<SttProvider, string> = {
 const SCRIBE_FIRST: SttProvider[] = ["elevenlabs", "openai", "mistral"];
 const VOXTRAL_FIRST: SttProvider[] = ["mistral", "elevenlabs", "openai"];
 
-export const LANGUAGE_INFO: Record<PitchLanguage, { label: string; adjective: string; bcp47: string; stt: SttProvider[] }> = {
-  sk: { label: "Slovenčina", adjective: "slovenčine", bcp47: "sk-SK", stt: SCRIBE_FIRST },
-  cs: { label: "Čeština", adjective: "češtine", bcp47: "cs-CZ", stt: SCRIBE_FIRST },
-  en: { label: "English", adjective: "angličtine", bcp47: "en-US", stt: VOXTRAL_FIRST },
-  de: { label: "Deutsch", adjective: "nemčine", bcp47: "de-DE", stt: VOXTRAL_FIRST },
-  pl: { label: "Polski", adjective: "poľštine", bcp47: "pl-PL", stt: SCRIBE_FIRST },
-  hu: { label: "Magyar", adjective: "maďarčine", bcp47: "hu-HU", stt: SCRIBE_FIRST },
+export const LANGUAGE_INFO: Record<PitchLanguage, { label: string; adjective: string; english: string; bcp47: string; stt: SttProvider[] }> = {
+  sk: { label: "Slovenčina", adjective: "slovenčine", english: "Slovak", bcp47: "sk-SK", stt: SCRIBE_FIRST },
+  cs: { label: "Čeština", adjective: "češtine", english: "Czech", bcp47: "cs-CZ", stt: SCRIBE_FIRST },
+  en: { label: "English", adjective: "angličtine", english: "English", bcp47: "en-US", stt: VOXTRAL_FIRST },
+  de: { label: "Deutsch", adjective: "nemčine", english: "German", bcp47: "de-DE", stt: VOXTRAL_FIRST },
+  pl: { label: "Polski", adjective: "poľštine", english: "Polish", bcp47: "pl-PL", stt: SCRIBE_FIRST },
+  hu: { label: "Magyar", adjective: "maďarčine", english: "Hungarian", bcp47: "hu-HU", stt: SCRIBE_FIRST },
 };
 
 export function parseLanguage(value: unknown): PitchLanguage {

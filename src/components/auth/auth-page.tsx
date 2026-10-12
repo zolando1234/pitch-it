@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { isAuthConfigured } from "@/config/env";
 import { Notice } from "@/components/ui/notice";
+import { T } from "@/components/i18n/t";
 
 /** Obsah auth panelu: nadpis v strede, stav konfigurácie, formulár a pätička. */
 export function AuthPage({
@@ -9,7 +10,7 @@ export function AuthPage({
   children,
   footer,
 }: {
-  title: string;
+  title: ReactNode;
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -20,10 +21,10 @@ export function AuthPage({
       <h1 className="type-heading text-center text-[36px] leading-[1.1]">{title}</h1>
       {description ? <p className="mt-2.5 text-center text-base text-mute">{description}</p> : null}
       {!configured ? (
-        <Notice tone="attention" className="mt-6" title="Účty momentálne nefungujú">
+        <Notice tone="attention" className="mt-6" title={<T sk="Účty momentálne nefungujú" en="Accounts are unavailable right now" />}>
           {process.env.NODE_ENV !== "production"
             ? "Vývojárska poznámka: nastav AUTH_SECRET v .env.local a reštartuj server. Postup je v README."
-            : "Skús to prosím neskôr."}
+            : <T sk="Skús to prosím neskôr." en="Please try again later." />}
         </Notice>
       ) : null}
       <div className="mt-6">{children}</div>

@@ -1,9 +1,9 @@
-import { AUDIENCE_LABELS } from "@/lib/onboarding/plan";
+import { audienceLabel } from "@/lib/onboarding/plan";
 import { parseStoredCoach, type StoredCoach } from "@/lib/coach/stored";
 import { PREVIEW_COACH } from "@/lib/preview/coach";
-import { BODY_EVENT_LABELS, bodyNarrative, clock, type BodySummary } from "@/lib/pitch/body";
+import { BODY_EVENT_LABELS, BODY_EVENT_LABELS_EN, bodyNarrative, clock, type BodySummary } from "@/lib/pitch/body";
 import { CATEGORY_LABELS, orderedCategories, type ContentScore } from "@/lib/pitch/content";
-import { decimal, pausesLabel, TEMPO_ADVICE, tempoPosition, tempoVerdict, type PitchMetrics, type TranscriptToken } from "@/lib/pitch/metrics";
+import { decimal, pausesLabel, TEMPO_ADVICE, TEMPO_ADVICE_EN, tempoPosition, tempoVerdict, type PitchMetrics, type TranscriptToken } from "@/lib/pitch/metrics";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
 import type { PitchAttemptRow } from "@/lib/db/types";
@@ -71,9 +71,25 @@ const ORDER_LABELS: Record<OrderVerdict, { label: string; tone: ScoreTone }> = {
   jumped: { label: "Preskakoval si medzi bodmi", tone: "low" },
 };
 
+const ORDER_LABELS_EN: Record<OrderVerdict, string> = {
+  kept: "You kept the order of the points",
+  minor: "Small detours from the order",
+  jumped: "You jumped between points",
+};
+
+const CATEGORY_LABELS_EN: Record<keyof typeof CATEGORY_LABELS, string> = {
+  problem: "Problem",
+  solution: "Solution",
+  market: "Market",
+  traction: "Traction",
+  ask: "Ask",
+};
+
+export const SECTION_LABELS_EN: Record<FeedbackSection, string> = { tempo: "Pace", fillery: "Filler words", obsah: "Content" };
+
 const pctTone = (pct: number): ScoreTone => (pct >= 70 ? "good" : pct >= 45 ? "mid" : "low");
 
-export function outlineFeedback(value: unknown): OutlineFeedback | null {
+export function outlineFeedback(value: unknown, locale: "sk" | "en" = "sk"): OutlineFeedback | null {
   const result = parseOutlineResult(value);
   if (!result) return null;
   const check = result.check;
@@ -87,7 +103,9 @@ export function outlineFeedback(value: unknown): OutlineFeedback | null {
           tone: pctTone(pct ?? 0),
           byKeywords: check.source === "keywords",
           onTopicPct: check.onTopicPct,
-          order: check.order ? { verdict: check.order, ...ORDER_LABELS[check.order] } : null,
+          order: check.order
+            ? { verdict: check.order, ...ORDER_LABELS[check.order], ...(locale === "en" ? { label: ORDER_LABELS_EN[check.order] } : {}) }
+            : null,
           clarity: check.clarity !== null ? { score: check.clarity, tone: scoreTone(check.clarity) } : null,
           takeaway: check.takeaway,
           advice: check.advice,
@@ -147,8 +165,10 @@ function bodyStrip(events: BodySummary["events"], durationMs: number) {
 
 export function buildFeedback(
   attempt: PitchAttemptRow,
-  extra: { number: number; retryHref: string; shareDefaults?: FeedbackData["shareDefaults"] },
+  extra: { number: number; retryHref: string; shareDefaults?: FeedbackData["shareDefaults"]; locale?: "sk" | "en" },
 ): FeedbackData {
+  const locale = extra.locale ?? "sk";
+  const en = locale === "en";
   const metrics = attempt.metrics as PitchMetrics | null;
   const content = attempt.content as ContentScore | null;
   const body = attempt.body as BodySummary | null;
@@ -160,18 +180,20 @@ export function buildFeedback(
     attemptId: attempt.id,
     number: extra.number,
     audience: attempt.audience,
-    audienceLabel: AUDIENCE_LABELS[attempt.audience],
-    languageLabel: LANGUAGE_INFO[parseLanguage(attempt.language)].label,
+    audienceLabel: audienceLabel(attempt.audience, locale),
+    languageLabel: en ? LANGUAGE_INFO[parseLanguage(attempt.language)].english : LANGUAGE_INFO[parseLanguage(attempt.language)].label,
     targetSeconds: attempt.target_seconds,
     focus: attempt.focus,
     retryHref: extra.retryHref,
     tempo:
       metrics?.tempo != null
-        ? { value: metrics.tempo, position: tempoPosition(metrics.tempo), advice: TEMPO_ADVICE[tempoVerdict(metrics.tempo)] }
+        ? { value: metrics.tempo, position: tempoPosition(metrics.tempo), advice: (en ? TEMPO_ADVICE_EN : TEMPO_ADVICE)[tempoVerdict(metrics.tempo)] }
         : null,
     pauses: {
       count: pauseCount,
-      label: `${pausesLabel(pauseCount)}${longest ? `, najdlhšia ${decimal(longest / 1000)} s` : ""}`,
+      label: en
+        ? `${pauseCount === 1 ? "pause" : "pauses"} over 1 second${longest ? `, longest ${(longest / 1000).toFixed(1)} s` : ""}`
+        : `${pausesLabel(pauseCount)}${longest ? `, najdlhšia ${decimal(longest / 1000)} s` : ""}`,
     },
     fillers: {
       per60s: Math.round(metrics?.fillersPer60s ?? 0),
@@ -183,19 +205,19 @@ export function buildFeedback(
     },
     tokens: metrics?.tokens ?? [],
     content: content
-      ? orderedCategories(content).map((c) => ({ label: CATEGORY_LABELS[c.key], score: c.score, tone: scoreTone(c.score), advice: c.advice }))
+      ? orderedCategories(content).map((c) => ({ label: (en ? CATEGORY_LABELS_EN : CATEGORY_LABELS)[c.key], score: c.score, tone: scoreTone(c.score), advice: c.advice }))
       : null,
     body:
       body && body.frames > 0 && body.eyeContactPct !== null
         ? {
             eyeContactPct: body.eyeContactPct,
-            narrative: bodyNarrative(body),
-            events: events.map((e) => ({ at: clock(e.t), label: BODY_EVENT_LABELS[e.kind].label, tone: BODY_TONES[e.kind] })),
+            narrative: bodyNarrative(body, locale),
+            events: events.map((e) => ({ at: clock(e.t), label: en ? BODY_EVENT_LABELS_EN[e.kind] : BODY_EVENT_LABELS[e.kind].label, tone: BODY_TONES[e.kind] })),
             strip: bodyStrip(events, attempt.duration_ms ?? 0),
           }
         : null,
     coach: parseStoredCoach(body?.coach ?? null),
-    outline: outlineFeedback(attempt.outline),
+    outline: outlineFeedback(attempt.outline, locale),
     shared: attempt.shared_at !== null,
     shareDefaults: extra.shareDefaults ?? { name: "", team: "", email: "" },
   };

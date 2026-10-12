@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /*
   Zdroj pitchu: živá kamera alebo nahraté video zo súboru. Video sa nikam neposiela:
@@ -40,6 +41,7 @@ export function VideoSourcePicker({
   /** najdlhšie analyzované video (podľa plánu) */
   maxSeconds: number;
 }) {
+  const en = useLocale() === "en";
   const [duration, setDuration] = useState<number | null>(null);
   const [unreadable, setUnreadable] = useState(false);
 
@@ -71,20 +73,25 @@ export function VideoSourcePicker({
   return (
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="zdroj-nadpis">
       <h2 id="zdroj-nadpis" className="text-sm font-bold uppercase tracking-widest text-mute">
-        Odkiaľ je pitch
+        {en ? "Where is the pitch from" : "Odkiaľ je pitch"}
       </h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {option(!useVideo, "Nahrať kamerou teraz", "Tréner ti radí naživo počas pitchu.", () => {
+        {option(!useVideo, en ? "Record with camera now" : "Nahrať kamerou teraz", en ? "The coach gives you live tips while you pitch." : "Tréner ti radí naživo počas pitchu.", () => {
           onUseVideo(false);
           onFile(null);
         })}
-        {option(useVideo, "Nahrať hotové video", "MP4, MOV alebo WebM z mobilu či kamery. Analyzuje sa rovnako ako živý pitch.", () => onUseVideo(true))}
+        {option(
+          useVideo,
+          en ? "Upload a finished video" : "Nahrať hotové video",
+          en ? "MP4, MOV or WebM from a phone or camera. Analyzed just like a live pitch." : "MP4, MOV alebo WebM z mobilu či kamery. Analyzuje sa rovnako ako živý pitch.",
+          () => onUseVideo(true),
+        )}
       </div>
 
       {useVideo ? (
         <div className="mt-5">
           <label htmlFor="pitch-video" className="text-sm font-bold">
-            Vyber video
+            {en ? "Choose a video" : "Vyber video"}
           </label>
           <input
             id="pitch-video"
@@ -104,16 +111,21 @@ export function VideoSourcePicker({
               {duration !== null ? <span className="text-mute"> · {fmt(duration)}</span> : null}
             </p>
           ) : (
-            <p className="mt-3 text-xs text-faint">Rečník by mal byť v zábere spredu, aspoň po pás. Video sa nikam neposiela, analyzuje sa v tvojom prehliadači.</p>
+            <p className="mt-3 text-xs text-faint">
+              {en
+                ? "The speaker should face the camera, at least down to the waist. The video is not uploaded, it is analyzed in your browser."
+                : "Rečník by mal byť v zábere spredu, aspoň po pás. Video sa nikam neposiela, analyzuje sa v tvojom prehliadači."}
+            </p>
           )}
           {unreadable ? (
             <p role="alert" className="mt-2 text-sm text-coral">
-              Toto video prehliadač nevie otvoriť. Skús MP4 (H.264), napríklad export z mobilu.
+              {en ? "The browser can't open this video. Try MP4 (H.264), for example an export from your phone." : "Toto video prehliadač nevie otvoriť. Skús MP4 (H.264), napríklad export z mobilu."}
             </p>
           ) : duration !== null && duration > maxSeconds ? (
             <p className="mt-2 text-sm text-marker" role="status">
-              Video má {fmt(duration)}. Analyzujeme prvé {fmt(maxSeconds)}
-              {maxSeconds < 240 ? ", dlhšie videá do 4 minút sú v platenej verzii" : ""}.
+              {en
+                ? `The video is ${fmt(duration)} long. We analyze the first ${fmt(maxSeconds)}${maxSeconds < 240 ? ", longer videos up to 4 minutes are in the paid version" : ""}.`
+                : `Video má ${fmt(duration)}. Analyzujeme prvé ${fmt(maxSeconds)}${maxSeconds < 240 ? ", dlhšie videá do 4 minút sú v platenej verzii" : ""}.`}
             </p>
           ) : null}
         </div>

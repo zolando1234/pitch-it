@@ -78,6 +78,56 @@ export const FOCUS_GOALS: Record<FirstFocus, string> = {
 
 export const AUDIENCE_LABELS: Record<Audience, string> = { investor: "Investorovi", jury: "Porote", customer: "Zákazníkovi", team: "Tímu" };
 
+/* ---------- angličtina ---------- */
+
+type Locale = "sk" | "en";
+
+export const QUESTIONS_EN = [
+  {
+    key: "audience",
+    title: "Who are you pitching to?",
+    subtitle: "We adjust what we score accordingly.",
+    options: [
+      { value: "investor", label: "An investor", detail: "Meeting with a VC or angel. Focus on traction and the ask", summary: "Investor" },
+      { value: "jury", label: "A jury", detail: "Demo day, competition, accelerator. A clear story and numbers", summary: "Jury" },
+      { value: "customer", label: "A customer or partner", detail: "Sale or pilot. Focus on the problem and the value", summary: "Customer" },
+      { value: "team", label: "Your team", detail: "Internal presentation. Focus on clarity and vision", summary: "Team" },
+    ],
+  } satisfies Question<Audience>,
+  {
+    key: "lengthSeconds",
+    title: "How long should your pitch be?",
+    subtitle: "We set the timer and the target speaking pace.",
+    options: [
+      { value: 30, label: "30 seconds", detail: "Elevator pitch, first impression at an event", summary: "30 seconds" },
+      { value: 60, label: "1 minute", detail: "Opening of a meeting, the most common length", summary: "1 minute" },
+      { value: 180, label: "3 minutes", detail: "Demo day or competition with the whole story", summary: "3 minutes" },
+    ],
+  } satisfies Question<PitchLength>,
+  {
+    key: "focus",
+    title: "What worries you most?",
+    subtitle: "We show you that metric first.",
+    options: [
+      { value: "tempo", label: "Pace and pauses", detail: "I speak too fast or without breathing", summary: "Pace" },
+      { value: "fillery", label: "Filler words", detail: "Um, like, you know, basically…", summary: "Filler words" },
+      { value: "obsah", label: "Content and structure", detail: "Problem, solution, market, traction, ask", summary: "Content" },
+    ],
+  } satisfies Question<FirstFocus>,
+] as const;
+
+const FOCUS_GOALS_EN: Record<FirstFocus, string> = {
+  tempo: "Speak calmly and leave room for pauses.",
+  fillery: "Skip the ums, likes and basicallys. Pause for a moment instead.",
+  obsah: "Cover the problem, solution, market, traction and what you want from the listener.",
+};
+
+const AUDIENCE_LABELS_EN: Record<Audience, string> = { investor: "To an investor", jury: "To a jury", customer: "To a customer", team: "To your team" };
+
+export const questionsFor = (locale: Locale) => (locale === "en" ? QUESTIONS_EN : QUESTIONS);
+export const focusGoal = (focus: FirstFocus, locale: Locale) => (locale === "en" ? FOCUS_GOALS_EN : FOCUS_GOALS)[focus];
+export const audienceLabel = (audience: Audience, locale: Locale) => (locale === "en" ? AUDIENCE_LABELS_EN : AUDIENCE_LABELS)[audience];
+
 /** Predvolené nastavenie pre používateľa bez odpovedí (preskočil kvíz). */
 export const DEFAULT_ANSWERS: OnboardingAnswers = { audience: "investor", lengthSeconds: 60, focus: "tempo" };
 
@@ -88,9 +138,10 @@ export function readAnswers(raw: unknown): OnboardingAnswers {
 }
 
 /** Zhrnutie pre kartu „Tvoj plán“. */
-export function planSummary(answers: OnboardingAnswers) {
+export function planSummary(answers: OnboardingAnswers, locale: Locale = "sk") {
+  const questions = questionsFor(locale);
   const pick = (index: number, value: unknown) =>
-    (QUESTIONS[index].options as ReadonlyArray<Option<unknown>>).find((option) => option.value === value)?.summary ?? "";
+    (questions[index].options as ReadonlyArray<Option<unknown>>).find((option) => option.value === value)?.summary ?? "";
   return {
     audience: pick(0, answers.audience),
     length: pick(1, answers.lengthSeconds),

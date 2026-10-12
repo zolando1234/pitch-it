@@ -38,6 +38,17 @@ export const METRICS: Record<MetricKey, { title: string; unit: string; digits: n
   outline: { title: "Zhoda s osnovou", unit: "%", digits: 0, better: "up" },
 };
 
+const METRICS_EN_UNIT: Record<MetricKey, string> = { body: "/ 100", content: "/ 10", fillers: "per min", tempo: "syll./s", outline: "%" };
+export const METRICS_EN_TITLE: Record<MetricKey, string> = {
+  body: "Body language",
+  content: "Content score",
+  fillers: "Filler words",
+  tempo: "Pace",
+  outline: "Outline match",
+};
+export const metricText = (key: MetricKey, locale: "sk" | "en") =>
+  locale === "en" ? { title: METRICS_EN_TITLE[key], unit: METRICS_EN_UNIT[key] } : { title: METRICS[key].title, unit: METRICS[key].unit };
+
 export function progressRows(attempts: PitchAttemptRow[]): PitchProgressRow[] {
   return attempts
     .filter((a) => a.status === "ready")
@@ -76,19 +87,20 @@ export function improved(key: MetricKey, first: number, last: number): boolean |
 }
 
 /** Karty na prehľade z nahraných pitchov: posledná hodnota a zmena oproti predošlému pitchu. */
-export function pitchStatCards(rows: PitchProgressRow[]): StatCard[] {
+export function pitchStatCards(rows: PitchProgressRow[], locale: "sk" | "en" = "sk"): StatCard[] {
+  const en = locale === "en";
   const spec: { key: MetricKey; label: string; icon: StatCard["icon"]; tone: StatCard["tone"] }[] = [
-    { key: "body", label: "Reč tela", icon: "star", tone: "lime" },
-    { key: "content", label: "Obsahové skóre", icon: "chat", tone: "violet" },
-    { key: "fillers", label: "Vypĺňacie slová", icon: "chat", tone: "lime" },
-    { key: "tempo", label: "Tempo reči", icon: "gauge", tone: "violet" },
+    { key: "body", label: en ? "Body language" : "Reč tela", icon: "star", tone: "lime" },
+    { key: "content", label: en ? "Content score" : "Obsahové skóre", icon: "chat", tone: "violet" },
+    { key: "fillers", label: en ? "Filler words" : "Vypĺňacie slová", icon: "chat", tone: "lime" },
+    { key: "tempo", label: en ? "Speaking pace" : "Tempo reči", icon: "gauge", tone: "violet" },
   ];
   return spec.map(({ key, label, icon, tone }) => {
     const values = rows.map((r) => r[key]).filter((v): v is number => v !== null);
     const info = METRICS[key];
     const last = values.at(-1) ?? null;
     const prev = values.length > 1 ? values[values.length - 2] : null;
-    const format = (v: number) => v.toFixed(info.digits).replace(".", ",");
+    const format = (v: number) => (en ? v.toFixed(info.digits) : v.toFixed(info.digits).replace(".", ","));
     let delta: StatDelta | null = null;
     if (last !== null && prev !== null) {
       const diff = last - prev;
@@ -97,7 +109,7 @@ export function pitchStatCards(rows: PitchProgressRow[]): StatCard[] {
         text: `${diff > 0 ? "+" : diff < 0 ? "−" : ""}${format(Math.abs(diff))}`,
         sign: diff > 0 ? "up" : diff < 0 ? "down" : "flat",
         verdict: better === null ? "same" : better ? "better" : "worse",
-        description: "oproti predošlému pitchu",
+        description: en ? "compared with the previous pitch" : "oproti predošlému pitchu",
       };
     }
     return {
@@ -106,10 +118,10 @@ export function pitchStatCards(rows: PitchProgressRow[]): StatCard[] {
       icon,
       tone,
       value: last === null ? null : format(last),
-      unit: last === null ? null : info.unit,
+      unit: last === null ? null : en ? METRICS_EN_UNIT[key] : info.unit,
       hint: null,
       delta,
-      note: last === null ? "Po prvom pitchi" : values.length === 1 ? "Prvý pitch" : "",
+      note: last === null ? (en ? "After your first pitch" : "Po prvom pitchi") : values.length === 1 ? (en ? "First pitch" : "Prvý pitch") : "",
     };
   });
 }

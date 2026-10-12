@@ -19,6 +19,8 @@ export type RecorderSetup = {
   focus: "tempo" | "fillery" | "obsah";
   /** jazyk pitchu; bez neho slovenčina */
   language?: PitchLanguage;
+  /** jazyk rozhrania (hlášky a spätná väzba od AI) */
+  uiLocale?: "sk" | "en";
 };
 
 export type MediaState = "idle" | "requesting" | "ready" | "denied" | "unsupported";
@@ -186,6 +188,7 @@ export async function uploadPitch(
   form.set("targetSeconds", String(setup.targetSeconds));
   form.set("focus", setup.focus);
   form.set("language", setup.language ?? "sk");
+  if (setup.uiLocale) form.set("uiLocale", setup.uiLocale);
   if (vision?.length) form.set("vision", JSON.stringify(vision));
   if (coach) form.set("coach", JSON.stringify(coach));
   if (outline) form.set("outline", JSON.stringify(outline));
@@ -196,9 +199,14 @@ export async function uploadPitch(
       if (data.attempt) keepLocalAttempt(data.attempt);
       return { ok: true, attemptId: data.attemptId };
     }
-    return { ok: false, message: data?.error?.message ?? "Analýza zlyhala. Skús to znova.", retryable: response.status >= 500 || !data };
+    const fallback = setup.uiLocale === "en" ? "The analysis failed. Try again." : "Analýza zlyhala. Skús to znova.";
+    return { ok: false, message: data?.error?.message ?? fallback, retryable: response.status >= 500 || !data };
   } catch {
-    return { ok: false, message: "Nepodarilo sa spojiť so serverom. Skontroluj pripojenie a skús to znova.", retryable: true };
+    const message =
+      setup.uiLocale === "en"
+        ? "Could not connect to the server. Check your connection and try again."
+        : "Nepodarilo sa spojiť so serverom. Skontroluj pripojenie a skús to znova.";
+    return { ok: false, message, retryable: true };
   }
 }
 

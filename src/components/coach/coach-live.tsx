@@ -10,7 +10,8 @@ import type { PrompterSetting } from "@/components/coach/SessionSetup";
 import StageMap from "@/components/coach/StageMap";
 import Teleprompter from "@/components/coach/Teleprompter";
 import { COUNTDOWN_OPTIONS, fmtClock, useCoachSession, type CoachResult, type CountdownSec } from "@/components/coach/use-coach-session";
-import { SCRIPTS, type SessionMode } from "@/lib/coach/modes";
+import { scriptsFor, type SessionMode } from "@/lib/coach/modes";
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { MicHand } from "@/lib/coach/pose/metrics";
 import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
 
@@ -58,6 +59,7 @@ function writePref(key: string, value: string) {
 
 /** Nastavenia trénera, zapamätané v prehliadači (len pohodlie, appka funguje aj bez nich). */
 export function useCoachPrefs() {
+  const locale = useLocale();
   const [micMode, setMicMode] = useState(false);
   const [quality, setQuality] = useState<TrackingQuality>("balanced");
   const [micHand, setMicHand] = useState<MicHand>("auto");
@@ -79,7 +81,7 @@ export function useCoachPrefs() {
   const prompterText =
     prompter.scriptId === "custom"
       ? prompter.customText.trim() || null
-      : (SCRIPTS.find((s) => s.id === prompter.scriptId)?.text ?? null);
+      : (scriptsFor(locale).find((s) => s.id === prompter.scriptId)?.text ?? null);
 
   return {
     micMode,
@@ -117,7 +119,7 @@ export function CoachLive({
   label,
   prefs,
   ruleFilter,
-  finishLabel = "Skončiť",
+  finishLabel,
   onLive,
   onFinish,
   onError,
@@ -135,6 +137,7 @@ export function CoachLive({
 }) {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const { prompter, onPrompter, prompterText, micMode, micHand, quality } = prefs;
+  const en = useLocale() === "en";
 
   const stageRef = useRef<HTMLElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -190,7 +193,7 @@ export function CoachLive({
             disabled={phase !== "live"}
             className="rounded-full bg-signal px-5 py-2 font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-30"
           >
-            {finishLabel}
+            {finishLabel ?? (en ? "Finish" : "Skončiť")}
           </button>
         </div>
         {phase === "live" && durationMs !== null && (
@@ -236,14 +239,20 @@ export function CoachLive({
 
           {phase === "loading" && (
             <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
-              <p className="animate-pulse text-xl text-white/70">Načítavam kameru a model…</p>
+              <p className="animate-pulse text-xl text-white/70">{en ? "Loading camera and model…" : "Načítavam kameru a model…"}</p>
             </div>
           )}
           {phase === "countdown" && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/50 px-6 text-center text-white">
-              <p className="text-sm uppercase tracking-[0.4em] text-white/70">Začíname o</p>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/70">{en ? "Starting in" : "Začíname o"}</p>
               <p className={waitingForPerson ? "mt-2 text-2xl font-bold text-white" : "mt-2 text-white/70"}>
-                {waitingForPerson ? "Postav sa do záberu, odpočet pokračuje, keď ťa kamera uvidí" : "Pozeraj sa rovno do kamery, nastavujeme polohu hlavy"}
+                {waitingForPerson
+                  ? en
+                    ? "Step into the frame, the countdown continues once the camera sees you"
+                    : "Postav sa do záberu, odpočet pokračuje, keď ťa kamera uvidí"
+                  : en
+                    ? "Look straight into the camera, we are calibrating your head position"
+                    : "Pozeraj sa rovno do kamery, nastavujeme polohu hlavy"}
               </p>
               <p
                 key={count}
@@ -255,7 +264,7 @@ export function CoachLive({
                   color: "transparent",
                 }}
               >
-                {count || "Štart"}
+                {count || (en ? "Go" : "Štart")}
               </p>
               {drill && <p className="max-w-xl text-xl font-semibold">{drill.goal}</p>}
             </div>

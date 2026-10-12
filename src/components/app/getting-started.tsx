@@ -3,7 +3,7 @@ import Link from "next/link";
 export type ChecklistItem = { key: string; title: string; detail: string; href: string; done: boolean };
 
 /** Kontrolný zoznam prvých krokov. Zmizne, keď je všetko hotové. */
-export function GettingStarted({ items, href = (path) => path }: { items: ChecklistItem[]; href?: (path: string) => string }) {
+export function GettingStarted({ items, href = (path) => path, en = false }: { items: ChecklistItem[]; href?: (path: string) => string; en?: boolean }) {
   const done = items.filter((item) => item.done).length;
   if (items.length === 0 || done === items.length) return null;
   const next = items.find((item) => !item.done);
@@ -12,11 +12,9 @@ export function GettingStarted({ items, href = (path) => path }: { items: Checkl
       <div className="flex flex-col gap-3 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="getting-started" className="font-semibold text-paper">
-            Začíname
+            {en ? "Getting started" : "Začíname"}
           </h2>
-          <p className="mt-0.5 text-sm text-mute">
-            {done} z {items.length} krokov hotových
-          </p>
+          <p className="mt-0.5 text-sm text-mute">{en ? `${done} of ${items.length} steps done` : `${done} z ${items.length} krokov hotových`}</p>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-line sm:w-48" aria-hidden="true">
           <div className="h-full rounded-full bg-mint" style={{ width: `${(done / items.length) * 100}%` }} />
@@ -45,12 +43,12 @@ export function GettingStarted({ items, href = (path) => path }: { items: Checkl
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className={`block text-sm font-medium ${item.done ? "text-mute line-through" : "text-paper"}`}>
-                    <span className="sr-only">{item.done ? "Hotové: " : "Čaká: "}</span>
+                    <span className="sr-only">{item.done ? (en ? "Done: " : "Hotové: ") : en ? "To do: " : "Čaká: "}</span>
                     {item.title}
                   </span>
                   {!item.done ? <span className="mt-0.5 block text-sm text-mute">{item.detail}</span> : null}
                 </span>
-                {current ? <span className="shrink-0 text-sm font-medium text-signal-soft">Pokračovať →</span> : null}
+                {current ? <span className="shrink-0 text-sm font-medium text-signal-soft">{en ? "Continue →" : "Pokračovať →"}</span> : null}
               </Link>
             </li>
           );

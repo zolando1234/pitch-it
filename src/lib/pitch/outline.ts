@@ -199,10 +199,20 @@ const AUDIENCE_BRIEF: Record<Audience, string> = {
   team: "vlastný tím",
 };
 
-export function buildOutlinePrompt(input: { outline: PitchOutline; transcript: string; audience: Audience; language?: string | null }): string {
+export function buildOutlinePrompt(input: {
+  outline: PitchOutline;
+  transcript: string;
+  audience: Audience;
+  language?: string | null;
+  feedbackLocale?: "sk" | "en";
+}): string {
   return [
     `Publikum: ${AUDIENCE_BRIEF[input.audience]}.`,
-    input.language && input.language !== "slovenčine" ? `Pitch je v ${input.language}. Všetky texty (note, takeaway, advice, digressions) píš po slovensky.` : null,
+    input.feedbackLocale === "en"
+      ? "IMPORTANT: Write all text fields (note, takeaway, advice, digressions) in English (informal, friendly second person), regardless of the pitch language or the instructions above."
+      : input.language && input.language !== "slovenčine"
+        ? `Pitch je v ${input.language}. Všetky texty (note, takeaway, advice, digressions) píš po slovensky.`
+        : null,
     input.outline.topic ? `Téma pitchu (záväzné zadanie):\n"""${input.outline.topic}"""` : "Téma pitchu nie je zadaná, odvoď ju z osnovy.",
     input.outline.points.length
       ? `Osnova (index: bod):\n${input.outline.points.map((p, i) => `${i}: ${p}`).join("\n")}`

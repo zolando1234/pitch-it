@@ -14,12 +14,21 @@ export type PlanSummary = {
 };
 
 /** Karta v bočnom paneli: zostatok pitchov a nákup balíka. */
-export function pitchSummary(balance: PitchBalance): PlanSummary {
-  const buy = { label: `Kúpiť ${PITCH_PACK.credits} pitchov`, href: PLAN_HREF };
+export function pitchSummary(balance: PitchBalance, locale: "sk" | "en" = "sk"): PlanSummary {
+  const en = locale === "en";
+  const buy = { label: en ? `Buy ${PITCH_PACK.credits} pitches` : `Kúpiť ${PITCH_PACK.credits} pitchov`, href: PLAN_HREF };
   if (!balance.canPitch) {
-    return { title: "Pitche sú minuté", detail: `Balík ${PITCH_PACK.credits} pitchov: ${formatEur(PITCH_PROMO.priceCents)} s kódom ${PITCH_PROMO.code} (inak ${formatEur(PITCH_PACK.priceCents)})`, action: { ...buy, emphasis: "primary" } };
+    const promo = formatEur(PITCH_PROMO.priceCents, locale);
+    const full = formatEur(PITCH_PACK.priceCents, locale);
+    return {
+      title: en ? "No pitches left" : "Pitche sú minuté",
+      detail: en
+        ? `Pack of ${PITCH_PACK.credits} pitches: ${promo} with code ${PITCH_PROMO.code} (otherwise ${full})`
+        : `Balík ${PITCH_PACK.credits} pitchov: ${promo} s kódom ${PITCH_PROMO.code} (inak ${full})`,
+      action: { ...buy, emphasis: "primary" },
+    };
   }
-  return { title: "Tvoje pitche", detail: balanceLabel(balance), action: { ...buy, emphasis: "secondary" } };
+  return { title: en ? "Your pitches" : "Tvoje pitche", detail: balanceLabel(balance, locale), action: { ...buy, emphasis: "secondary" } };
 }
 
 export type PlanSummaryInput = {

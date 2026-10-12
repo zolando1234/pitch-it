@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 const CUE = /(\[[^\]]+\])/;
 const MIN_WPM = 80;
@@ -27,6 +28,7 @@ export default function Teleprompter({ text, wpm, onWpmChange, running }: Props)
   const viewRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
+  const en = useLocale() === "en";
   const elapsed = useRef(0);
   const wpmRef = useRef(wpm);
   const words = useMemo(() => countWords(text), [text]);
@@ -118,16 +120,16 @@ export default function Teleprompter({ text, wpm, onWpmChange, running }: Props)
       <div className="pointer-events-none absolute inset-x-0 top-[30%] border-t border-signal/40" />
 
       <div className="absolute bottom-2 right-3 flex items-center gap-2 text-xs text-white/70">
-        {paused && <span className="font-bold uppercase tracking-widest text-marker">Pozastavené · medzerník</span>}
-        <button onClick={() => changeWpm(wpm - 10)} className="rounded bg-line px-2 py-1 hover:bg-line-strong" aria-label="Pomalšie">
+        {paused && <span className="font-bold uppercase tracking-widest text-marker">{en ? "Paused · space" : "Pozastavené · medzerník"}</span>}
+        <button onClick={() => changeWpm(wpm - 10)} className="rounded bg-line px-2 py-1 hover:bg-line-strong" aria-label={en ? "Slower" : "Pomalšie"}>
           −
         </button>
-        <span className="w-20 text-center font-mono">{wpm} sl/min</span>
-        <button onClick={() => changeWpm(wpm + 10)} className="rounded bg-line px-2 py-1 hover:bg-line-strong" aria-label="Rýchlejšie">
+        <span className="w-20 text-center font-mono">{wpm} {en ? "wpm" : "sl/min"}</span>
+        <button onClick={() => changeWpm(wpm + 10)} className="rounded bg-line px-2 py-1 hover:bg-line-strong" aria-label={en ? "Faster" : "Rýchlejšie"}>
           +
         </button>
         <button onClick={() => setPaused((p) => !p)} className="rounded bg-line px-2 py-1 hover:bg-line-strong">
-          {paused ? "Pokračovať" : "Pauza"}
+          {paused ? (en ? "Resume" : "Pokračovať") : en ? "Pause" : "Pauza"}
         </button>
       </div>
     </div>

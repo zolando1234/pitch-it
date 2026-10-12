@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { SessionSummary } from "@/lib/coach/pose/session";
 import { STATUS_COLOR, STATUS_TEXT } from "@/lib/coach/pose/renderer";
 import type { Highlight } from "@/lib/coach/pose/metrics";
-import { HIGHLIGHTS, RULE_BY_ID } from "@/lib/coach/pose/rules";
+import { HIGHLIGHTS } from "@/lib/coach/pose/rules";
+import { highlightCopy, ruleCopy } from "@/lib/coach/pose/copy";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { ScoreRing, SideShare } from "./LivePanel";
 import MistakeLog from "./MistakeLog";
 import type { DrillProgress, SessionMode } from "@/lib/coach/modes";
@@ -28,8 +30,58 @@ export const scoreColor = (v: number | null) =>
 const scoreTextColor = (v: number | null) =>
   v === null ? STATUS_TEXT.idle : v >= 85 ? STATUS_TEXT.good : v >= 65 ? STATUS_TEXT.warn : STATUS_TEXT.bad;
 
+const SUMMARY = {
+  sk: {
+    breakdown: "Rozpis skóre",
+    ofScore: "% skóre",
+    notScored: "V tomto cvičení sa nehodnotí",
+    why: "Prečo nie 100?",
+    cap: "Strop",
+    flawless: "Nič. Bezchybný výkon.",
+    length: "Dĺžka",
+    zone: (p: number) => `ruky v power zóne ${p} % času`,
+    gestures: (g: number) => `${g} gest za minútu (najlepší TED rečníci ~25)`,
+    timeline: "Priebeh",
+    clean: "bez chyby",
+    couldBeBetter: "mohlo byť lepšie",
+    problem: "problém",
+    space: "Priestor a pohľad",
+    stood: "Kde si stál",
+    looked: "Kam si sa pozeral",
+    ideal: "Ideál: využi všetky tri časti priestoru a pohľad striedaj medzi ľavou stranou, stredom a pravou stranou publika.",
+    moments: "Skvelé momenty",
+    workOn: "Na čom pracovať",
+    noRepeats: "Žiadne opakujúce sa chyby. Výborne!",
+    total: (n: number, t: string) => `${n}× · spolu ${t}`,
+  },
+  en: {
+    breakdown: "Score breakdown",
+    ofScore: "% of score",
+    notScored: "Not scored in this exercise",
+    why: "Why not 100?",
+    cap: "Cap",
+    flawless: "Nothing. A flawless performance.",
+    length: "Length",
+    zone: (p: number) => `hands in the power zone ${p} % of the time`,
+    gestures: (g: number) => `${g} gestures per minute (top TED speakers ~25)`,
+    timeline: "Timeline",
+    clean: "mistake-free",
+    couldBeBetter: "could be better",
+    problem: "problem",
+    space: "Space and gaze",
+    stood: "Where you stood",
+    looked: "Where you looked",
+    ideal: "Ideal: use all three parts of the space and alternate your gaze between the left, centre and right of the audience.",
+    moments: "Great moments",
+    workOn: "What to work on",
+    noRepeats: "No repeated mistakes. Excellent!",
+    total: (n: number, t: string) => `${n}× · ${t} in total`,
+  },
+};
+
 /** Rozpis skóre: kategórie, stropy a konkrétne stratené body. */
 function ScoreBreakdown({ score }: { score: FinalScore }) {
+  const tx = SUMMARY[useLocale()];
   const deductions = score.categories
     .flatMap((c) => c.deductions.map((d) => ({ ...d, category: c.title })))
     .sort((a, b) => b.points - a.points)
@@ -38,13 +90,13 @@ function ScoreBreakdown({ score }: { score: FinalScore }) {
   return (
     <section className="grid gap-6 lg:grid-cols-2">
       <div className="rounded-2xl bg-panel p-5">
-        <h2 className="mb-5 text-sm uppercase tracking-widest text-faint">Rozpis skóre</h2>
+        <h2 className="mb-5 text-sm uppercase tracking-widest text-faint">{tx.breakdown}</h2>
         <ul className="flex flex-col gap-4">
           {score.categories.map((c) => (
             <li key={c.id}>
               <div className="mb-1 flex items-baseline justify-between">
                 <span className="font-semibold">
-                  {c.title} <span className="text-xs text-faint">· {Math.round(c.weight * 100)} % skóre</span>
+                  {c.title} <span className="text-xs text-faint">· {Math.round(c.weight * 100)} {tx.ofScore}</span>
                 </span>
                 <span className="font-mono text-lg font-bold" style={{ color: scoreTextColor(c.score) }}>
                   {c.score ?? "—"}
@@ -56,25 +108,25 @@ function ScoreBreakdown({ score }: { score: FinalScore }) {
                   style={{ width: `${c.score ?? 0}%`, background: scoreColor(c.score) }}
                 />
               </div>
-              {c.score === null && <p className="mt-1 text-xs text-faint">V tomto cvičení sa nehodnotí</p>}
+              {c.score === null && <p className="mt-1 text-xs text-faint">{tx.notScored}</p>}
             </li>
           ))}
         </ul>
       </div>
 
       <div className="rounded-2xl bg-panel p-5">
-        <h2 className="mb-5 text-sm uppercase tracking-widest text-faint">Prečo nie 100?</h2>
+        <h2 className="mb-5 text-sm uppercase tracking-widest text-faint">{tx.why}</h2>
         {score.caps.length > 0 && (
           <ul className="mb-4 flex flex-col gap-2">
             {score.caps.map((c) => (
               <li key={c.reason} className="rounded-xl border border-danger/50 bg-danger/10 px-4 py-3 text-sm">
-                <b className="text-coral">Strop {c.limit}</b> · {c.reason}
+                <b className="text-coral">{tx.cap} {c.limit}</b> · {c.reason}
               </li>
             ))}
           </ul>
         )}
         {deductions.length === 0 && score.caps.length === 0 ? (
-          <p className="text-mute">Nič. Bezchybný výkon.</p>
+          <p className="text-mute">{tx.flawless}</p>
         ) : (
           <ul className="flex flex-col divide-y divide-line">
             {deductions.map((d) => (
@@ -105,6 +157,8 @@ export function CoachReport({
 }) {
   const { statusShare: share } = summary;
   const top = summary.issues.slice(0, 3);
+  const locale = useLocale();
+  const tx = SUMMARY[locale];
   return (
     <>
       <div className="flex flex-col items-start gap-8 md:flex-row md:items-center">
@@ -118,8 +172,8 @@ export function CoachReport({
           </div>
           <p className="max-w-2xl text-xl font-semibold">{final.verdict}</p>
           <p className="text-mute">
-            Dĺžka {fmt(summary.durationMs)} · ruky v power zóne {Math.round(summary.zoneShare * 100)} % času
-            {summary.gesturesPerMin !== null && <> · {summary.gesturesPerMin} gest za minútu (najlepší TED rečníci ~25)</>}
+            {tx.length} {fmt(summary.durationMs)} · {tx.zone(Math.round(summary.zoneShare * 100))}
+            {summary.gesturesPerMin !== null && <> · {tx.gestures(summary.gesturesPerMin)}</>}
           </p>
         </div>
       </div>
@@ -127,7 +181,7 @@ export function CoachReport({
       {final.total !== null && <ScoreBreakdown score={final} />}
 
       <section>
-        <h2 className="mb-3 text-sm uppercase tracking-widest text-faint">Priebeh</h2>
+        <h2 className="mb-3 text-sm uppercase tracking-widest text-faint">{tx.timeline}</h2>
         <div className="flex h-10 w-full overflow-hidden rounded-lg bg-panel">
           {downsample(summary.timeline, 300).map((s, i) => (
             <div key={i} className="h-full flex-1" style={{ background: STATUS_COLOR[s.status] }} />
@@ -135,13 +189,13 @@ export function CoachReport({
         </div>
         <div className="mt-3 flex flex-wrap gap-5 text-sm text-mute">
           <span>
-            <b className="text-accent">{Math.round(summary.cleanShare * 100)} %</b> bez chyby
+            <b className="text-accent">{Math.round(summary.cleanShare * 100)} %</b> {tx.clean}
           </span>
           <span>
-            <b className="text-marker">{Math.round(share.warn * 100)} %</b> mohlo byť lepšie
+            <b className="text-marker">{Math.round(share.warn * 100)} %</b> {tx.couldBeBetter}
           </span>
           <span>
-            <b className="text-danger">{Math.round(share.bad * 100)} %</b> problém
+            <b className="text-danger">{Math.round(share.bad * 100)} %</b> {tx.problem}
           </span>
         </div>
       </section>
@@ -150,21 +204,21 @@ export function CoachReport({
 
       <section className="grid gap-6 md:grid-cols-2">
         <div className="rounded-2xl bg-panel p-5">
-          <h2 className="mb-4 text-sm uppercase tracking-widest text-faint">Priestor a pohľad</h2>
+          <h2 className="mb-4 text-sm uppercase tracking-widest text-faint">{tx.space}</h2>
           <div className="flex flex-col gap-4">
-            <SideShare label="Kde si stál" share={summary.stageShare} />
-            <SideShare label="Kam si sa pozeral" share={summary.gazeShare} />
+            <SideShare label={tx.stood} share={summary.stageShare} />
+            <SideShare label={tx.looked} share={summary.gazeShare} />
           </div>
           <p className="mt-4 text-sm text-mute">
-            Ideál: využi všetky tri časti priestoru a pohľad striedaj medzi ľavou stranou, stredom a pravou stranou publika.
+            {tx.ideal}
           </p>
         </div>
         <div className="rounded-2xl bg-panel p-5">
-          <h2 className="mb-4 text-sm uppercase tracking-widest text-faint">Skvelé momenty</h2>
+          <h2 className="mb-4 text-sm uppercase tracking-widest text-faint">{tx.moments}</h2>
           <ul className="flex flex-col gap-3">
             {(Object.keys(HIGHLIGHTS) as Highlight[]).map((h) => (
               <li key={h} className="flex items-center justify-between">
-                <span className="text-mute">{HIGHLIGHTS[h].label}</span>
+                <span className="text-mute">{highlightCopy(h, locale).label}</span>
                 <span className="text-2xl font-black text-accent">{summary.highlights[h] ?? 0}×</span>
               </li>
             ))}
@@ -173,21 +227,20 @@ export function CoachReport({
       </section>
 
       <section>
-        <h2 className="mb-4 text-sm uppercase tracking-widest text-faint">Na čom pracovať</h2>
+        <h2 className="mb-4 text-sm uppercase tracking-widest text-faint">{tx.workOn}</h2>
         {top.length === 0 ? (
-          <p className="text-lg text-mute">Žiadne opakujúce sa chyby. Výborne!</p>
+          <p className="text-lg text-mute">{tx.noRepeats}</p>
         ) : (
           <ol className="flex flex-col gap-4">
             {top.map((issue, i) => {
-              const rule = RULE_BY_ID[issue.id];
-              if (!rule) return null;
+              const rule = ruleCopy(issue.id, locale);
               return (
                 <li key={issue.id} className="flex gap-5 rounded-2xl bg-panel p-5">
                   <span className="h text-4xl text-violet-soft">{i + 1}</span>
                   <div>
                     <p className="text-xl font-bold">{rule.title}</p>
                     <p className="text-sm text-faint">
-                      {issue.count}× · spolu {fmt(issue.ms)}
+                      {tx.total(issue.count, fmt(issue.ms))}
                     </p>
                     <p className="mt-2 text-mute">{rule.tip}</p>
                   </div>

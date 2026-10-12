@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ICE_SERVERS, readLink, sleep, waitForIce } from "@/lib/mic/webrtc";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /*
   Počítač: vytvorí odkaz pre mobil, pošle WebRTC ponuku a čaká, kým sa mobil pripojí.
@@ -13,6 +14,12 @@ export type PhoneMicState = "idle" | "creating" | "waiting" | "connected" | "los
 const POLL_MS = 1500;
 
 export function usePhoneMic() {
+  const en = useLocale() === "en";
+  const enRef = useRef(en);
+  useEffect(() => {
+    enRef.current = en;
+  }, [en]);
+  const L = (sk: string, enText: string) => (enRef.current ? enText : sk);
   const [state, setState] = useState<PhoneMicState>("idle");
   const [link, setLink] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -55,10 +62,10 @@ export function usePhoneMic() {
     try {
       const response = await fetch("/api/mikrofon", { method: "POST" });
       const data = (await response.json().catch(() => null)) as { code?: string; error?: { message?: string } } | null;
-      if (!response.ok || !data?.code) return fail(data?.error?.message ?? "Odkaz pre mobil sa nepodarilo vytvoriť.");
+      if (!response.ok || !data?.code) return fail(data?.error?.message ?? L("Odkaz pre mobil sa nepodarilo vytvoriť.", "The link for the phone couldn't be created."));
       code = data.code;
     } catch {
-      return fail("Nepodarilo sa spojiť so serverom.");
+      return fail(L("Nepodarilo sa spojiť so serverom.", "Could not connect to the server."));
     }
     if (!alive()) return;
 
@@ -79,7 +86,7 @@ export function usePhoneMic() {
     };
     pc.onconnectionstatechange = () => {
       if (!alive()) return;
-      if (pc.connectionState === "failed") fail("Mobil sa nepodarilo pripojiť. Skús, či sú mobil aj počítač na rovnakej Wi-Fi.");
+      if (pc.connectionState === "failed") fail(L("Mobil sa nepodarilo pripojiť. Skús, či sú mobil aj počítač na rovnakej Wi-Fi.", "The phone couldn't connect. Check that the phone and the computer are on the same Wi-Fi."));
       else if (pc.connectionState === "disconnected" || pc.connectionState === "closed") setState((s) => (s === "connected" ? "lost" : s));
       else if (pc.connectionState === "connected") setState("connected");
     };
@@ -93,9 +100,9 @@ export function usePhoneMic() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sdp: pc.localDescription?.sdp ?? "" }),
       });
-      if (!response.ok) return fail("Odkaz pre mobil sa nepodarilo pripraviť.");
+      if (!response.ok) return fail(L("Odkaz pre mobil sa nepodarilo pripraviť.", "The link for the phone couldn't be prepared."));
     } catch {
-      return fail("Nepodarilo sa spojiť so serverom.");
+      return fail(L("Nepodarilo sa spojiť so serverom.", "Could not connect to the server."));
     }
     if (!alive()) return;
     setLink(`${window.location.origin}/mikrofon/${code}`);
@@ -111,7 +118,7 @@ export function usePhoneMic() {
         try {
           await pc.setRemoteDescription({ type: "answer", sdp: data.answer });
         } catch {
-          return fail("Mobil poslal neplatné spojenie. Vygeneruj nový odkaz.");
+          return fail(L("Mobil poslal neplatné spojenie. Vygeneruj nový odkaz.", "The phone sent an invalid connection. Create a new link."));
         }
         return;
       }

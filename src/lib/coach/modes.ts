@@ -235,6 +235,25 @@ export type Script = { id: string; title: string; text: string };
  * Ukážkové texty. V hranatých zátvorkách sú pokyny na gesto alebo pohyb,
  * teleprompter ich zobrazí inou farbou a nečíta sa ich nahlas.
  */
+export const SCRIPTS_EN: Script[] = [
+  {
+    id: "investor-pitch",
+    title: "Sample investor pitch (1 min)",
+    text: `[open palms] Imagine spending three hours every Friday copying invoices into a spreadsheet. [pause] That is exactly what 200,000 small businesses in Slovakia do.
+
+[step] My name is Alex and this is Invoicely. [count on fingers] You snap a photo of an invoice, we read it and send it straight to your accounting. In ten seconds.
+
+[wide gesture] In six months 1,400 companies use us and we grow 18 percent every month. They pay us 19 euros a month and almost nobody leaves.
+
+[step] The market is big: in Central Europe alone, two million companies still do the same thing by hand.
+
+[open palms] We are raising 400,000 euros to expand to Czechia and Poland. [pause] Help us give business owners their Fridays back. Thank you.`,
+  },
+];
+
+/** Ukážkové texty pre teleprompter v jazyku rozhrania. */
+export const scriptsFor = (locale: "sk" | "en"): Script[] => (locale === "en" ? SCRIPTS_EN : SCRIPTS);
+
 export const SCRIPTS: Script[] = [
   {
     id: "investor-pitch",

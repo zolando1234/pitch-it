@@ -16,6 +16,7 @@ import { recommendNextStep } from "@/lib/dashboard/recommendation";
 import { listExercises } from "@/lib/db/exercises";
 import { listOwnPitchAttempts } from "@/lib/db/pitch";
 import { pitchStatCards, progressRows } from "@/lib/pitch/progress";
+import { getLocale } from "@/lib/i18n/server";
 import { getProfile } from "@/lib/db/profile";
 import { getMaterialCounts, listProjects } from "@/lib/db/projects";
 import { listDashboardSessions } from "@/lib/db/sessions";
@@ -24,7 +25,9 @@ import { toNumber } from "@/lib/db/types";
 // Stránka závisí od URL a dát používateľa: navigácia smie počkať na server.
 export const instant = false;
 
-export const metadata: Metadata = { title: "Prehľad" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getLocale()) === "en" ? "Overview" : "Prehľad" };
+}
 
 export default async function DashboardPage({ searchParams }: PageProps<"/app">) {
   const user = await requireUser("/app");
@@ -36,6 +39,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/app">)
     listExercises(user.id),
     listOwnPitchAttempts(user.id, 200),
   ]);
+  const locale = await getLocale();
+  const en = locale === "en";
   // Nový účet: najprv krátky úvodný kvíz (dá sa preskočiť).
   if (profile && !profile.onboarding_completed_at) redirect("/app/vitaj");
 
@@ -47,15 +52,17 @@ export default async function DashboardPage({ searchParams }: PageProps<"/app">)
   const checklist = [
     {
       key: "profile",
-      title: "Nastav si plán tréningu",
-      detail: "Tri rýchle otázky, z ktorých zostavíme plán tréningu.",
+      title: en ? "Set up your training plan" : "Nastav si plán tréningu",
+      detail: en ? "Three quick questions we build your training plan from." : "Tri rýchle otázky, z ktorých zostavíme plán tréningu.",
       href: "/app/vitaj",
       done: Boolean(profile?.onboarding_answers),
     },
     {
       key: "pitch",
-      title: "Nahraj prvý pitch",
-      detail: "Pitch pred kamerou. Tréner ti radí počas pitchu, na konci dostaneš spätnú väzbu.",
+      title: en ? "Record your first pitch" : "Nahraj prvý pitch",
+      detail: en
+        ? "A pitch on camera. The coach gives you tips while you pitch and you get feedback at the end."
+        : "Pitch pred kamerou. Tréner ti radí počas pitchu, na konci dostaneš spätnú väzbu.",
       href: "/app/nahravka",
       done: pitchAttempts.length > 0,
     },
@@ -92,7 +99,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/app">)
   const { subject, family, cards: sessionCards } = buildStatCards(completed);
   // AI investor je zamknutý: kým nie sú tréningy, karty ukazujú progres nahraných pitchov
   const pitchRows = progressRows(pitchAttempts);
-  const cards = completed.length === 0 && pitchRows.length > 0 ? pitchStatCards(pitchRows) : sessionCards;
+  const cards = completed.length === 0 ? pitchStatCards(pitchRows, locale) : sessionCards;
   const reports = buildRecentReports(completed);
 
   return (
@@ -119,7 +126,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/app">)
       latestReportHref={reports[0]?.href ?? null}
       now={new Date().toISOString()}
       checklist={checklist}
-      notice={params.heslo === "zmenene" ? <Notice tone="success">Heslo je zmenené.</Notice> : null}
+      locale={locale}
+      notice={params.heslo === "zmenene" ? <Notice tone="success">{en ? "Your password has been changed." : "Heslo je zmenené."}</Notice> : null}
     />
   );
 }

@@ -31,6 +31,8 @@ export type DashboardViewData = {
   checklist?: ChecklistItem[];
   /** Prepis odkazov (ukážka mapuje /app na /ukazka). */
   href?: (path: string) => string;
+  /** jazyk rozhrania */
+  locale?: "sk" | "en";
 };
 
 /* ───────────── Spoločné časti ───────────── */
@@ -47,26 +49,28 @@ function IconBadge({ icon, tone, size = "md" }: { icon: IconName; tone: "lime" |
 
 /* ───────────── Úvodná karta ───────────── */
 
-function Hero({ recordHref }: { recordHref: string }) {
+function Hero({ recordHref, en }: { recordHref: string; en: boolean }) {
   return (
     <section aria-labelledby="hero-title" className="dash-hero relative isolate overflow-hidden rounded-[16px] border border-hero-line">
       {/* eslint-disable-next-line @next/next/no-img-element -- dekoratívne pozadie, rovnaký súbor ako na landingu */}
       <img src="/landing/hero.jpg" alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 h-full w-full object-cover object-[75%_center]" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/85 to-ink/10" />
       <div className="relative px-6 pt-7 pb-7 sm:px-[30px] sm:pt-9 sm:pb-[27px] md:max-w-[58%]">
-        <p className="text-[11px] font-semibold tracking-[0.1em] text-periwinkle uppercase">Tvoj rozvoj</p>
+        <p className="text-[11px] font-semibold tracking-[0.1em] text-periwinkle uppercase">{en ? "Your progress" : "Tvoj rozvoj"}</p>
         <h2 id="hero-title" className="mt-3.5 text-[34px] leading-[1.06] font-extrabold tracking-[-0.015em] text-paper sm:text-[44px]">
-          Tvoj ďalší tréning
-          <span className="block text-accent">začína tu</span>
+          {en ? "Your next training" : "Tvoj ďalší tréning"}
+          <span className="block text-accent">{en ? "starts here" : "začína tu"}</span>
         </h2>
-        <p className="mt-3 text-[15px] leading-relaxed text-slide sm:text-[16px]">Nahraj pitch pred kamerou a dostaneš spätnú väzbu na mieru.</p>
+        <p className="mt-3 text-[15px] leading-relaxed text-slide sm:text-[16px]">
+          {en ? "Record a pitch on camera and get tailored feedback." : "Nahraj pitch pred kamerou a dostaneš spätnú väzbu na mieru."}
+        </p>
         <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
           <Link
             href={recordHref}
             className="dash-cta inline-flex h-11 items-center gap-3 rounded-full bg-signal pr-5 pl-[26px] text-[15px] font-bold text-on-signal transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0"
         >
             <PlayIcon className="size-[17px]" />
-            Nahrať pitch
+            {en ? "Record pitch" : "Nahrať pitch"}
             <Icon name="chevronRight" className="size-[18px]" strokeWidth={2.2} />
           </Link>
         </div>
@@ -135,14 +139,16 @@ export function DashboardView({
   notice = null,
   checklist = [],
   href = (path) => path,
+  locale = "sk",
 }: DashboardViewData) {
+  const en = locale === "en";
   return (
     <div className="dash-enter space-y-5">
       {notice}
       <div className="min-w-0 space-y-[18px]">
-          <Hero recordHref={href("/app/nahravka")} />
-          <GettingStarted items={checklist} href={href} />
-          <section aria-label="Výsledky posledného tréningu">
+          <Hero recordHref={href("/app/nahravka")} en={en} />
+          <GettingStarted items={checklist} href={href} en={en} />
+          <section aria-label={en ? "Results of your latest pitch" : "Výsledky posledného tréningu"}>
             <ul className="grid grid-cols-1 gap-[18px] min-[420px]:grid-cols-2 2xl:grid-cols-4">
               {stats.map((card) => (
                 <StatTile key={card.key} card={card} />

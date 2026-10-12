@@ -7,13 +7,15 @@ import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { Icon } from "@/components/app/icons";
 import { useMobileNav } from "@/components/app/mobile-nav";
-import { APP_NAV, PREVIEW_NAV, type NavItem } from "@/components/app/nav-items";
+import { APP_NAV, navLabel, PREVIEW_NAV, type NavItem } from "@/components/app/nav-items";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { Wordmark } from "@/components/wordmark";
 
 function Navigation({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const locale = useLocale();
   return (
-    <nav aria-label="Aplikácia">
+    <nav aria-label={locale === "en" ? "Application" : "Aplikácia"}>
     <ul className="flex flex-col gap-1">
       {items.map((item) => {
         const active = item.match(pathname);
@@ -22,12 +24,12 @@ function Navigation({ items, onNavigate }: { items: NavItem[]; onNavigate?: () =
             <li key={item.href}>
               <span
                 aria-disabled="true"
-                title="Čoskoro"
+                title={locale === "en" ? "Coming soon" : "Čoskoro"}
                 className="flex h-12 cursor-not-allowed items-center gap-4 rounded-xl px-4 text-[15.5px] text-nav opacity-50"
               >
                 <Icon name={item.icon} className="size-[22px] text-nav-icon" />
-                {item.label}
-                <Icon name="lock" className="ml-auto size-[16px]" aria-label="Zamknuté" />
+                {navLabel(item, locale)}
+                <Icon name="lock" className="ml-auto size-[16px]" aria-label={locale === "en" ? "Locked" : "Zamknuté"} />
               </span>
             </li>
           );
@@ -44,7 +46,7 @@ function Navigation({ items, onNavigate }: { items: NavItem[]; onNavigate?: () =
             >
               {active ? <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-signal" /> : null}
               <Icon name={item.icon} className={`size-[22px] ${active ? "text-accent" : "text-nav-icon group-hover:text-paper"}`} />
-              {item.label}
+              {navLabel(item, locale)}
             </Link>
           </li>
         );

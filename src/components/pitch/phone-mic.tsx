@@ -3,6 +3,7 @@
 import "@/styles/screens/record.css";
 import { useEffect, useRef, useState } from "react";
 import { PI_BACKGROUND } from "@/components/pitch/pi-topbar";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { Wordmark } from "@/components/wordmark";
 import { ICE_SERVERS, readLink, sleep, waitForIce } from "@/lib/mic/webrtc";
 
@@ -18,6 +19,8 @@ const OFFER_WAIT_MS = 60_000;
 type WakeLockSentinelLike = { release: () => Promise<void> };
 
 export function PhoneMic({ code }: { code: string }) {
+  const en = useLocale() === "en";
+  const L = (sk: string, enText: string) => (en ? enText : sk);
   const [state, setState] = useState<State>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
@@ -53,13 +56,13 @@ export function PhoneMic({ code }: { code: string }) {
     setState("connecting");
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      return fail("Tento prehliadač nevie zapnúť mikrofón. Otvor odkaz v Safari alebo Chrome (stránka musí byť cez https).");
+      return fail(L("Tento prehliadač nevie zapnúť mikrofón. Otvor odkaz v Safari alebo Chrome (stránka musí byť cez https).", "This browser can't turn on the microphone. Open the link in Safari or Chrome (the page must use https)."));
     }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     } catch {
-      return fail("Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a skús znova.");
+      return fail(L("Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a skús znova.", "Microphone access is denied. Allow it in your browser settings and try again."));
     }
     streamRef.current = stream;
 
@@ -88,21 +91,21 @@ export function PhoneMic({ code }: { code: string }) {
     while (!offer && Date.now() < until) {
       const link = await readLink(code);
       if ("error" in link) return fail(link.error);
-      if (link.answer) return fail("K počítaču je už pripojený iný mobil. Na počítači vygeneruj nový odkaz.");
+      if (link.answer) return fail(L("K počítaču je už pripojený iný mobil. Na počítači vygeneruj nový odkaz.", "Another phone is already connected to the computer. Create a new link on the computer."));
       offer = link.offer;
       if (!offer) await sleep(1500);
     }
-    if (!offer) return fail("Počítač zatiaľ nie je pripravený. Nechaj na ňom otvorenú obrazovku nahrávania a skús znova.");
+    if (!offer) return fail(L("Počítač zatiaľ nie je pripravený. Nechaj na ňom otvorenú obrazovku nahrávania a skús znova.", "The computer isn't ready yet. Keep the recording screen open on it and try again."));
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
     stream.getAudioTracks().forEach((track) => pc.addTrack(track, stream));
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected") setState("live");
-      else if (pc.connectionState === "failed") fail("Spojenie s počítačom zlyhalo. Skús, či sú mobil aj počítač na rovnakej Wi-Fi.");
+      else if (pc.connectionState === "failed") fail(L("Spojenie s počítačom zlyhalo. Skús, či sú mobil aj počítač na rovnakej Wi-Fi.", "The connection to the computer failed. Check that the phone and the computer are on the same Wi-Fi."));
       else if (pc.connectionState === "disconnected") {
         cleanup();
-        setMessage("Počítač sa odpojil.");
+        setMessage(L("Počítač sa odpojil.", "The computer disconnected."));
         setState("ended");
       }
     };
@@ -110,7 +113,7 @@ export function PhoneMic({ code }: { code: string }) {
       await pc.setRemoteDescription({ type: "offer", sdp: offer });
       await pc.setLocalDescription(await pc.createAnswer());
     } catch {
-      return fail("Spojenie s počítačom sa nepodarilo pripraviť. Na počítači vygeneruj nový odkaz.");
+      return fail(L("Spojenie s počítačom sa nepodarilo pripraviť. Na počítači vygeneruj nový odkaz.", "The connection to the computer couldn't be prepared. Create a new link on the computer."));
     }
     await waitForIce(pc);
     try {
@@ -120,9 +123,9 @@ export function PhoneMic({ code }: { code: string }) {
         body: JSON.stringify({ sdp: pc.localDescription?.sdp ?? "" }),
       });
       const data = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-      if (!response.ok) return fail(data?.error?.message ?? "Spojenie s počítačom zlyhalo.");
+      if (!response.ok) return fail(data?.error?.message ?? L("Spojenie s počítačom zlyhalo.", "The connection to the computer failed."));
     } catch {
-      return fail("Nepodarilo sa spojiť so serverom.");
+      return fail(L("Nepodarilo sa spojiť so serverom.", "Could not connect to the server."));
     }
 
     // obrazovka mobilu nesmie zhasnúť, inak sa mikrofón vypne
@@ -136,7 +139,7 @@ export function PhoneMic({ code }: { code: string }) {
 
   const disconnect = () => {
     cleanup();
-    setMessage("Mikrofón je vypnutý.");
+    setMessage(L("Mikrofón je vypnutý.", "The microphone is off."));
     setState("ended");
   };
 
@@ -149,14 +152,14 @@ export function PhoneMic({ code }: { code: string }) {
       </header>
       <main id="obsah" className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 pb-16">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">Mobil ako mikrofón</p>
+          <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">{L("Mobil ako mikrofón", "Phone as microphone")}</p>
           <h1 className="h mt-3 text-4xl leading-tight">
-            {live ? "Mikrofón je zapnutý." : state === "connecting" ? "Pripájam k počítaču…" : "Zapni mikrofón."}
+            {live ? L("Mikrofón je zapnutý.", "The microphone is on.") : state === "connecting" ? L("Pripájam k počítaču…", "Connecting to the computer…") : L("Zapni mikrofón.", "Turn on the microphone.")}
           </h1>
           <p className="mt-3 text-lg text-mute">
             {live
-              ? "Hovor normálne, zvuk ide do počítača. Mobil drž pri ústach alebo si ho daj do vrecka na hrudi a nechaj obrazovku zapnutú."
-              : "Zvuk z mobilu pôjde priamo do počítača, kde beží nahrávanie. Nikam sa neukladá."}
+              ? L("Hovor normálne, zvuk ide do počítača. Mobil drž pri ústach alebo si ho daj do vrecka na hrudi a nechaj obrazovku zapnutú.", "Speak normally, the sound goes to the computer. Hold the phone at your mouth or put it in a chest pocket, and keep the screen on.")
+              : L("Zvuk z mobilu pôjde priamo do počítača, kde beží nahrávanie. Nikam sa neukladá.", "The sound from your phone goes straight to the computer where the recording runs. It isn't stored anywhere.")}
           </p>
         </div>
 
@@ -171,12 +174,10 @@ export function PhoneMic({ code }: { code: string }) {
         ) : null}
 
         {live ? (
-          <button type="button" className="btn" onClick={disconnect} style={{ minHeight: "56px" }}>
-            Vypnúť mikrofón
-          </button>
+          <button type="button" className="btn" onClick={disconnect} style={{ minHeight: "56px" }}>{L("Vypnúť mikrofón", "Turn off microphone")}</button>
         ) : (
           <button type="button" className="btn btn-p" onClick={() => void connect()} disabled={state === "connecting"} style={{ minHeight: "56px", opacity: state === "connecting" ? 0.6 : 1 }}>
-            {state === "connecting" ? "Pripájam…" : state === "idle" ? "Zapnúť mikrofón" : "Pripojiť znova"}
+            {state === "connecting" ? L("Pripájam…", "Connecting…") : state === "idle" ? L("Zapnúť mikrofón", "Turn on microphone") : L("Pripojiť znova", "Connect again")}
           </button>
         )}
       </main>

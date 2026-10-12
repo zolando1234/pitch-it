@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "@/components/i18n/locale-provider";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Icon } from "@/components/app/icons";
@@ -59,6 +60,7 @@ export function useMobileNav(): MobileNavState {
 }
 
 export function MobileNavToggle() {
+  const en = useLocale() === "en";
   const { open, setOpen, panelId, toggleRef } = useMobileNav();
   return (
     <button
@@ -67,7 +69,7 @@ export function MobileNavToggle() {
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       aria-controls={panelId}
-      aria-label={open ? "Zavrieť menu" : "Otvoriť menu"}
+      aria-label={en ? (open ? "Close menu" : "Open menu") : open ? "Zavrieť menu" : "Otvoriť menu"}
       className="inline-flex size-10 items-center justify-center rounded-full border border-line-strong text-paper transition-colors hover:bg-panel-2"
     >
       <Icon name={open ? "close" : "menu"} className="size-5" />

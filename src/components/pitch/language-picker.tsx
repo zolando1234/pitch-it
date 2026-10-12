@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LANGUAGE_INFO, PITCH_LANGUAGES, STT_LABELS, parseLanguage, type PitchLanguage } from "@/lib/pitch/language";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /*
   Jazyk pitchu pred nahrávaním. Podľa neho sa vyberie model prepisu reči a jazyk živých titulkov.
@@ -31,10 +32,12 @@ export function usePitchLanguage() {
 }
 
 export function LanguagePicker({ language, choose }: ReturnType<typeof usePitchLanguage>) {
+  const en = useLocale() === "en";
+  const info = LANGUAGE_INFO[language];
   return (
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="jazyk-nadpis">
       <h2 id="jazyk-nadpis" className="text-sm font-bold uppercase tracking-widest text-mute">
-        V akom jazyku budeš pitchovať?
+        {en ? "What language will you pitch in?" : "V akom jazyku budeš pitchovať?"}
       </h2>
       <div className="mt-4 flex flex-wrap gap-2" role="radiogroup" aria-labelledby="jazyk-nadpis">
         {PITCH_LANGUAGES.map((code) => (
@@ -53,7 +56,9 @@ export function LanguagePicker({ language, choose }: ReturnType<typeof usePitchL
         ))}
       </div>
       <p className="mt-3 text-xs text-faint">
-        Prepis reči: {STT_LABELS[LANGUAGE_INFO[language].stt[0]]} v {LANGUAGE_INFO[language].adjective}. Spätnú väzbu dostaneš po slovensky.
+        {en
+          ? `Transcription: ${STT_LABELS[info.stt[0]]} in ${info.english}. You get the feedback in English.`
+          : `Prepis reči: ${STT_LABELS[info.stt[0]]} v ${info.adjective}. Spätnú väzbu dostaneš po slovensky.`}
       </p>
     </section>
   );

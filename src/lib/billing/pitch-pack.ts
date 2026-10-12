@@ -16,7 +16,8 @@ export const PITCH_PACK = {
 /** Zľavový kód zo Startup Weekendu Žilina (kupón v Stripe: −18,99 €). Zákazník ho zadá v Stripe Checkoute. */
 export const PITCH_PROMO = { code: "SWZA", priceCents: 100 } as const;
 
-export const formatEur = (cents: number) => `${(cents / 100).toFixed(2).replace(".", ",")} €`;
+export const formatEur = (cents: number, locale: "sk" | "en" = "sk") =>
+  locale === "en" ? `€${(cents / 100).toFixed(2)}` : `${(cents / 100).toFixed(2).replace(".", ",")} €`;
 
 export type PitchWallet = { free_used: number; credits: number };
 
@@ -41,8 +42,13 @@ export function afterPitch(wallet: PitchWallet | null): PitchWallet {
   return { ...w, credits: Math.max(0, w.credits - 1) };
 }
 
-export function balanceLabel(balance: PitchBalance): string {
+export function balanceLabel(balance: PitchBalance, locale: "sk" | "en" = "sk"): string {
   const parts: string[] = [];
+  if (locale === "en") {
+    if (balance.freeLeft > 0) parts.push(`${balance.freeLeft} free ${balance.freeLeft === 1 ? "pitch" : "pitches"}`);
+    if (balance.credits > 0) parts.push(`${balance.credits} purchased`);
+    return parts.length ? `You have ${parts.join(" and ")} left.` : "You have no pitches left.";
+  }
   if (balance.freeLeft > 0) parts.push(`${balance.freeLeft} ${balance.freeLeft === 1 ? "pitch" : "pitche"} zadarmo`);
   if (balance.credits > 0) parts.push(`${balance.credits} zakúpených`);
   return parts.length ? `Zostáva ti ${parts.join(" a ")}.` : "Nemáš žiadne pitche.";

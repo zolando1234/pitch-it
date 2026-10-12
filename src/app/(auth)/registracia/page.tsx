@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { SignUpForm } from "@/components/auth/auth-forms";
+import { T } from "@/components/i18n/t";
 import { AuthPage, authAvailable } from "@/components/auth/auth-page";
 import { EarlyAccessForm } from "@/components/sections/early-access-form";
 import { getSignupMode } from "@/config/env";
@@ -12,12 +13,12 @@ export const metadata: Metadata = {
   description: "Vytvor si účet a natrénuj investorské stretnutie na vlastných podkladoch.",
 };
 
-const DEFAULT_DESCRIPTION = "Začni zadarmo. Netreba kreditnú kartu.";
+const DEFAULT_DESCRIPTION = <T sk="Začni zadarmo. Netreba kreditnú kartu." en="Start for free. No credit card needed." />;
 
 // searchParams sú runtime dáta: čítame ich až za Suspense, zvyšok stránky ostáva statický
 async function SignUpDescription({ searchParams }: { searchParams: PageProps<"/registracia">["searchParams"] }) {
   return (await searchParams)["stary-ucet"] === "1"
-    ? "Po aktualizácii sme tvoj predošlý účet nenašli. Prepáč, zaregistruj sa prosím znova, tentoraz sa už všetko uloží."
+    ? <T sk="Po aktualizácii sme tvoj predošlý účet nenašli. Prepáč, zaregistruj sa prosím znova, tentoraz sa už všetko uloží." en="After an update we couldn't find your previous account. Sorry, please sign up again, this time everything will be saved." />
     : DEFAULT_DESCRIPTION;
 }
 
@@ -35,7 +36,7 @@ export default function SignUpPage({ searchParams }: PageProps<"/registracia">) 
 
   return (
     <AuthPage
-      title="Vytvor si účet."
+      title={<T sk="Vytvor si účet." en="Create your account." />}
       description={
         <Suspense fallback={DEFAULT_DESCRIPTION}>
           <SignUpDescription searchParams={searchParams} />
@@ -43,9 +44,9 @@ export default function SignUpPage({ searchParams }: PageProps<"/registracia">) 
       }
       footer={
         <>
-          Už máš účet?{" "}
+          <T sk="Už máš účet?" en="Already have an account?" />{" "}
           <Link href="/prihlasenie" className="font-bold text-accent hover:underline">
-            Prihlásiť sa
+            <T sk="Prihlásiť sa" en="Sign in" />
           </Link>
         </>
       }

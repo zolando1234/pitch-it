@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Wordmark } from "@/components/wordmark";
+import { LanguageSwitch } from "@/components/i18n/locale-provider";
 
 /** Prihlásenie a registrácia: panel v strede obrazovky s dvomi rozmazanými škvrnami farby. */
 export default function AuthLayout({ children }: { children: ReactNode }) {
@@ -20,6 +21,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       <div className="relative w-full max-w-[460px] rounded-[28px] border border-line bg-[linear-gradient(160deg,color-mix(in_srgb,var(--card-from)_95%,transparent),color-mix(in_srgb,var(--card-to)_95%,transparent))] px-6 py-10 shadow-[0_30px_80px_rgba(0,0,0,0.45)] sm:px-9 light:shadow-[0_30px_80px_rgba(30,30,70,0.14)]">
         {children}
       </div>
+      <LanguageSwitch className="relative mt-6" />
     </main>
   );
 }

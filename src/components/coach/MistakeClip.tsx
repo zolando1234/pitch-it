@@ -56,7 +56,7 @@ export default function MistakeClip({ src, snapshot, startMs, endMs, alt }: Prop
   };
 
   return (
-    <button onClick={play} className="group relative block aspect-video w-full overflow-hidden bg-panel" aria-label={`Prehrať klip: ${alt}`}>
+    <button onClick={play} className="group relative block aspect-video w-full overflow-hidden bg-panel" aria-label={alt}>
       {/* nahrávka je nezrkadlená, zobrazíme ju zrkadlovo ako počas tréningu */}
       <video
         ref={ref}

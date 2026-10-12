@@ -6,7 +6,129 @@ import { Fragment, useEffect, useState, useTransition, type CSSProperties } from
 import { CoachFeedbackCard } from "@/components/coach/coach-feedback-card";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
 import { sharePitch } from "@/lib/pitch/actions";
-import { SECTION_LABELS, sectionOrder, type BodyTone, type FeedbackData, type OutlineFeedback, type ScoreTone } from "@/lib/pitch/feedback";
+import { SECTION_LABELS, SECTION_LABELS_EN, sectionOrder, type BodyTone, type FeedbackData, type OutlineFeedback, type ScoreTone } from "@/lib/pitch/feedback";
+import { useLocale } from "@/components/i18n/locale-provider";
+
+const FB = {
+  sk: {
+    toneLabel: { good: "Sebavedomo", warn: "Pozor", alert: "Upozornenie" },
+    status: { covered: "Odprezentované", partial: "Len spomenuté", missing: "Chýbalo" },
+    outlineMatch: "Zhoda s osnovou",
+    yourTopic: "Tvoja téma, podľa ktorej sme hodnotili",
+    noSpeechOutline: "V nahrávke sme nezachytili reč, preto sme pitch s osnovou nevedeli porovnať. Pri ďalšom pokuse hovor nahlas a bližšie k mikrofónu.",
+    outlineCovered: "osnovy si odprezentoval",
+    onTopicShare: "pitchu sa držalo témy",
+    stayedOnTopic: "Držal si sa témy",
+    ofPitch: (p: number) => `${p} % pitchu`,
+    order: "Poradie",
+    clarity: "Zrozumiteľnosť",
+    takeaway: "Čo si poslucháč odnesie",
+    clarityPoint: (c: number) => ` · zrozumiteľnosť ${c}/10`,
+    digressions: "Odbočky mimo témy",
+    nextTime: "Na ďalší pokus: ",
+    byKeywords: "AI hodnotenie tentoraz nebolo dostupné, body sme porovnali len podľa kľúčových slov. Zrozumiteľnosť a odbočky preto chýbajú.",
+    emphasis: "dôraz",
+    hesitation: "zaváhanie",
+    attempt: (n: number) => `Pokus ${n}`,
+    ready: "Tvoj feedback je hotový.",
+    orderChip: (label: string) => `Poradie podľa tvojej odpovede: ${label} najprv`,
+    tryAgain: "Skús znova",
+    sendMentor: "Pošli mentorovi",
+    tempo: "Tempo",
+    syllables: "slabiky za sekundu",
+    you: "Ty",
+    slow: "Pomaly",
+    target: "V cieli",
+    fast: "Rýchlo",
+    tooShort: "Nahrávka bola na meranie tempa príliš krátka. Skús hovoriť aspoň pár viet.",
+    pauses: "Pauzy",
+    pauseNote: "Dlhá pauza nemusí byť chyba. Rozhoduje, kde je.",
+    emphasisNote: "Po kľúčovej vete. Pôsobí sebavedomo.",
+    hesitationNote: "Uprostred vety. Stojí za to pozrieť.",
+    fillers: "Vypĺňacie slová",
+    per60: "za 60 sekúnd",
+    marked: "Prepis s označením",
+    emptyTranscript: "Prepis je prázdny.",
+    word: "slovo",
+    fillerWord: "vypĺňacie slovo",
+    content: "Obsahové skóre",
+    rubric: (forInvestor: boolean) => `Hodnotenie podľa pitch rubriky pre ${forInvestor ? "investora" : "tím"}`,
+    contentFailed: "Obsahové skóre sa tentoraz nepodarilo vyhodnotiť. Tempo a vypĺňacie slová platia, obsah skús pri ďalšom pokuse.",
+    speechFailed: "Reč sa tentoraz nepodarilo vyhodnotiť, preto hodnotíme len reč tela. Pri ďalšom pokuse hovor nahlas a bližšie k mikrofónu.",
+    body: "Reč tela",
+    fromVideo: "Z videa pitchu",
+    eyeContact: "očný kontakt",
+    shareTitle: "Chceš výsledok zdieľať s mentorom?",
+    shareText: "Tvoj pokus sa uložil do histórie. Ak ho chceš poslať mentorovi, doplň tri údaje. Dovtedy sme o teba nepotrebovali nič.",
+    name: "Meno",
+    namePh: "Tvoje meno",
+    team: "Firma alebo tím",
+    teamPh: "Názov tímu",
+    saving: "Ukladám…",
+    save: "Uložiť a zdieľať s mentorom",
+    done: "Hotovo.",
+    mentorSees: "Mentor teraz vidí tvoj pokus a ďalšie, ktoré spravíš.",
+  },
+  en: {
+    toneLabel: { good: "Confident", warn: "Watch out", alert: "Warning" },
+    status: { covered: "Covered", partial: "Only mentioned", missing: "Missing" },
+    outlineMatch: "Outline match",
+    yourTopic: "Your topic, which we scored against",
+    noSpeechOutline: "We didn't catch any speech in the recording, so we couldn't compare the pitch with your outline. Next time speak up and get closer to the microphone.",
+    outlineCovered: "of the outline covered",
+    onTopicShare: "of the pitch stayed on topic",
+    stayedOnTopic: "Stayed on topic",
+    ofPitch: (p: number) => `${p} % of the pitch`,
+    order: "Order",
+    clarity: "Clarity",
+    takeaway: "What the listener takes away",
+    clarityPoint: (c: number) => ` · clarity ${c}/10`,
+    digressions: "Off-topic detours",
+    nextTime: "Next time: ",
+    byKeywords: "AI scoring wasn't available this time, so we compared the points by keywords only. Clarity and detours are therefore missing.",
+    emphasis: "emphasis",
+    hesitation: "hesitation",
+    attempt: (n: number) => `Attempt ${n}`,
+    ready: "Your feedback is ready.",
+    orderChip: (label: string) => `Order based on your answer: ${label} first`,
+    tryAgain: "Try again",
+    sendMentor: "Send to a mentor",
+    tempo: "Pace",
+    syllables: "syllables per second",
+    you: "You",
+    slow: "Slow",
+    target: "On target",
+    fast: "Fast",
+    tooShort: "The recording was too short to measure the pace. Try to say at least a few sentences.",
+    pauses: "Pauses",
+    pauseNote: "A long pause isn't necessarily a mistake. What matters is where it is.",
+    emphasisNote: "After a key sentence. Comes across as confident.",
+    hesitationNote: "In the middle of a sentence. Worth a look.",
+    fillers: "Filler words",
+    per60: "per 60 seconds",
+    marked: "Marked-up transcript",
+    emptyTranscript: "The transcript is empty.",
+    word: "word",
+    fillerWord: "filler word",
+    content: "Content score",
+    rubric: (forInvestor: boolean) => `Scored with the pitch rubric for ${forInvestor ? "an investor" : "the audience"}`,
+    contentFailed: "The content score couldn't be evaluated this time. Pace and filler words still apply, try content again next time.",
+    speechFailed: "We couldn't evaluate the speech this time, so we only score body language. Next time speak up and get closer to the microphone.",
+    body: "Body language",
+    fromVideo: "From your pitch video",
+    eyeContact: "eye contact",
+    shareTitle: "Want to share the result with a mentor?",
+    shareText: "Your attempt is saved in your history. To send it to a mentor, fill in three details. Until now we didn't need anything from you.",
+    name: "Name",
+    namePh: "Your name",
+    team: "Company or team",
+    teamPh: "Team name",
+    saving: "Saving…",
+    save: "Save and share with a mentor",
+    done: "Done.",
+    mentorSees: "Your mentor can now see this attempt and the ones you make next.",
+  },
+};
 import type { PointStatus } from "@/lib/pitch/outline";
 
 /*
@@ -75,8 +197,9 @@ const POINT_STATUS: Record<PointStatus, { label: string; color: string }> = {
 
 function StatusIcon({ status }: { status: PointStatus }) {
   const color = POINT_STATUS[status].color;
+  const tx = FB[useLocale()];
   return (
-    <svg width="22" height="22" viewBox="0 0 22 22" aria-label={POINT_STATUS[status].label} style={{ flex: "0 0 22px", marginTop: "2px" }}>
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-label={tx.status[status]} style={{ flex: "0 0 22px", marginTop: "2px" }}>
       {status === "covered" ? (
         <>
           <circle cx="11" cy="11" r="11" fill={color} />
@@ -99,6 +222,7 @@ function StatusIcon({ status }: { status: PointStatus }) {
 
 /** Zhoda s témou a osnovou, ktorú si founder uložil pred nahrávaním. */
 function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress: (delay: number, dur: number) => number }) {
+  const tx = FB[useLocale()];
   const m = outline.match;
   const q = progress(200, 1500);
   const stat = (label: string, value: string, color?: string) => (
@@ -115,13 +239,13 @@ function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress
     <section className="card rv" style={{ animationDelay: "50ms", order: -1 }} aria-labelledby="osnova-zhoda">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
         <h2 id="osnova-zhoda" className="h" style={{ fontSize: "26px" }}>
-          Zhoda s osnovou
+          {tx.outlineMatch}
         </h2>
       </div>
       {outline.topic ? (
         <div style={{ marginTop: "14px", padding: "16px 18px", borderRadius: "14px", background: "var(--color-panel)", border: "1px solid var(--color-line)" }}>
           <div className="muted" style={{ fontSize: "13px", fontWeight: 700 }}>
-            Tvoja téma, podľa ktorej sme hodnotili
+            {tx.yourTopic}
           </div>
           <p style={{ margin: "6px 0 0", fontSize: "16px", lineHeight: "1.55", whiteSpace: "pre-line" }}>{outline.topic}</p>
         </div>
@@ -129,7 +253,7 @@ function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress
 
       {!m ? (
         <p className="muted" style={{ margin: "16px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
-          V nahrávke sme nezachytili reč, preto sme pitch s osnovou nevedeli porovnať. Pri ďalšom pokuse hovor nahlas a bližšie k mikrofónu.
+          {tx.noSpeechOutline}
         </p>
       ) : (
         <>
@@ -139,22 +263,22 @@ function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress
                 <span className="big" style={{ color: SCORE_COLOR[m.tone].text, whiteSpace: "nowrap" }}>
                   {m.pct !== null ? `${Math.round(m.pct * q)} %` : "–"}
                 </span>
-                <span className="muted">{outline.points.length ? "osnovy si odprezentoval" : "pitchu sa držalo témy"}</span>
+                <span className="muted">{outline.points.length ? tx.outlineCovered : tx.onTopicShare}</span>
               </div>
               <div className="sc" style={{ margin: "14px 0 0" }}>
                 <i style={{ width: `${Math.round((m.pct ?? 0) * q)}%`, background: SCORE_COLOR[m.tone].bar }} />
               </div>
             </div>
             <div style={{ flex: "1 1 420px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "10px" }}>
-              {m.onTopicPct !== null ? stat("Držal si sa témy", `${m.onTopicPct} % pitchu`, SCORE_COLOR[m.onTopicPct >= 70 ? "good" : m.onTopicPct >= 45 ? "mid" : "low"].text) : null}
-              {m.order ? stat("Poradie", m.order.label, SCORE_COLOR[m.order.tone].text) : null}
-              {m.clarity ? stat("Zrozumiteľnosť", `${m.clarity.score} / 10`, SCORE_COLOR[m.clarity.tone].text) : null}
+              {m.onTopicPct !== null ? stat(tx.stayedOnTopic, tx.ofPitch(m.onTopicPct), SCORE_COLOR[m.onTopicPct >= 70 ? "good" : m.onTopicPct >= 45 ? "mid" : "low"].text) : null}
+              {m.order ? stat(tx.order, m.order.label, SCORE_COLOR[m.order.tone].text) : null}
+              {m.clarity ? stat(tx.clarity, `${m.clarity.score} / 10`, SCORE_COLOR[m.clarity.tone].text) : null}
             </div>
           </div>
 
           {m.takeaway ? (
             <div style={{ marginTop: "22px", padding: "18px 20px", borderRadius: "16px", background: "var(--pi-sel)", border: "1px solid var(--color-line)" }}>
-              <div style={{ fontWeight: 700, marginBottom: "6px" }}>Čo si poslucháč odnesie</div>
+              <div style={{ fontWeight: 700, marginBottom: "6px" }}>{tx.takeaway}</div>
               <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.55" }}>{m.takeaway}</p>
             </div>
           ) : null}
@@ -168,8 +292,8 @@ function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
                       <b style={{ fontSize: "16px" }}>{point.text}</b>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: POINT_STATUS[point.status].color }}>
-                        {POINT_STATUS[point.status].label}
-                        {point.clarity !== null && point.status !== "missing" ? ` · zrozumiteľnosť ${point.clarity}/10` : ""}
+                        {tx.status[point.status]}
+                        {point.clarity !== null && point.status !== "missing" ? tx.clarityPoint(point.clarity) : ""}
                       </span>
                     </div>
                     {point.note ? (
@@ -185,7 +309,7 @@ function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress
 
           {m.digressions.length ? (
             <div style={{ marginTop: "16px" }}>
-              <div style={{ fontWeight: 700, marginBottom: "8px" }}>Odbočky mimo témy</div>
+              <div style={{ fontWeight: 700, marginBottom: "8px" }}>{tx.digressions}</div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 {m.digressions.map((d) => (
                   <span key={d} className="chip">
@@ -198,13 +322,13 @@ function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress
 
           {m.advice ? (
             <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
-              <b>Na ďalší pokus: </b>
+              <b>{tx.nextTime}</b>
               {m.advice}
             </p>
           ) : null}
           {m.byKeywords ? (
             <p className="muted" style={{ margin: "14px 0 0", fontSize: "13px" }}>
-              AI hodnotenie tentoraz nebolo dostupné, body sme porovnali len podľa kľúčových slov. Zrozumiteľnosť a odbočky preto chýbajú.
+              {tx.byKeywords}
             </p>
           ) : null}
         </>
@@ -217,6 +341,8 @@ const comma = (value: number, digits = 1) => value.toFixed(digits).replace(".", 
 
 export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; preview?: boolean }) {
   const p = useCountUp();
+  const locale = useLocale();
+  const tx = FB[locale];
   const [shared, setShared] = useState(data.shared);
   const [form, setForm] = useState(data.shareDefaults);
   const [error, setError] = useState<string | null>(null);
@@ -248,11 +374,11 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
       const s = comma(token.ms / 1000);
       return token.kind === "emphasis" ? (
         <span key={i} className="pz pz-e">
-          {s} s dôraz
+          {s} s {tx.emphasis}
         </span>
       ) : (
         <span key={i} className="pz pz-w">
-          {s} s zaváhanie
+          {s} s {tx.hesitation}
         </span>
       );
     }
@@ -273,23 +399,23 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
       <main id="obsah" className="wrap" style={{ paddingTop: "40px", paddingBottom: "64px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px", marginBottom: "28px" }}>
           <div>
-            <div className="eyebrow">Pokus {data.number}</div>
+            <div className="eyebrow">{tx.attempt(data.number)}</div>
             <h1 className="h" style={{ fontSize: "48px", margin: "10px 0 12px" }}>
-              Tvoj feedback je hotový.
+              {tx.ready}
             </h1>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span className="chip">{data.audienceLabel}</span>
               <span className="chip">{data.targetSeconds >= 60 ? `${data.targetSeconds / 60} min` : `${data.targetSeconds} s`}</span>
               <span className="chip">{data.languageLabel}</span>
-              <span className="chip">Poradie podľa tvojej odpovede: {SECTION_LABELS[data.focus]} najprv</span>
+              <span className="chip">{tx.orderChip((locale === "en" ? SECTION_LABELS_EN : SECTION_LABELS)[data.focus])}</span>
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <Link className="btn btn-p" href={data.retryHref}>
-              Skús znova
+              {tx.tryAgain}
             </Link>
             <a className="btn" href="#zdielat">
-              Pošli mentorovi
+              {tx.sendMentor}
             </a>
           </div>
         </div>
@@ -301,11 +427,11 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
             <div style={{ display: "flex", flexWrap: "wrap", gap: "32px" }}>
               <div style={{ flex: "1 1 440px" }}>
                 <h2 className="h" style={{ fontSize: "26px" }}>
-                  Tempo
+                  {tx.tempo}
                 </h2>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "16px 0 18px" }}>
                   <span className="big">{data.tempo ? comma(data.tempo.value * a) : "–"}</span>
-                  <span className="muted">slabiky za sekundu</span>
+                  <span className="muted">{tx.syllables}</span>
                 </div>
                 <div style={{ position: "relative", paddingTop: "26px" }}>
                   {data.tempo ? (
@@ -320,7 +446,7 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                         color: "var(--color-accent)",
                       }}
                     >
-                      Ty
+                      {tx.you}
                     </div>
                   ) : null}
                   <div style={{ display: "flex", height: "16px", borderRadius: "8px", overflow: "hidden", gap: "3px" }}>
@@ -343,32 +469,32 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                     />
                   ) : null}
                   <div style={{ display: "flex", marginTop: "8px", fontSize: "13px" }} className="muted">
-                    <span style={{ flex: "3" }}>Pomaly</span>
-                    <span style={{ flex: "4", textAlign: "center", color: "var(--color-accent)" }}>V cieli</span>
-                    <span style={{ flex: "3", textAlign: "right" }}>Rýchlo</span>
+                    <span style={{ flex: "3" }}>{tx.slow}</span>
+                    <span style={{ flex: "4", textAlign: "center", color: "var(--color-accent)" }}>{tx.target}</span>
+                    <span style={{ flex: "3", textAlign: "right" }}>{tx.fast}</span>
                   </div>
                 </div>
                 <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
-                  {data.tempo ? data.tempo.advice : "Nahrávka bola na meranie tempa príliš krátka. Skús hovoriť aspoň pár viet."}
+                  {data.tempo ? data.tempo.advice : tx.tooShort}
                 </p>
               </div>
               <div style={{ flex: "1 1 360px", borderLeft: "1px solid var(--color-line)", paddingLeft: "32px" }}>
                 <h2 className="h" style={{ fontSize: "26px" }}>
-                  Pauzy
+                  {tx.pauses}
                 </h2>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "16px 0 14px" }}>
                   <span className="big">{Math.round(data.pauses.count * b)}</span>
                   <span className="muted">{data.pauses.label}</span>
                 </div>
-                <p style={{ margin: "0 0 14px", fontSize: "15px", lineHeight: "1.55" }}>Dlhá pauza nemusí byť chyba. Rozhoduje, kde je.</p>
+                <p style={{ margin: "0 0 14px", fontSize: "15px", lineHeight: "1.55" }}>{tx.pauseNote}</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "14px" }}>
                   <div>
-                    <span className="pz pz-e">dôraz</span>
-                    <span className="muted">Po kľúčovej vete. Pôsobí sebavedomo.</span>
+                    <span className="pz pz-e">{tx.emphasis}</span>
+                    <span className="muted">{tx.emphasisNote}</span>
                   </div>
                   <div>
-                    <span className="pz pz-w">zaváhanie</span>
-                    <span className="muted">Uprostred vety. Stojí za to pozrieť.</span>
+                    <span className="pz pz-w">{tx.hesitation}</span>
+                    <span className="muted">{tx.hesitationNote}</span>
                   </div>
                 </div>
               </div>
@@ -379,11 +505,11 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
             <div style={{ display: "flex", flexWrap: "wrap", gap: "32px" }}>
               <div style={{ flex: "0 1 300px" }}>
                 <h2 className="h" style={{ fontSize: "26px" }}>
-                  Vypĺňacie slová
+                  {tx.fillers}
                 </h2>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "16px 0 16px" }}>
                   <span className="big">{Math.round(data.fillers.per60s * c)}</span>
-                  <span className="muted">za 60 sekúnd</span>
+                  <span className="muted">{tx.per60}</span>
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {data.fillers.chips.map((chip) => (
@@ -394,17 +520,17 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                 </div>
               </div>
               <div style={{ flex: "1 1 480px" }}>
-                <div style={{ fontWeight: 700, marginBottom: "12px" }}>Prepis s označením</div>
-                <p style={{ margin: "0", fontSize: "17px", lineHeight: "2.1" }}>{tokenNodes.length ? tokenNodes : <span className="muted">Prepis je prázdny.</span>}</p>
+                <div style={{ fontWeight: 700, marginBottom: "12px" }}>{tx.marked}</div>
+                <p style={{ margin: "0", fontSize: "17px", lineHeight: "2.1" }}>{tokenNodes.length ? tokenNodes : <span className="muted">{tx.emptyTranscript}</span>}</p>
                 <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "16px", fontSize: "13px" }} className="muted">
                   <span>
-                    <span className="fill">slovo</span> vypĺňacie slovo
+                    <span className="fill">{tx.word}</span> {tx.fillerWord}
                   </span>
                   <span>
-                    <span className="pz pz-e">dôraz</span>
+                    <span className="pz pz-e">{tx.emphasis}</span>
                   </span>
                   <span>
-                    <span className="pz pz-w">zaváhanie</span>
+                    <span className="pz pz-w">{tx.hesitation}</span>
                   </span>
                 </div>
               </div>
@@ -414,9 +540,9 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
           <section className="card rv" style={{ animationDelay: "400ms", order: o.obsah }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
               <h2 className="h" style={{ fontSize: "26px" }}>
-                Obsahové skóre
+                {tx.content}
               </h2>
-              <span className="muted">Hodnotenie podľa pitch rubriky pre {data.audience === "investor" ? "investora" : "tím"}</span>
+              <span className="muted">{tx.rubric(data.audience === "investor")}</span>
             </div>
             <div style={{ marginTop: "12px" }}>
               {data.content ? (
@@ -447,8 +573,8 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
               ) : (
                 <div className="muted" style={{ padding: "18px 0", borderTop: "1px solid var(--color-line)", fontSize: "14px", lineHeight: "1.55" }}>
                   {data.tempo
-                    ? "Obsahové skóre sa tentoraz nepodarilo vyhodnotiť. Tempo a vypĺňacie slová platia, obsah skús pri ďalšom pokuse."
-                    : "Reč sa tentoraz nepodarilo vyhodnotiť, preto hodnotíme len reč tela. Pri ďalšom pokuse hovor nahlas a bližšie k mikrofónu."}
+                    ? tx.contentFailed
+                    : tx.speechFailed}
                 </div>
               )}
             </div>
@@ -460,15 +586,15 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
             <section className="card rv" style={{ animationDelay: "550ms", order: 3 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
                 <h2 className="h" style={{ fontSize: "26px" }}>
-                  Reč tela
+                  {tx.body}
                 </h2>
-                <span className="muted">Z videa pitchu</span>
+                <span className="muted">{tx.fromVideo}</span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", marginTop: "20px" }}>
                 <div style={{ flex: "0 1 320px" }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
                     <span className="big">{Math.round(data.body.eyeContactPct * d)} %</span>
-                    <span className="muted">očný kontakt</span>
+                    <span className="muted">{tx.eyeContact}</span>
                   </div>
                   <div className="sc" style={{ margin: "14px 0 18px" }}>
                     <i style={{ width: `${Math.round(data.body.eyeContactPct * d)}%`, background: "var(--color-signal)" }} />
@@ -495,7 +621,7 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                       <Face tone={event.tone} />
                       <div>
                         <div style={{ fontWeight: 700, fontSize: "15px" }}>{event.label}</div>
-                        <div style={{ fontSize: "12px", fontWeight: 700, color: BODY_TONE[event.tone].fill }}>{BODY_TONE[event.tone].label}</div>
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: BODY_TONE[event.tone].fill }}>{tx.toneLabel[event.tone]}</div>
                       </div>
                     </div>
                   ))}
@@ -517,10 +643,10 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 320px" }}>
               <h2 className="h" style={{ fontSize: "28px", marginBottom: "10px" }}>
-                Chceš výsledok zdieľať s mentorom?
+                {tx.shareTitle}
               </h2>
               <p className="muted" style={{ margin: "0", fontSize: "15px", lineHeight: "1.55" }}>
-                Tvoj pokus sa uložil do histórie. Ak ho chceš poslať mentorovi, doplň tri údaje. Dovtedy sme o teba nepotrebovali nič.
+                {tx.shareText}
               </p>
             </div>
             <div style={{ flex: "1 1 420px" }}>
@@ -532,13 +658,13 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                   }}
                 >
                   <label className="l" htmlFor="mn" style={{ marginTop: "0" }}>
-                    Meno
+                    {tx.name}
                   </label>
-                  <input id="mn" type="text" placeholder="Tvoje meno" required autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <input id="mn" type="text" placeholder={tx.namePh} required autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   <label className="l" htmlFor="mf">
-                    Firma alebo tím
+                    {tx.team}
                   </label>
-                  <input id="mf" type="text" placeholder="Názov tímu" required autoComplete="organization" value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })} />
+                  <input id="mf" type="text" placeholder={tx.teamPh} required autoComplete="organization" value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })} />
                   <label className="l" htmlFor="me">
                     E-mail
                   </label>
@@ -549,17 +675,17 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                     </p>
                   ) : null}
                   <button className="btn btn-p" type="submit" disabled={pending} style={{ marginTop: "20px", width: "100%", opacity: pending ? 0.7 : 1 }}>
-                    {pending ? "Ukladám…" : "Uložiť a zdieľať s mentorom"}
+                    {pending ? tx.saving : tx.save}
                   </button>
                 </form>
               ) : (
                 <div style={{ padding: "24px", border: "1px solid var(--color-mint)", borderRadius: "16px", background: "var(--pi-sel)" }}>
-                  <b style={{ fontSize: "18px" }}>Hotovo.</b>
+                  <b style={{ fontSize: "18px" }}>{tx.done}</b>
                   <p className="muted" style={{ margin: "8px 0 16px" }}>
-                    Mentor teraz vidí tvoj pokus a ďalšie, ktoré spravíš.
+                    {tx.mentorSees}
                   </p>
                   <Link className="btn" href={data.retryHref}>
-                    Skús znova
+                    {tx.tryAgain}
                   </Link>
                 </div>
               )}

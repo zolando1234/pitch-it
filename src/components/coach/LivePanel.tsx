@@ -1,3 +1,4 @@
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { FeedbackState } from "@/lib/coach/pose/feedback";
 import type { Metrics, Side } from "@/lib/coach/pose/metrics";
 import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
@@ -55,10 +56,11 @@ function Meter({ label, value, ok, hint }: { label: string; value: number; ok: b
 
 /** Tri dieliky ľavo / stred / vpravo, výška = podiel času. */
 export function SideShare({ label, share }: { label: string; share: Record<Side, number> }) {
+  const en = useLocale() === "en";
   const sides: [Side, string][] = [
-    ["left", "Ľ"],
-    ["center", "S"],
-    ["right", "P"],
+    ["left", en ? "L" : "Ľ"],
+    ["center", en ? "C" : "S"],
+    ["right", en ? "R" : "P"],
   ];
   return (
     <div>

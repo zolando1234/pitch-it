@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import type { Mistake } from "@/lib/coach/pose/session";
 import { STATUS_COLOR } from "@/lib/coach/pose/renderer";
 import { RULE_BY_ID } from "@/lib/coach/pose/rules";
+import { ruleCopy } from "@/lib/coach/pose/copy";
+import { useLocale } from "@/components/i18n/locale-provider";
 import MistakeClip from "./MistakeClip";
 
 const fmt = (ms: number) => {
@@ -33,23 +35,27 @@ export default function MistakeLog({
   }, [mistakes]);
 
   const shown = filter ? mistakes.filter((m) => m.id === filter) : mistakes;
+  const locale = useLocale();
+  const en = locale === "en";
+  const title = (id: string) => ruleCopy(id, locale).title;
   const total = Math.max(durationMs, 1);
 
   if (!mistakes.length) {
     return (
       <section>
-        <h2 className="mb-3 text-sm uppercase tracking-widest text-faint">Záznam chýb</h2>
-        <p className="text-lg text-mute">Počas nahrávania sme nezaznamenali žiadnu chybu. Výborne!</p>
+        <h2 className="mb-3 text-sm uppercase tracking-widest text-faint">{en ? "Mistake log" : "Záznam chýb"}</h2>
+        <p className="text-lg text-mute">{en ? "No mistakes recorded during the recording. Excellent!" : "Počas nahrávania sme nezaznamenali žiadnu chybu. Výborne!"}</p>
       </section>
     );
   }
 
   return (
     <section>
-      <h2 className="mb-1 text-sm uppercase tracking-widest text-faint">Záznam chýb</h2>
+      <h2 className="mb-1 text-sm uppercase tracking-widest text-faint">{en ? "Mistake log" : "Záznam chýb"}</h2>
       <p className="mb-4 text-mute">
-        {mistakes.length} {mistakes.length === 1 ? "chyba" : mistakes.length < 5 ? "chyby" : "chýb"} počas nahrávania. Klikni na značku
-        na časovej osi a prehraj si klip, aby si videl, čo presne si urobil.
+        {en
+          ? `${mistakes.length} ${mistakes.length === 1 ? "mistake" : "mistakes"} during the recording. Click a marker on the timeline and play the clip to see exactly what you did.`
+          : `${mistakes.length} ${mistakes.length === 1 ? "chyba" : mistakes.length < 5 ? "chyby" : "chýb"} počas nahrávania. Klikni na značku na časovej osi a prehraj si klip, aby si videl, čo presne si urobil.`}
       </p>
 
       {/* časová os so značkami */}
@@ -63,7 +69,7 @@ export default function MistakeLog({
             <a
               key={i}
               href={`#mistake-${i}`}
-              title={`${fmt(m.start)} · ${RULE_BY_ID[m.id]?.title}`}
+              title={`${fmt(m.start)} · ${title(m.id)}`}
               className="absolute top-2 h-10 min-w-1.5 rounded-sm opacity-85 transition hover:opacity-100 hover:ring-2 hover:ring-white"
               style={{
                 left: `${(m.start / total) * 100}%`,
@@ -85,7 +91,7 @@ export default function MistakeLog({
           onClick={() => setFilter(null)}
           className={`rounded-full px-4 py-1.5 text-sm font-semibold ${!filter ? "bg-paper text-ink" : "bg-panel text-mute"}`}
         >
-          Všetky ({mistakes.length})
+          {en ? "All" : "Všetky"} ({mistakes.length})
         </button>
         {kinds.map(([id, n]) => (
           <button
@@ -96,7 +102,7 @@ export default function MistakeLog({
             }`}
           >
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: severityColor(id) }} />
-            {RULE_BY_ID[id]?.title ?? id} ({n})
+            {title(id)} ({n})
           </button>
         ))}
       </div>
@@ -104,7 +110,7 @@ export default function MistakeLog({
       <ol className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((m) => {
           const i = mistakes.indexOf(m);
-          const rule = RULE_BY_ID[m.id];
+          const rule = RULE_BY_ID[m.id] ? ruleCopy(m.id, locale) : null;
           const secs = Math.max(1, Math.round((m.end - m.start) / 1000));
           return (
             <li
@@ -120,13 +126,13 @@ export default function MistakeLog({
                     snapshot={m.snapshot}
                     startMs={m.start}
                     endMs={m.end}
-                    alt={`Moment chyby: ${rule?.title}`}
+                    alt={`${en ? "Mistake moment" : "Moment chyby"}: ${rule?.title}`}
                   />
                 ) : m.snapshot ? (
                   // eslint-disable-next-line @next/next/no-img-element -- lokálny data URL z kamery
-                  <img src={m.snapshot} alt={`Moment chyby: ${rule?.title}`} className="h-full w-full object-cover" />
+                  <img src={m.snapshot} alt={`${en ? "Mistake moment" : "Moment chyby"}: ${rule?.title}`} className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-faint">bez fotky</div>
+                  <div className="flex h-full items-center justify-center text-sm text-faint">{en ? "no photo" : "bez fotky"}</div>
                 )}
                 <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/80 px-2 py-1 font-mono text-sm font-bold">
                   {fmt(m.start)}
@@ -134,7 +140,7 @@ export default function MistakeLog({
               </div>
               <div className="p-4">
                 <p className="text-lg font-bold">{rule?.title ?? m.id}</p>
-                <p className="text-xs uppercase tracking-wider text-faint">trvalo {secs} s</p>
+                <p className="text-xs uppercase tracking-wider text-faint">{en ? `lasted ${secs} s` : `trvalo ${secs} s`}</p>
                 <p className="mt-2 text-sm text-mute">{rule?.tip}</p>
               </div>
             </li>

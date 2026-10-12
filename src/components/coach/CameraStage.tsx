@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { HandLandmarker, NormalizedLandmark, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { FeedbackEngine, type FeedbackState } from "@/lib/coach/pose/feedback";
 import { analyzeHands, type Hands } from "@/lib/coach/pose/hands";
@@ -21,15 +22,49 @@ const SLOW_FRAME_MS = 45;
 const LOST_GRACE_MS = 700;
 const PERF_WARMUP_FRAMES = 60;
 
-const RECOVERING_FB: FeedbackState = {
+/** Hlášky kamery v jazyku rozhrania. */
+const TEXT = {
+  sk: {
+    recoveringTitle: "Obnovujem sledovanie…",
+    recoveringTip: "Chvíľu vydrž, reštartujem model.",
+    denied:
+      "Prístup ku kamere je zamietnutý. Klikni na ikonu kamery alebo zámku v adresnom riadku a kameru povoľ. Na Macu skontroluj aj Nastavenia systému → Súkromie a bezpečnosť → Kamera.",
+    notFound: "Nenašli sme kameru. Skontroluj, či je pripojená.",
+    busy: "Kameru používa iná aplikácia (Zoom, Teams, FaceTime…). Zavri ju a skús to znova.",
+    failed: (detail: string) => `Kameru sa nepodarilo spustiť (${detail}).`,
+    videoFailed: "Video sa nepodarilo otvoriť. Skús MP4 (H.264) alebo WebM.",
+    modelFailed: "Nepodarilo sa načítať model na sledovanie tela.",
+    insecure: "Prehliadač tu kameru nepovoľuje. Otvor stránku cez zabezpečené pripojenie (https) v Chrome alebo Safari.",
+    disconnected: "Kamera sa odpojila. Skontroluj ju a spusti nahrávanie znova.",
+    unstable: "Sledovanie sa opakovane zastavilo. Zavri iné náročné karty a aplikácie a spusti nahrávanie znova.",
+    recoverFailed: "Sledovanie tela sa nepodarilo obnoviť.",
+  },
+  en: {
+    recoveringTitle: "Restoring tracking…",
+    recoveringTip: "Hold on a moment, restarting the model.",
+    denied:
+      "Camera access was denied. Click the camera or lock icon in the address bar and allow the camera. On a Mac also check System Settings → Privacy & Security → Camera.",
+    notFound: "No camera found. Check that it is connected.",
+    busy: "Another app is using the camera (Zoom, Teams, FaceTime…). Close it and try again.",
+    failed: (detail: string) => `The camera could not be started (${detail}).`,
+    videoFailed: "The video could not be opened. Try MP4 (H.264) or WebM.",
+    modelFailed: "The body tracking model could not be loaded.",
+    insecure: "The browser doesn't allow the camera here. Open the page over a secure connection (https) in Chrome or Safari.",
+    disconnected: "The camera was disconnected. Check it and start the recording again.",
+    unstable: "Tracking stopped repeatedly. Close other heavy tabs and apps and start the recording again.",
+    recoverFailed: "Body tracking could not be restored.",
+  },
+};
+
+const recoveringFb = (t: (typeof TEXT)["sk"]): FeedbackState => ({
   status: "idle",
-  title: "Obnovujem sledovanie…",
-  tip: "Chvíľu vydrž, reštartujem model.",
+  title: t.recoveringTitle,
+  tip: t.recoveringTip,
   ruleId: "recovering",
   activeIds: [],
   score: 0,
   highlight: null,
-};
+});
 
 export type Recording = { url: string; mimeType: string };
 
@@ -166,19 +201,19 @@ async function createModels(variant: PoseVariant): Promise<Models> {
   return { pose, hands, variant };
 }
 
-function cameraErrorMessage(e: unknown): string {
+function cameraErrorMessage(e: unknown, t: (typeof TEXT)["sk"]): string {
   const name = e instanceof DOMException ? e.name : "";
   switch (name) {
     case "NotAllowedError":
-      return "Prístup ku kamere je zamietnutý. Klikni na ikonu kamery alebo zámku v adresnom riadku a kameru povoľ. Na Macu skontroluj aj Nastavenia systému → Súkromie a bezpečnosť → Kamera.";
+      return t.denied;
     case "NotFoundError":
     case "OverconstrainedError":
-      return "Nenašli sme kameru. Skontroluj, či je pripojená.";
+      return t.notFound;
     case "NotReadableError":
     case "AbortError":
-      return "Kameru používa iná aplikácia (Zoom, Teams, FaceTime…). Zavri ju a skús to znova.";
+      return t.busy;
     default:
-      return `Kameru sa nepodarilo spustiť (${name || String(e)}).`;
+      return t.failed(name || String(e));
   }
 }
 
@@ -196,6 +231,8 @@ export default function CameraStage({
 }: Props) {
   // súbor sa počas jedného štúdia nemení; video zo súboru sa nezrkadlí (kamera áno, ako v zrkadle)
   const [source] = useState(file);
+  const locale = useLocale();
+  const localeRef = useRef(locale);
   const mirrored = !source;
   const fileUrlRef = useRef<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -211,6 +248,11 @@ export default function CameraStage({
   const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<{ rec: MediaRecorder; chunks: Blob[]; mimeType: string } | null>(null);
   const ruleFilterRef = useRef(ruleFilter);
+
+  useEffect(() => {
+    localeRef.current = locale;
+    engineRef.current?.setLocale(locale);
+  }, [locale]);
 
   useEffect(() => {
     ruleFilterRef.current = ruleFilter;
@@ -357,6 +399,8 @@ export default function CameraStage({
     trackerRef.current = tracker;
     const engine = new FeedbackEngine();
     engine.setRuleFilter(ruleFilterRef.current);
+    engine.setLocale(localeRef.current);
+    const t = () => TEXT[localeRef.current];
     engineRef.current = engine;
     const renderer = new StageRenderer();
     const detectCanvas = document.createElement("canvas");
@@ -399,14 +443,14 @@ export default function CameraStage({
           video.addEventListener("error", () => reject(new Error("video")), { once: true });
         });
       } catch {
-        callbacks.current.onError("Video sa nepodarilo otvoriť. Skús MP4 (H.264) alebo WebM.");
+        callbacks.current.onError(t().videoFailed);
         return;
       }
       try {
         models = await modelsReady;
       } catch (e) {
         console.error(e);
-        callbacks.current.onError("Nepodarilo sa načítať model na sledovanie tela.");
+        callbacks.current.onError(t().modelFailed);
         return;
       }
       if (cancelled) return closeModels();
@@ -426,9 +470,7 @@ export default function CameraStage({
     async function start() {
       if (source) return startFromFile(source);
       if (!navigator.mediaDevices?.getUserMedia) {
-        callbacks.current.onError(
-          "Prehliadač tu kameru nepovoľuje. Otvor stránku cez zabezpečené pripojenie (https) v Chrome alebo Safari.",
-        );
+        callbacks.current.onError(t().insecure);
         return;
       }
       // modely sa načítavajú súbežne so zapínaním kamery
@@ -446,7 +488,7 @@ export default function CameraStage({
         });
       } catch (e) {
         console.error(e);
-        callbacks.current.onError(cameraErrorMessage(e));
+        callbacks.current.onError(cameraErrorMessage(e, t()));
         dropModels();
         return;
       }
@@ -455,7 +497,7 @@ export default function CameraStage({
         return stream.getTracks().forEach((t) => t.stop());
       }
       stream.getVideoTracks()[0]?.addEventListener("ended", () => {
-        if (!cancelled) callbacks.current.onError("Kamera sa odpojila. Skontroluj ju a spusti nahrávanie znova.");
+        if (!cancelled) callbacks.current.onError(t().disconnected);
       });
 
       const video = videoRef.current!;
@@ -466,7 +508,7 @@ export default function CameraStage({
         models = await modelsReady;
       } catch (e) {
         console.error(e);
-        callbacks.current.onError("Nepodarilo sa načítať model na sledovanie tela.");
+        callbacks.current.onError(t().modelFailed);
         return;
       }
       if (cancelled) return closeModels();
@@ -492,9 +534,7 @@ export default function CameraStage({
       closeModels();
       if (countAsFailure) recoveries++;
       if (recoveries > MAX_RECOVERIES) {
-        callbacks.current.onError(
-          "Sledovanie sa opakovane zastavilo. Zavri iné náročné karty a aplikácie a spusti nahrávanie znova.",
-        );
+        callbacks.current.onError(t().unstable);
         return;
       }
       try {
@@ -507,7 +547,7 @@ export default function CameraStage({
         models = m;
       } catch (e) {
         console.error(e);
-        callbacks.current.onError("Sledovanie tela sa nepodarilo obnoviť.");
+        callbacks.current.onError(t().recoverFailed);
         return;
       }
       lastResultAt = stableSince = performance.now();
@@ -554,7 +594,7 @@ export default function CameraStage({
       const now = performance.now();
 
       if (!models) {
-        if (recovering) callbacks.current.onFrame(RECOVERING_FB, null, now);
+        if (recovering) callbacks.current.onFrame(recoveringFb(t()), null, now);
         return;
       }
       // pri zastavenom videu (pred štartom, pauza) nie sú nové snímky a to nie je pád

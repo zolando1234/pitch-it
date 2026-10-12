@@ -83,14 +83,18 @@ export async function createPitchPackCheckout(input: {
   successUrl: string;
   cancelUrl: string;
   pack: { credits: number; priceCents: number; currency: string; name: string };
+  locale?: "sk" | "en";
 }): Promise<string> {
+  const en = input.locale === "en";
   const params: Record<string, string> = {
     mode: "payment",
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": input.pack.currency,
     "line_items[0][price_data][unit_amount]": String(input.pack.priceCents),
-    "line_items[0][price_data][product_data][name]": input.pack.name,
-    "line_items[0][price_data][product_data][description]": `${input.pack.credits} nahraných pitchov s analýzou a reportom`,
+    "line_items[0][price_data][product_data][name]": en ? `PitchIt: ${input.pack.credits} pitches` : input.pack.name,
+    "line_items[0][price_data][product_data][description]": en
+      ? `${input.pack.credits} recorded pitches with analysis and report`
+      : `${input.pack.credits} nahraných pitchov s analýzou a reportom`,
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
     client_reference_id: input.userId,
@@ -99,7 +103,7 @@ export async function createPitchPackCheckout(input: {
     "metadata[credits]": String(input.pack.credits),
     "payment_intent_data[metadata][user_id]": input.userId,
     allow_promotion_codes: "true",
-    locale: "sk",
+    locale: en ? "en" : "sk",
   };
   if (input.email) params.customer_email = input.email;
   const session = await stripePost<{ url?: string }>("/checkout/sessions", params);

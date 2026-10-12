@@ -1,6 +1,7 @@
 import { siteConfig } from "@/config/site";
 import { PITCH_PACK } from "@/lib/billing/pitch-pack";
 import { createPitchPackCheckout, isStripeConfigured, StripeError } from "@/lib/billing/stripe";
+import { getLocale } from "@/lib/i18n/server";
 import { getPitchBalance } from "@/lib/db/pitch-wallet";
 import { trackEvent } from "@/lib/events/track";
 import { apiError, apiOk, handleRouteError, rateLimited, requireApiUser } from "@/lib/http/route";
@@ -32,6 +33,7 @@ export async function POST() {
       successUrl: `${siteConfig.url}/app/nahravka?platba=ok`,
       cancelUrl: `${siteConfig.url}/app/nahravka`,
       pack: PITCH_PACK,
+      locale: await getLocale(),
     });
     await trackEvent(user.id, "checkout_started", { kind: "pitch_pack" });
     return apiOk({ url });

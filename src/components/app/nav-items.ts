@@ -2,6 +2,19 @@ import type { IconName } from "@/components/app/icons";
 
 export type NavItem = { href: string; label: string; icon: IconName; match: (path: string) => boolean; /** Zamknuté: v menu je, ale zatiaľ sa nedá otvoriť. */ locked?: boolean };
 
+const NAV_EN: Record<string, string> = {
+  "Prehľad": "Overview",
+  "Môj startup": "My startup",
+  "Tréning pitchu": "Pitch training",
+  "AI investor": "AI investor",
+  "Progres": "Progress",
+  "Nastavenia": "Settings",
+  "Úvodný kvíz": "Intro quiz",
+};
+
+/** Názov položky menu v jazyku rozhrania. */
+export const navLabel = (item: NavItem, locale: "sk" | "en") => (locale === "en" ? (NAV_EN[item.label] ?? item.label) : item.label);
+
 export const APP_NAV: NavItem[] = [
   { href: "/app", label: "Prehľad", icon: "home", match: (path) => path === "/app" },
   { href: "/app/projekty", label: "Môj startup", icon: "presentation", match: (path) => path.startsWith("/app/projekty"), locked: true },

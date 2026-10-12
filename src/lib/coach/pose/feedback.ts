@@ -1,5 +1,7 @@
 import type { Highlight, Metrics } from "./metrics";
-import { HIGHLIGHTS, PRAISE, RULES, RULE_BY_ID, type Rule } from "./rules";
+import type { Locale } from "@/lib/i18n/locale";
+import { highlightCopy, IDLE_COPY, praiseCopy, ruleCopy } from "./copy";
+import { PRAISE, RULES, RULE_BY_ID, type Rule } from "./rules";
 
 export type Status = "good" | "warn" | "bad" | "idle";
 
@@ -40,6 +42,12 @@ export class FeedbackEngine {
   private highlightAt = new Map<Highlight, number>();
   private shownHighlight: { id: Highlight; t: number } | null = null;
   private ruleFilter: ((id: string) => boolean) | null = null;
+  private locale: Locale = "sk";
+
+  /** Jazyk rád nad hlavou. */
+  setLocale(locale: Locale) {
+    this.locale = locale;
+  }
 
   /** Obmedzí, ktoré pravidlá sa ozývajú (napr. pri cvičení len tie k téme). */
   setRuleFilter(filter: ((id: string) => boolean) | null) {
@@ -59,8 +67,7 @@ export class FeedbackEngine {
   idle(): FeedbackState {
     return {
       status: "idle",
-      title: "Postav sa pred kameru",
-      tip: "Postav sa 2 až 3 m od kamery, aby bolo vidno aspoň trup po pás.",
+      ...IDLE_COPY[this.locale],
       ruleId: null,
       activeIds: [],
       score: Math.round(this.score),
@@ -114,21 +121,20 @@ export class FeedbackEngine {
     if (!top) {
       const sh = this.shownHighlight;
       if (sh && t - sh.t < HIGHLIGHT_SHOW_MS) {
-        const { title, tip } = HIGHLIGHTS[sh.id];
+        const { title, tip } = highlightCopy(sh.id, this.locale);
         return { status: "good", title, tip, ruleId: `hl-${sh.id}`, activeIds: [], score: Math.round(this.score), highlight };
       }
       if (t - this.praiseAt > PRAISE_ROTATE_MS) {
         this.praiseIdx = (this.praiseIdx + 1) % PRAISE.length;
         this.praiseAt = t;
       }
-      const p = PRAISE[this.praiseIdx];
-      return { status: "good", ...p, ruleId: null, activeIds: [], score: Math.round(this.score), highlight };
+      const p = praiseCopy(this.praiseIdx, this.locale);
+      return { status: "good", title: p.title, tip: p.tip, ruleId: null, activeIds: [], score: Math.round(this.score), highlight };
     }
 
     return {
       status: top.severity,
-      title: top.title,
-      tip: top.tip,
+      ...ruleCopy(top.id, this.locale),
       ruleId: top.id,
       activeIds: active.map((r) => r.id),
       score: Math.round(this.score),

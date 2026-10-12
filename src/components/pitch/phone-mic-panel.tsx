@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { usePhoneMic } from "@/components/pitch/use-phone-mic";
 
 /*
@@ -11,6 +12,7 @@ type PhoneMic = ReturnType<typeof usePhoneMic>;
 
 export function PhoneMicPanel({ phone, level }: { phone: PhoneMic; level: number }) {
   const [copied, setCopied] = useState(false);
+  const en = useLocale() === "en";
   const usePhone = phone.state !== "idle";
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
@@ -28,7 +30,11 @@ export function PhoneMicPanel({ phone, level }: { phone: PhoneMic; level: number
   const share = async () => {
     if (!phone.link) return;
     try {
-      await navigator.share({ title: "Mikrofón pre pitch", text: "Otvor na mobile a zapni mikrofón:", url: phone.link });
+      await navigator.share({
+        title: en ? "Microphone for the pitch" : "Mikrofón pre pitch",
+        text: en ? "Open on your phone and turn on the microphone:" : "Otvor na mobile a zapni mikrofón:",
+        url: phone.link,
+      });
     } catch {
       // zrušené zdieľanie nie je chyba
     }
@@ -49,46 +55,57 @@ export function PhoneMicPanel({ phone, level }: { phone: PhoneMic; level: number
   return (
     <section className="w-full" aria-labelledby="mikrofon-nadpis">
       <p id="mikrofon-nadpis" className="mb-3 text-xs font-bold uppercase tracking-widest text-faint">
-        Čo držíš ako mikrofón?
+        {en ? "What do you hold as the microphone?" : "Čo držíš ako mikrofón?"}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {option(!usePhone, "Mikrofón počítača", "Externý mikrofón pripojený k počítaču alebo vstavaný mikrofón.", phone.stop)}
-        {option(usePhone, "Mobil ako mikrofón", "Mobil držíš v ruke ako mikrofón, zvuk ide do počítača cez odkaz.", () => {
+        {option(
+          !usePhone,
+          en ? "Computer microphone" : "Mikrofón počítača",
+          en ? "An external microphone connected to the computer or the built-in one." : "Externý mikrofón pripojený k počítaču alebo vstavaný mikrofón.",
+          phone.stop,
+        )}
+        {option(usePhone, en ? "Phone as microphone" : "Mobil ako mikrofón", en ? "Hold your phone as the microphone, the sound goes to the computer via a link." : "Mobil držíš v ruke ako mikrofón, zvuk ide do počítača cez odkaz.", () => {
           if (!usePhone) void phone.start();
         })}
       </div>
 
       {usePhone ? (
         <div className="mt-5 flex flex-col gap-3" aria-live="polite">
-          {phone.state === "creating" ? <p className="text-sm text-mute">Pripravujem odkaz…</p> : null}
+          {phone.state === "creating" ? <p className="text-sm text-mute">{en ? "Preparing the link…" : "Pripravujem odkaz…"}</p> : null}
 
           {phone.link && phone.state !== "connected" ? (
             <>
-              <p className="text-sm text-mute">Otvor tento odkaz na mobile a stlač „Zapnúť mikrofón“. Môžeš si ho poslať správou alebo e-mailom.</p>
+              <p className="text-sm text-mute">
+                {en
+                  ? "Open this link on your phone and tap “Turn on microphone”. You can send it to yourself by message or e-mail."
+                  : "Otvor tento odkaz na mobile a stlač „Zapnúť mikrofón“. Môžeš si ho poslať správou alebo e-mailom."}
+              </p>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   readOnly
                   value={phone.link}
                   onFocus={(e) => e.currentTarget.select()}
-                  aria-label="Odkaz pre mobil"
+                  aria-label={en ? "Link for the phone" : "Odkaz pre mobil"}
                   className="min-w-0 flex-1 rounded-full border border-line bg-transparent px-4 py-2 font-mono text-xs text-paper"
                 />
                 <button type="button" className="btn btn-p" onClick={() => void copy()} style={{ minHeight: "40px", padding: "8px 18px", fontSize: "14px" }}>
-                  {copied ? "Skopírované" : "Kopírovať"}
+                  {copied ? (en ? "Copied" : "Skopírované") : en ? "Copy" : "Kopírovať"}
                 </button>
                 {canShare ? (
                   <button type="button" className="btn" onClick={() => void share()} style={{ minHeight: "40px", padding: "8px 18px", fontSize: "14px" }}>
-                    Poslať
+                    {en ? "Send" : "Poslať"}
                   </button>
                 ) : null}
               </div>
-              {phone.state === "waiting" ? <p className="animate-pulse text-sm text-mute">Čakám, kým sa mobil pripojí…</p> : null}
+              {phone.state === "waiting" ? <p className="animate-pulse text-sm text-mute">{en ? "Waiting for the phone to connect…" : "Čakám, kým sa mobil pripojí…"}</p> : null}
             </>
           ) : null}
 
           {phone.state === "connected" ? (
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-bold text-accent">Mobil je pripojený. Povedz pár slov, mal by sa pohnúť ukazovateľ.</p>
+              <p className="text-sm font-bold text-accent">
+                {en ? "Phone connected. Say a few words, the meter should move." : "Mobil je pripojený. Povedz pár slov, mal by sa pohnúť ukazovateľ."}
+              </p>
               <div className="h-2.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
                 <div className="h-full rounded-full bg-signal transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
               </div>
@@ -98,10 +115,10 @@ export function PhoneMicPanel({ phone, level }: { phone: PhoneMic; level: number
           {phone.state === "lost" || phone.state === "failed" ? (
             <div className="flex flex-wrap items-center gap-3">
               <p role="alert" className="text-sm text-coral">
-                {phone.state === "lost" ? "Mobil sa odpojil." : phone.error}
+                {phone.state === "lost" ? (en ? "The phone disconnected." : "Mobil sa odpojil.") : phone.error}
               </p>
               <button type="button" className="btn" onClick={() => void phone.start()} style={{ minHeight: "40px", padding: "8px 18px", fontSize: "14px" }}>
-                Nový odkaz
+                {en ? "New link" : "Nový odkaz"}
               </button>
             </div>
           ) : null}

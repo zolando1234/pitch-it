@@ -2,6 +2,8 @@ import { z } from "zod";
 import { parseStoredCoach, storedCoachSchema } from "@/lib/coach/stored";
 import { outlineInputSchema } from "@/lib/pitch/outline";
 import { parseLanguage } from "@/lib/pitch/language";
+import { parseLocale } from "@/lib/i18n/locale";
+import { getLocale } from "@/lib/i18n/server";
 import { analyzePitch, MAX_PITCH_AUDIO_BYTES, PitchServiceError } from "@/lib/pitch/service";
 import { AUDIENCES } from "@/lib/onboarding/plan";
 import { apiError, apiOk, handleRouteError, rateLimited, requireApiUser } from "@/lib/http/route";
@@ -120,6 +122,7 @@ export async function POST(request: Request) {
       coach,
       outline,
       language: parseLanguage(form.get("language")),
+      uiLocale: parseLocale(form.get("uiLocale")) ?? (await getLocale()),
     });
     // celý výsledok ide aj klientovi, feedback sa tak zobrazí aj bez trvalého úložiska
     return apiOk({ attemptId: attempt.id, attempt }, 201);

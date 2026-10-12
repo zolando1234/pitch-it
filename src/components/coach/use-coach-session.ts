@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { Recording, StageApi } from "@/components/coach/CameraStage";
 import { DrillTracker, type DrillProgress, type SessionMode } from "@/lib/coach/modes";
 import type { FeedbackState } from "@/lib/coach/pose/feedback";
@@ -31,15 +32,18 @@ const PRESENCE_MS = 600;
 /** armed = nahraté video je pripravené, čaká sa na kliknutie „Spustiť analýzu“ */
 export type CoachPhase = "loading" | "armed" | "countdown" | "live" | "paused";
 
+/** Stav pred prvým snímkom (ruleId "loading" odlišuje ho od skutočných rád). */
 export const INITIAL_FB: FeedbackState = {
   status: "idle",
   title: "Načítavam…",
   tip: "Zapínam kameru a sledovanie tela.",
-  ruleId: null,
+  ruleId: "loading",
   activeIds: [],
   score: 70,
   highlight: null,
 };
+
+const INITIAL_FB_EN: FeedbackState = { ...INITIAL_FB, title: "Loading…", tip: "Starting the camera and body tracking." };
 
 export function useCoachSession({
   mode,
@@ -66,7 +70,8 @@ export function useCoachSession({
   onUi?: (m: Metrics | null) => void;
 }) {
   const [phase, setPhase] = useState<CoachPhase>("loading");
-  const [fb, setFb] = useState<FeedbackState>(INITIAL_FB);
+  const locale = useLocale();
+  const [fb, setFb] = useState<FeedbackState>(locale === "en" ? INITIAL_FB_EN : INITIAL_FB);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [count, setCount] = useState<number>(countdown);
   /** odpočet stojí, kým sa človek nepostaví do záberu */
