@@ -15,6 +15,7 @@ import {
 import { recommendNextStep } from "@/lib/dashboard/recommendation";
 import { listExercises } from "@/lib/db/exercises";
 import { listOwnPitchAttempts } from "@/lib/db/pitch";
+import { pitchStatCards, progressRows } from "@/lib/pitch/progress";
 import { getProfile } from "@/lib/db/profile";
 import { getMaterialCounts, listProjects } from "@/lib/db/projects";
 import { listDashboardSessions } from "@/lib/db/sessions";
@@ -33,7 +34,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/app">)
     listProjects(),
     listDashboardSessions(user.id),
     listExercises(user.id),
-    listOwnPitchAttempts(user.id, 1),
+    listOwnPitchAttempts(user.id, 200),
   ]);
   // Nový účet: najprv krátky úvodný kvíz (dá sa preskočiť).
   if (profile && !profile.onboarding_completed_at) redirect("/app/vitaj");
@@ -88,7 +89,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/app">)
   });
 
   const completed = sessions.filter((session) => session.status === "completed");
-  const { subject, family, cards } = buildStatCards(completed);
+  const { subject, family, cards: sessionCards } = buildStatCards(completed);
+  // AI investor je zamknutý: kým nie sú tréningy, karty ukazujú progres nahraných pitchov
+  const pitchRows = progressRows(pitchAttempts);
+  const cards = completed.length === 0 && pitchRows.length > 0 ? pitchStatCards(pitchRows) : sessionCards;
   const reports = buildRecentReports(completed);
 
   return (
