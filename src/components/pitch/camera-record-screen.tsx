@@ -299,8 +299,13 @@ export function CameraRecordScreen({
     }
   }, [phoneStream, attach, open]);
 
-  // modely sťahujeme už počas nastavenia, aby štart nahrávania nečakal
-  useEffect(() => (phase === "setup" ? preloadCoachModels(prefs.quality) : undefined), [prefs.quality, phase]);
+  // modely na sledovanie tela sa načítajú na pozadí už na výbere tréningu.
+  // Spracovanie knižnice trvá chvíľu: hneď po kliknutí by zasekla prechod na nastavenie.
+  useEffect(() => {
+    // chvíľu po zobrazení výberu tréningu, kým človek číta (nie až po kliknutí)
+    const id = setTimeout(() => preloadCoachModels(prefs.quality), 600);
+    return () => clearTimeout(id);
+  }, [prefs.quality]);
 
   // kroky analýzy postupujú, posledný sa uzavrie až po odpovedi servera
   useEffect(() => {
