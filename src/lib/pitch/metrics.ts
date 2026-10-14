@@ -163,13 +163,13 @@ export function tempoVerdict(tempo: number): TempoVerdict {
 
 export const TEMPO_ADVICE: Record<TempoVerdict, string> = {
   slow: "Hovoríš pomalšie, ako je cieľ. Skráť pauzy medzi vetami a nechaj tempo plynúť, pomalé miesta si nechaj na čísla.",
-  target: "Tempo máš v cieľovom okne. Pri čísle o trhu spomaľ, aby ho investor stihol zachytiť.",
+  target: "Tempo máš v cieľovom okne. Pri dôležitom čísle či myšlienke spomaľ, aby ju publikum stihlo zachytiť.",
   fast: "Hovoríš rýchlejšie, ako je cieľ. Po každej kľúčovej vete sa nadýchni a pri číslach spomaľ.",
 };
 
 export const TEMPO_ADVICE_EN: Record<TempoVerdict, string> = {
   slow: "You speak slower than the target. Shorten the pauses between sentences and let the pace flow, keep the slow parts for numbers.",
-  target: "Your pace is in the target window. Slow down on the market number so the investor can catch it.",
+  target: "Your pace is in the target window. Slow down on key numbers and ideas so the audience can catch them.",
   fast: "You speak faster than the target. Take a breath after every key sentence and slow down on numbers.",
 };
 

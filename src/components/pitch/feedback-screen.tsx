@@ -6,7 +6,7 @@ import { Fragment, useEffect, useState, useTransition, type CSSProperties } from
 import { CoachFeedbackCard } from "@/components/coach/coach-feedback-card";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
 import { sharePitch } from "@/lib/pitch/actions";
-import { SECTION_LABELS, SECTION_LABELS_EN, sectionOrder, type BodyTone, type FeedbackData, type OutlineFeedback, type ScoreTone } from "@/lib/pitch/feedback";
+import type { BodyTone, FeedbackData, ScoreRow, ScoreTone, TranscriptSentence } from "@/lib/pitch/feedback";
 import { useLocale } from "@/components/i18n/locale-provider";
 
 const FB = {
@@ -68,6 +68,38 @@ const FB = {
     save: "Uložiť a zdieľať s mentorom",
     done: "Hotovo.",
     mentorSees: "Mentor teraz vidí tvoj pokus a ďalšie, ktoré spravíš.",
+    plan: "Osnova prezentácie",
+    planHint: "Téma a body, podľa ktorých sme prejav hodnotili. Rozklikni.",
+    planTopic: "Téma",
+    planPoints: "Osnova",
+    noPlan: "Tému ani osnovu si nezadal, hodnotili sme podľa toho, čo zaznelo.",
+    s1: "1 · Držanie sa témy",
+    s2: "2 · Držanie sa osnovy",
+    s3: "3 · Zrozumiteľnosť",
+    onTopic: (p: number) => `${p} % prejavu k téme`,
+    covered: (p: number) => `${p} % osnovy odprezentované`,
+    noOutline: "Bez osnovy. Pridaj ju pri ďalšom pokuse a uvidíš, či sa jej držíš.",
+    s4: "4 · Reč",
+    overall: "celkové skóre reči",
+    pointsTitle: "Čo z osnovy zaznelo",
+    derivedTitle: "Hlavné body, ktoré téma vyžaduje",
+    waste: "Zbytočné slová a veci mimo tému",
+    noWaste: "Žiadne zbytočné odbočky ani prílišné vysvetľovanie. Výborne.",
+    s5: "5 · Tempo a pauzy",
+    s6: "6 · Prepis prejavu",
+    s6sub: "Zelené je v poriadku, oranžové drobnosť, červené chyba",
+    legendOk: "v poriadku",
+    legendMinor: "drobnosť",
+    legendMajor: "chyba",
+    legendStutter: "zakoktanie",
+    issuesTitle: "Na čo si dať pozor",
+    unreviewed: "Vety sa tentoraz nepodarilo rozobrať, označené sú len vypĺňacie slová, zakoktania a pauzy.",
+    s7: "7 · Obsahové skóre",
+    s7outline: "Podľa tvojej osnovy",
+    s7derived: "Podľa hlavných bodov témy (pridaj vlastnú osnovu pre presnejšie hodnotenie)",
+    s7rubric: "Podľa pitch rubriky (starší pokus)",
+    average: "priemer bodov",
+    s8: "8 · Reč tela",
   },
   en: {
     toneLabel: { good: "Confident", warn: "Watch out", alert: "Warning" },
@@ -127,6 +159,38 @@ const FB = {
     save: "Save and share with a mentor",
     done: "Done.",
     mentorSees: "Your mentor can now see this attempt and the ones you make next.",
+    plan: "Presentation outline",
+    planHint: "The topic and points we scored your talk against. Click to open.",
+    planTopic: "Topic",
+    planPoints: "Outline",
+    noPlan: "You didn't set a topic or outline, so we scored what you said.",
+    s1: "1 · Staying on topic",
+    s2: "2 · Following the outline",
+    s3: "3 · Clarity",
+    onTopic: (p: number) => `${p} % of the talk on topic`,
+    covered: (p: number) => `${p} % of the outline covered`,
+    noOutline: "No outline. Add one next time to see if you follow it.",
+    s4: "4 · Speech",
+    overall: "overall speech score",
+    pointsTitle: "What you covered from the outline",
+    derivedTitle: "Main points the topic needs",
+    waste: "Unnecessary words and off-topic parts",
+    noWaste: "No unnecessary detours or over-explaining. Well done.",
+    s5: "5 · Pace and pauses",
+    s6: "6 · Transcript",
+    s6sub: "Green is fine, orange a small issue, red a mistake",
+    legendOk: "fine",
+    legendMinor: "small issue",
+    legendMajor: "mistake",
+    legendStutter: "stutter",
+    issuesTitle: "What to watch out for",
+    unreviewed: "The sentences couldn't be reviewed this time; only filler words, stutters and pauses are marked.",
+    s7: "7 · Content score",
+    s7outline: "Based on your outline",
+    s7derived: "Based on the main points of the topic (add your own outline for a more accurate score)",
+    s7rubric: "Based on the pitch rubric (older attempt)",
+    average: "average of the points",
+    s8: "8 · Body language",
   },
 };
 import type { PointStatus } from "@/lib/pitch/outline";
@@ -134,7 +198,8 @@ import type { QaResult } from "@/lib/pitch/qa";
 
 /*
   Feedback 1:1 podľa dizajnu PitchIt („3 · Feedback“). Čísla nabehnú za 2,6 s (bez animácie
-  pri prefers-reduced-motion), poradie sekcií určuje odpoveď z onboardingu.
+  pri prefers-reduced-motion). Poradie: osnova prezentácie (zbalená), téma, osnova, zrozumiteľnosť,
+  reč, tempo a pauzy, prepis s označením, obsahové skóre podľa osnovy, reč tela a Q&A.
 */
 
 const DURATION = 2600;
@@ -249,10 +314,10 @@ function QaCard({ qa }: { qa: QaResult }) {
   const locale = useLocale();
   const tx = QA_TX[locale];
   return (
-    <section className="card rv" style={{ animationDelay: "450ms", order: 4 }} aria-labelledby="qa-nadpis">
+    <section className="card rv" style={{ animationDelay: "450ms" }} aria-labelledby="qa-nadpis">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
         <h2 id="qa-nadpis" className="h" style={{ fontSize: "26px" }}>
-          {tx.title}
+          9 · {tx.title}
         </h2>
         <span className="muted">{tx.sub}</span>
       </div>
@@ -300,125 +365,66 @@ function QaCard({ qa }: { qa: QaResult }) {
   );
 }
 
-function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress: (delay: number, dur: number) => number }) {
-  const tx = FB[useLocale()];
-  const m = outline.match;
-  const q = progress(200, 1500);
-  const stat = (label: string, value: string, color?: string) => (
-    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "var(--color-panel)", border: "1px solid var(--color-line)" }}>
-      <div className="muted" style={{ fontSize: "13px" }}>
-        {label}
-      </div>
-      <div className="h" style={{ fontSize: "20px", marginTop: "4px", color }}>
-        {value}
-      </div>
-    </div>
-  );
+
+const comma = (value: number, digits = 1) => value.toFixed(digits).replace(".", ",");
+
+function ScoreTile({ title, row, extra, empty, delay }: { title: string; row: ScoreRow | null; extra?: string | null; empty?: string; delay: number }) {
+  const color = row ? SCORE_COLOR[row.tone] : null;
   return (
-    <section className="card rv" style={{ animationDelay: "50ms", order: -1 }} aria-labelledby="osnova-zhoda">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
-        <h2 id="osnova-zhoda" className="h" style={{ fontSize: "26px" }}>
-          {tx.outlineMatch}
-        </h2>
-      </div>
-      {outline.topic ? (
-        <div style={{ marginTop: "14px", padding: "16px 18px", borderRadius: "14px", background: "var(--color-panel)", border: "1px solid var(--color-line)" }}>
-          <div className="muted" style={{ fontSize: "13px", fontWeight: 700 }}>
-            {tx.yourTopic}
-          </div>
-          <p style={{ margin: "6px 0 0", fontSize: "16px", lineHeight: "1.55", whiteSpace: "pre-line" }}>{outline.topic}</p>
-        </div>
-      ) : null}
-
-      {!m ? (
-        <p className="muted" style={{ margin: "16px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
-          {tx.noSpeechOutline}
-        </p>
-      ) : (
+    <section className="card rv" style={{ animationDelay: `${delay}ms`, flex: "1 1 260px", minWidth: 0 }}>
+      <h2 className="h" style={{ fontSize: "19px" }}>
+        {title}
+      </h2>
+      {row && color ? (
         <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", marginTop: "18px" }}>
-            <div style={{ flex: "0 1 300px" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                <span className="big" style={{ color: SCORE_COLOR[m.tone].text, whiteSpace: "nowrap" }}>
-                  {m.pct !== null ? `${Math.round(m.pct * q)} %` : "–"}
-                </span>
-                <span className="muted">{outline.points.length ? tx.outlineCovered : tx.onTopicShare}</span>
-              </div>
-              <div className="sc" style={{ margin: "14px 0 0" }}>
-                <i style={{ width: `${Math.round((m.pct ?? 0) * q)}%`, background: SCORE_COLOR[m.tone].bar }} />
-              </div>
-            </div>
-            <div style={{ flex: "1 1 420px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "10px" }}>
-              {m.onTopicPct !== null ? stat(tx.stayedOnTopic, tx.ofPitch(m.onTopicPct), SCORE_COLOR[m.onTopicPct >= 70 ? "good" : m.onTopicPct >= 45 ? "mid" : "low"].text) : null}
-              {m.order ? stat(tx.order, m.order.label, SCORE_COLOR[m.order.tone].text) : null}
-              {m.clarity ? stat(tx.clarity, `${m.clarity.score} / 10`, SCORE_COLOR[m.clarity.tone].text) : null}
-            </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginTop: "14px" }}>
+            <span className="big" style={{ color: color.text }}>
+              {row.score}
+            </span>
+            <span className="muted">/ 10</span>
           </div>
-
-          {m.takeaway ? (
-            <div style={{ marginTop: "22px", padding: "18px 20px", borderRadius: "16px", background: "var(--pi-sel)", border: "1px solid var(--color-line)" }}>
-              <div style={{ fontWeight: 700, marginBottom: "6px" }}>{tx.takeaway}</div>
-              <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.55" }}>{m.takeaway}</p>
-            </div>
-          ) : null}
-
-          {m.points.length ? (
-            <div style={{ marginTop: "18px" }}>
-              {m.points.map((point, i) => (
-                <div key={i} style={{ display: "flex", gap: "14px", padding: "16px 0", borderTop: "1px solid var(--color-line)" }}>
-                  <StatusIcon status={point.status} />
-                  <div style={{ flex: "1", minWidth: "0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
-                      <b style={{ fontSize: "16px" }}>{point.text}</b>
-                      <span style={{ fontSize: "13px", fontWeight: 700, color: POINT_STATUS[point.status].color }}>
-                        {tx.status[point.status]}
-                        {point.clarity !== null && point.status !== "missing" ? tx.clarityPoint(point.clarity) : ""}
-                      </span>
-                    </div>
-                    {point.note ? (
-                      <div className="muted" style={{ fontSize: "14px", lineHeight: "1.55", marginTop: "4px" }}>
-                        {point.note}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {m.digressions.length ? (
-            <div style={{ marginTop: "16px" }}>
-              <div style={{ fontWeight: 700, marginBottom: "8px" }}>{tx.digressions}</div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {m.digressions.map((d) => (
-                  <span key={d} className="chip">
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {m.advice ? (
-            <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
-              <b>{tx.nextTime}</b>
-              {m.advice}
+          <div className="sc" style={{ margin: "12px 0 0" }}>
+            <i style={{ width: `${row.score * 10}%`, background: color.bar }} />
+          </div>
+          {extra ? (
+            <p className="muted" style={{ margin: "10px 0 0", fontSize: "13px", fontWeight: 700 }}>
+              {extra}
             </p>
           ) : null}
-          {m.byKeywords ? (
-            <p className="muted" style={{ margin: "14px 0 0", fontSize: "13px" }}>
-              {tx.byKeywords}
-            </p>
-          ) : null}
+          {row.note ? <p style={{ margin: "8px 0 0", fontSize: "14px", lineHeight: "1.55" }}>{row.note}</p> : null}
         </>
+      ) : (
+        <p className="muted" style={{ margin: "12px 0 0", fontSize: "14px", lineHeight: "1.55" }}>
+          {empty ?? "–"}
+        </p>
       )}
     </section>
   );
 }
 
-const comma = (value: number, digits = 1) => value.toFixed(digits).replace(".", ",");
+function SentenceText({ sentence }: { sentence: TranscriptSentence }) {
+  const tx = FB[useLocale()];
+  const cls = sentence.severity ? `sn-${sentence.severity}` : undefined;
+  return (
+    <span className={cls} title={sentence.note ? `${sentence.issue}: ${sentence.note}` : undefined}>
+      {sentence.tokens.map((token, i) => {
+        if (token.type === "pause") {
+          const s = comma(token.ms / 1000);
+          return (
+            <span key={i} className={token.kind === "emphasis" ? "pz pz-e" : "pz pz-w"}>
+              {s} s {token.kind === "emphasis" ? tx.emphasis : tx.hesitation}
+            </span>
+          );
+        }
+        const text = token.filler ? <span className="fill">{token.text}</span> : token.stutter ? <span className="stt">{token.text}</span> : token.text;
+        return <Fragment key={i}>{text} </Fragment>;
+      })}
+      {sentence.marker !== null ? <span className={`mk mk-${sentence.severity}`}>{sentence.marker}</span> : null}{" "}
+    </span>
+  );
+}
 
-export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; preview?: boolean }) {
+export function FeedbackScreen({ data }: { data: FeedbackData }) {
   const p = useCountUp();
   const locale = useLocale();
   const tx = FB[locale];
@@ -426,18 +432,12 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
   const [form, setForm] = useState(data.shareDefaults);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-
   const a = p(300, 1500);
   const b = p(550, 1500);
-  const c = p(800, 1500);
   const d = p(1000, 1500);
-  const o = sectionOrder(data.focus);
+  const num = (v: number) => (locale === "en" ? v.toFixed(1) : comma(v));
 
   const share = () => {
-    if (preview) {
-      setShared(true);
-      return;
-    }
     setError(null);
     startTransition(async () => {
       const result = await sharePitch({ attemptId: data.attemptId, ...form });
@@ -446,35 +446,13 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
     });
   };
 
-  const tokenNodes = data.tokens.map((token, i) => {
-    const next = data.tokens[i + 1];
-    const gap = next && next.type === "word" && token.type === "word" ? " " : "";
-    if (token.type === "pause") {
-      const s = comma(token.ms / 1000);
-      return token.kind === "emphasis" ? (
-        <span key={i} className="pz pz-e">
-          {s} s {tx.emphasis}
-        </span>
-      ) : (
-        <span key={i} className="pz pz-w">
-          {s} s {tx.hesitation}
-        </span>
-      );
-    }
-    return (
-      <Fragment key={i}>
-        {token.filler ? <span className="fill">{token.text}</span> : token.text}
-        {gap}
-      </Fragment>
-    );
-  });
+  const hasSpeech = data.transcript.length > 0;
+  const issues = data.transcript.filter((s) => s.marker !== null);
+  const speech = data.speech;
 
   return (
-    <div
-      className="pi-fb"
-      style={{ background: PI_BACKGROUND, color: "var(--color-paper)", fontFamily: "var(--font-dm-sans),sans-serif", minHeight: "100dvh" }}
-    >
-      <PiTopbar href={preview ? "/ukazka" : "/app"} />
+    <div className="pi-fb" style={{ background: PI_BACKGROUND, color: "var(--color-paper)", fontFamily: "var(--font-dm-sans),sans-serif", minHeight: "100dvh" }}>
+      <PiTopbar href="/app" />
       <main id="obsah" className="wrap" style={{ paddingTop: "40px", paddingBottom: "64px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px", marginBottom: "28px" }}>
           <div>
@@ -483,10 +461,8 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
               {tx.ready}
             </h1>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <span className="chip">{data.audienceLabel}</span>
-              <span className="chip">{data.targetSeconds >= 60 ? `${data.targetSeconds / 60} min` : `${data.targetSeconds} s`}</span>
+              <span className="chip">{data.targetSeconds >= 60 ? `${Math.round((data.targetSeconds / 60) * 10) / 10} min` : `${data.targetSeconds} s`}</span>
               <span className="chip">{data.languageLabel}</span>
-              <span className="chip">{tx.orderChip((locale === "en" ? SECTION_LABELS_EN : SECTION_LABELS)[data.focus])}</span>
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -500,174 +476,324 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          {data.outline ? <OutlineCard outline={data.outline} progress={p} /> : null}
-
-          <section className="card rv" style={{ animationDelay: "100ms", order: o.tempo }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "32px" }}>
-              <div style={{ flex: "1 1 440px" }}>
-                <h2 className="h" style={{ fontSize: "26px" }}>
-                  {tx.tempo}
-                </h2>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "16px 0 18px" }}>
-                  <span className="big">{data.tempo ? comma(data.tempo.value * a) : "–"}</span>
-                  <span className="muted">{tx.syllables}</span>
-                </div>
-                <div style={{ position: "relative", paddingTop: "26px" }}>
-                  {data.tempo ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: `${Math.round(data.tempo.position * a)}%`,
-                        top: "0",
-                        transform: "translateX(-50%)",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        color: "var(--color-accent)",
-                      }}
-                    >
-                      {tx.you}
+          {/* Osnova prezentácie: zbalená, otvorí sa po kliknutí */}
+          <details className="card plan rv" style={{ animationDelay: "0ms" }}>
+            <summary style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+              <span>
+                <span className="h" style={{ fontSize: "22px", display: "block" }}>
+                  {tx.plan}
+                </span>
+                <span className="muted" style={{ fontSize: "13px" }}>
+                  {data.plan ? tx.planHint : tx.noPlan}
+                </span>
+              </span>
+              <span className="plan-arrow" aria-hidden="true" style={{ transition: "transform .2s", fontSize: "18px" }}>
+                ▾
+              </span>
+            </summary>
+            {data.plan ? (
+              <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                {data.plan.topic ? (
+                  <div>
+                    <div className="muted" style={{ fontSize: "13px", fontWeight: 700 }}>
+                      {tx.planTopic}
                     </div>
-                  ) : null}
-                  <div style={{ display: "flex", height: "16px", borderRadius: "8px", overflow: "hidden", gap: "3px" }}>
-                    <div style={{ flex: "3", background: "var(--color-line)" }} />
-                    <div style={{ flex: "4", background: "linear-gradient(90deg,#7AB800,var(--color-signal))" }} />
-                    <div style={{ flex: "3", background: "var(--color-line)" }} />
+                    <p style={{ margin: "6px 0 0", fontSize: "16px", lineHeight: "1.55", whiteSpace: "pre-line" }}>{data.plan.topic}</p>
                   </div>
-                  {data.tempo ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: `${Math.round(data.tempo.position * a)}%`,
-                        top: "20px",
-                        width: "4px",
-                        height: "28px",
-                        marginLeft: "-2px",
-                        borderRadius: "2px",
-                        background: "var(--color-paper)",
-                      }}
-                    />
-                  ) : null}
-                  <div style={{ display: "flex", marginTop: "8px", fontSize: "13px" }} className="muted">
-                    <span style={{ flex: "3" }}>{tx.slow}</span>
-                    <span style={{ flex: "4", textAlign: "center", color: "var(--color-accent)" }}>{tx.target}</span>
-                    <span style={{ flex: "3", textAlign: "right" }}>{tx.fast}</span>
-                  </div>
-                </div>
-                <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
-                  {data.tempo ? data.tempo.advice : tx.tooShort}
-                </p>
-              </div>
-              <div style={{ flex: "1 1 360px", borderLeft: "1px solid var(--color-line)", paddingLeft: "32px" }}>
-                <h2 className="h" style={{ fontSize: "26px" }}>
-                  {tx.pauses}
-                </h2>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "16px 0 14px" }}>
-                  <span className="big">{Math.round(data.pauses.count * b)}</span>
-                  <span className="muted">{data.pauses.label}</span>
-                </div>
-                <p style={{ margin: "0 0 14px", fontSize: "15px", lineHeight: "1.55" }}>{tx.pauseNote}</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "14px" }}>
+                ) : null}
+                {data.plan.points.length ? (
                   <div>
-                    <span className="pz pz-e">{tx.emphasis}</span>
-                    <span className="muted">{tx.emphasisNote}</span>
+                    <div className="muted" style={{ fontSize: "13px", fontWeight: 700 }}>
+                      {tx.planPoints}
+                    </div>
+                    <ol style={{ margin: "6px 0 0", paddingLeft: "22px", fontSize: "15px", lineHeight: "1.7" }}>
+                      {data.plan.points.map((point, i) => (
+                        <li key={i}>{point}</li>
+                      ))}
+                    </ol>
                   </div>
-                  <div>
-                    <span className="pz pz-w">{tx.hesitation}</span>
-                    <span className="muted">{tx.hesitationNote}</span>
-                  </div>
-                </div>
+                ) : null}
               </div>
-            </div>
-          </section>
+            ) : null}
+          </details>
 
-          <section className="card rv" style={{ animationDelay: "250ms", order: o.fillery }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "32px" }}>
-              <div style={{ flex: "0 1 300px" }}>
-                <h2 className="h" style={{ fontSize: "26px" }}>
-                  {tx.fillers}
-                </h2>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "16px 0 16px" }}>
-                  <span className="big">{Math.round(data.fillers.per60s * c)}</span>
-                  <span className="muted">{tx.per60}</span>
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {data.fillers.chips.map((chip) => (
-                    <span key={chip.phrase} className="chip">
-                      {chip.phrase} ×{chip.count}
-                    </span>
-                  ))}
-                </div>
+          {!hasSpeech ? (
+            <section className="card rv">
+              <p className="muted" style={{ margin: 0, fontSize: "15px", lineHeight: "1.55" }}>
+                {tx.speechFailed}
+              </p>
+            </section>
+          ) : (
+            <>
+              {/* 1–3 */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "20px" }}>
+                <ScoreTile title={tx.s1} row={data.topic} extra={data.topic?.onTopicPct != null ? tx.onTopic(data.topic.onTopicPct) : null} delay={50} />
+                <ScoreTile
+                  title={tx.s2}
+                  row={data.outline}
+                  extra={data.outline ? [data.outline.pct !== null ? tx.covered(data.outline.pct) : null, data.outline.order?.label].filter(Boolean).join(" · ") : null}
+                  empty={tx.noOutline}
+                  delay={120}
+                />
+                <ScoreTile title={tx.s3} row={data.clarity} delay={190} />
               </div>
-              <div style={{ flex: "1 1 480px" }}>
-                <div style={{ fontWeight: 700, marginBottom: "12px" }}>{tx.marked}</div>
-                <p style={{ margin: "0", fontSize: "17px", lineHeight: "2.1" }}>{tokenNodes.length ? tokenNodes : <span className="muted">{tx.emptyTranscript}</span>}</p>
+
+              {/* 4 · Reč */}
+              <section className="card rv" style={{ animationDelay: "250ms" }}>
+                <h2 className="h" style={{ fontSize: "26px" }}>
+                  {tx.s4}
+                </h2>
+                {speech?.overall ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "24px", alignItems: "center", marginTop: "16px" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                      <span className="big" style={{ color: SCORE_COLOR[speech.overall.tone].text }}>
+                        {Math.round(speech.overall.score * a)}
+                      </span>
+                      <span className="muted">/ 10 · {tx.overall}</span>
+                    </div>
+                    <p style={{ margin: 0, flex: "1 1 360px", fontSize: "15px", lineHeight: "1.55" }}>{speech.overall.summary}</p>
+                  </div>
+                ) : null}
+                {speech?.takeaway ? (
+                  <div style={{ marginTop: "20px", padding: "18px 20px", borderRadius: "16px", background: "var(--pi-sel)", border: "1px solid var(--color-line)" }}>
+                    <div style={{ fontWeight: 700, marginBottom: "6px" }}>{tx.takeaway}</div>
+                    <p style={{ margin: 0, fontSize: "16px", lineHeight: "1.55" }}>{speech.takeaway}</p>
+                  </div>
+                ) : null}
+                {speech?.points.length ? (
+                  <div style={{ marginTop: "20px" }}>
+                    <div style={{ fontWeight: 700, marginBottom: "4px" }}>{speech.derivedPoints ? tx.derivedTitle : tx.pointsTitle}</div>
+                    {speech.points.map((point, i) => (
+                      <div key={i} style={{ display: "flex", gap: "14px", padding: "14px 0", borderTop: "1px solid var(--color-line)" }}>
+                        <StatusIcon status={point.status} />
+                        <div style={{ flex: "1", minWidth: "0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
+                            <b style={{ fontSize: "16px" }}>{point.text}</b>
+                            <span style={{ fontSize: "13px", fontWeight: 700, color: POINT_STATUS[point.status].color }}>{tx.status[point.status]}</span>
+                          </div>
+                          {point.note ? (
+                            <div className="muted" style={{ fontSize: "14px", lineHeight: "1.55", marginTop: "4px" }}>
+                              {point.note}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div style={{ marginTop: "20px" }}>
+                  <div style={{ fontWeight: 700, marginBottom: "10px" }}>{tx.waste}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "10px", marginBottom: "12px" }}>
+                    <span className="h" style={{ fontSize: "24px" }}>
+                      {Math.round(data.fillers.per60s * b)}
+                    </span>
+                    <span className="muted">
+                      {tx.fillers.toLowerCase()} {tx.per60}
+                    </span>
+                    {data.fillers.chips.map((chip) => (
+                      <span key={chip.phrase} className="chip">
+                        {chip.phrase} ×{chip.count}
+                      </span>
+                    ))}
+                  </div>
+                  {speech && speech.waste.length ? (
+                    speech.waste.map((w, i) => (
+                      <div key={i} style={{ padding: "12px 0", borderTop: "1px solid var(--color-line)" }}>
+                        <span className="chip" style={{ marginRight: "8px" }}>
+                          {w.label}
+                        </span>
+                        {w.quote ? <i style={{ fontSize: "14px" }}>„{w.quote}“</i> : null}
+                        {w.note ? (
+                          <p className="muted" style={{ margin: "6px 0 0", fontSize: "14px", lineHeight: "1.55" }}>
+                            {w.note}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))
+                  ) : speech && !speech.byKeywords ? (
+                    <p className="muted" style={{ margin: 0, fontSize: "14px" }}>
+                      {tx.noWaste}
+                    </p>
+                  ) : null}
+                </div>
+                {speech?.advice ? (
+                  <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>
+                    <b>{tx.nextTime}</b>
+                    {speech.advice}
+                  </p>
+                ) : null}
+                {speech?.byKeywords ? (
+                  <p className="muted" style={{ margin: "14px 0 0", fontSize: "13px" }}>
+                    {tx.byKeywords}
+                  </p>
+                ) : null}
+              </section>
+
+              {/* 5 · Tempo a pauzy */}
+              <section className="card rv" style={{ animationDelay: "320ms" }}>
+                <h2 className="h" style={{ fontSize: "26px" }}>
+                  {tx.s5}
+                </h2>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", marginTop: "8px" }}>
+                  <div style={{ flex: "1 1 440px" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "8px 0 18px" }}>
+                      <span className="big">{data.tempo ? num(data.tempo.value * a) : "–"}</span>
+                      <span className="muted">{tx.syllables}</span>
+                    </div>
+                    <div style={{ position: "relative", paddingTop: "26px" }}>
+                      {data.tempo ? (
+                        <div style={{ position: "absolute", left: `${Math.round(data.tempo.position * a)}%`, top: "0", transform: "translateX(-50%)", fontSize: "12px", fontWeight: 700, color: "var(--color-accent)" }}>
+                          {tx.you}
+                        </div>
+                      ) : null}
+                      <div style={{ display: "flex", height: "16px", borderRadius: "8px", overflow: "hidden", gap: "3px" }}>
+                        <div style={{ flex: "3", background: "var(--color-line)" }} />
+                        <div style={{ flex: "4", background: "linear-gradient(90deg,#7AB800,var(--color-signal))" }} />
+                        <div style={{ flex: "3", background: "var(--color-line)" }} />
+                      </div>
+                      {data.tempo ? (
+                        <div style={{ position: "absolute", left: `${Math.round(data.tempo.position * a)}%`, top: "20px", width: "4px", height: "28px", marginLeft: "-2px", borderRadius: "2px", background: "var(--color-paper)" }} />
+                      ) : null}
+                      <div style={{ display: "flex", marginTop: "8px", fontSize: "13px" }} className="muted">
+                        <span style={{ flex: "3" }}>{tx.slow}</span>
+                        <span style={{ flex: "4", textAlign: "center", color: "var(--color-accent)" }}>{tx.target}</span>
+                        <span style={{ flex: "3", textAlign: "right" }}>{tx.fast}</span>
+                      </div>
+                    </div>
+                    <p style={{ margin: "18px 0 0", fontSize: "15px", lineHeight: "1.55" }}>{data.tempo ? data.tempo.advice : tx.tooShort}</p>
+                  </div>
+                  <div style={{ flex: "1 1 360px", borderLeft: "1px solid var(--color-line)", paddingLeft: "32px" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "8px 0 14px" }}>
+                      <span className="big">{Math.round(data.pauses.count * b)}</span>
+                      <span className="muted">{data.pauses.label}</span>
+                    </div>
+                    <p style={{ margin: "0 0 14px", fontSize: "15px", lineHeight: "1.55" }}>{tx.pauseNote}</p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "14px" }}>
+                      <div>
+                        <span className="pz pz-e">{tx.emphasis}</span>
+                        <span className="muted">{tx.emphasisNote}</span>
+                      </div>
+                      <div>
+                        <span className="pz pz-w">{tx.hesitation}</span>
+                        <span className="muted">{tx.hesitationNote}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 6 · Prepis s označením */}
+              <section className="card rv" style={{ animationDelay: "380ms" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
+                  <h2 className="h" style={{ fontSize: "26px" }}>
+                    {tx.s6}
+                  </h2>
+                  {data.transcriptReviewed ? <span className="muted">{tx.s6sub}</span> : null}
+                </div>
+                <p style={{ margin: "16px 0 0", fontSize: "17px", lineHeight: "2.1" }}>
+                  {data.transcript.map((sentence, i) => (
+                    <SentenceText key={i} sentence={sentence} />
+                  ))}
+                </p>
                 <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "16px", fontSize: "13px" }} className="muted">
+                  {data.transcriptReviewed ? (
+                    <>
+                      <span className="sn-ok">● {tx.legendOk}</span>
+                      <span className="sn-minor">{tx.legendMinor}</span>
+                      <span className="sn-major">{tx.legendMajor}</span>
+                    </>
+                  ) : null}
+                  <span className="stt">{tx.legendStutter}</span>
                   <span>
                     <span className="fill">{tx.word}</span> {tx.fillerWord}
                   </span>
-                  <span>
-                    <span className="pz pz-e">{tx.emphasis}</span>
-                  </span>
-                  <span>
-                    <span className="pz pz-w">{tx.hesitation}</span>
-                  </span>
+                  <span className="pz pz-e">{tx.emphasis}</span>
+                  <span className="pz pz-w">{tx.hesitation}</span>
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="card rv" style={{ animationDelay: "400ms", order: o.obsah }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
-              <h2 className="h" style={{ fontSize: "26px" }}>
-                {tx.content}
-              </h2>
-              <span className="muted">{tx.rubric(data.audience === "investor")}</span>
-            </div>
-            <div style={{ marginTop: "12px" }}>
-              {data.content ? (
-                data.content.map((row, i) => {
-                  const q = p(900 + i * 180, 1100);
-                  const color = SCORE_COLOR[row.tone];
-                  return (
-                    <div key={row.label} style={{ padding: "18px 0", borderTop: "1px solid var(--color-line)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
-                        <b style={{ fontSize: "16px" }}>{row.label}</b>
-                        <span className="h" style={{ fontSize: "24px", color: color.text }}>
-                          {Math.round(row.score * q)}
-                          <span className="muted" style={{ fontSize: "14px" }}>
-                            {" "}
-                            / 10
-                          </span>
+                {!data.transcriptReviewed ? (
+                  <p className="muted" style={{ margin: "14px 0 0", fontSize: "13px" }}>
+                    {tx.unreviewed}
+                  </p>
+                ) : issues.length ? (
+                  <div style={{ marginTop: "20px" }}>
+                    <div style={{ fontWeight: 700, marginBottom: "6px" }}>{tx.issuesTitle}</div>
+                    {issues.map((s) => (
+                      <div key={s.marker} style={{ display: "flex", gap: "12px", padding: "10px 0", borderTop: "1px solid var(--color-line)", fontSize: "14px", lineHeight: "1.55" }}>
+                        <span className={`mk mk-${s.severity}`} style={{ flex: "0 0 auto" }}>
+                          {s.marker}
+                        </span>
+                        <span>
+                          <b>{s.issue}</b>
+                          {s.note ? <span className="muted"> · {s.note}</span> : null}
                         </span>
                       </div>
-                      <div className="sc" style={{ margin: "10px 0 10px" }}>
-                        <i style={{ width: `${Math.round(row.score * 10 * q)}%`, background: color.bar }} />
-                      </div>
-                      <div className="muted" style={{ fontSize: "14px", lineHeight: "1.55" }}>
-                        {row.advice}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="muted" style={{ padding: "18px 0", borderTop: "1px solid var(--color-line)", fontSize: "14px", lineHeight: "1.55" }}>
-                  {data.tempo
-                    ? tx.contentFailed
-                    : tx.speechFailed}
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
+              {/* 7 · Obsahové skóre */}
+              <section className="card rv" style={{ animationDelay: "440ms" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
+                  <h2 className="h" style={{ fontSize: "26px" }}>
+                    {tx.s7}
+                  </h2>
+                  {data.content ? <span className="muted">{data.content.source === "outline" ? tx.s7outline : data.content.source === "derived" ? tx.s7derived : tx.s7rubric}</span> : null}
                 </div>
-              )}
-            </div>
-          </section>
+                {data.content ? (
+                  <>
+                    {data.content.score !== null ? (
+                      <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "16px" }}>
+                        <span className="big" style={{ color: SCORE_COLOR[data.content.tone].text }}>
+                          {num(data.content.score)}
+                        </span>
+                        <span className="muted">/ 10 · {tx.average}</span>
+                      </div>
+                    ) : null}
+                    <div style={{ marginTop: "12px" }}>
+                      {data.content.rows.map((row, i) => {
+                        const q = p(900 + i * 180, 1100);
+                        const color = SCORE_COLOR[row.tone];
+                        return (
+                          <div key={i} style={{ padding: "18px 0", borderTop: "1px solid var(--color-line)" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
+                              <b style={{ fontSize: "16px" }}>{row.label}</b>
+                              <span className="h" style={{ fontSize: "24px", color: color.text, whiteSpace: "nowrap" }}>
+                                {Math.round(row.score * q)}
+                                <span className="muted" style={{ fontSize: "14px" }}>
+                                  {" "}
+                                  / 10
+                                </span>
+                              </span>
+                            </div>
+                            <div className="sc" style={{ margin: "10px 0 10px" }}>
+                              <i style={{ width: `${Math.round(row.score * 10 * q)}%`, background: color.bar }} />
+                            </div>
+                            <div className="muted" style={{ fontSize: "14px", lineHeight: "1.55" }}>
+                              {row.note}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted" style={{ margin: "16px 0 0", fontSize: "14px", lineHeight: "1.55" }}>
+                    {tx.contentFailed}
+                  </p>
+                )}
+              </section>
+            </>
+          )}
 
-          {data.qa ? <QaCard qa={data.qa} /> : null}
-
+          {/* 8 · Reč tela */}
           {data.coach ? (
             <CoachFeedbackCard attemptId={data.attemptId} coach={data.coach} />
           ) : data.body ? (
-            <section className="card rv" style={{ animationDelay: "550ms", order: 3 }}>
+            <section className="card rv" style={{ animationDelay: "500ms" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
                 <h2 className="h" style={{ fontSize: "26px" }}>
-                  {tx.body}
+                  {tx.s8}
                 </h2>
                 <span className="muted">{tx.fromVideo}</span>
               </div>
@@ -684,18 +810,7 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
                 </div>
                 <div style={{ flex: "1 1 420px", display: "flex", flexDirection: "column", gap: "10px" }}>
                   {data.body.events.map((event) => (
-                    <div
-                      key={`${event.at}-${event.label}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "14px",
-                        padding: "12px 16px",
-                        borderRadius: "14px",
-                        background: "var(--color-panel)",
-                        border: "1px solid var(--color-line)",
-                      }}
-                    >
+                    <div key={`${event.at}-${event.label}`} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "14px", background: "var(--color-panel)", border: "1px solid var(--color-line)" }}>
                       <span className="muted" style={{ flex: "0 0 40px", fontSize: "13px" }}>
                         {event.at}
                       </span>
@@ -710,14 +825,14 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
               </div>
               <div style={{ display: "flex", gap: "4px", marginTop: "22px", height: "10px" }}>
                 {data.body.strip.map((segment, i) => (
-                  <span
-                    key={i}
-                    style={{ flex: String(segment.flex), background: segment.tone ? BODY_TONE[segment.tone].strip : "var(--pi-sel)", borderRadius: "5px" } as CSSProperties}
-                  />
+                  <span key={i} style={{ flex: String(segment.flex), background: segment.tone ? BODY_TONE[segment.tone].strip : "var(--pi-sel)", borderRadius: "5px" } as CSSProperties} />
                 ))}
               </div>
             </section>
           ) : null}
+
+          {/* 9 · Q&A */}
+          {data.qa ? <QaCard qa={data.qa} /> : null}
         </div>
 
         <div className="card" id="zdielat" style={{ marginTop: "20px", padding: "28px" }}>

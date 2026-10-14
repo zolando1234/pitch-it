@@ -8,7 +8,7 @@ import { computeFinalScore, gradeFor } from "../src/lib/coach/pose/scoring.ts";
 import { SessionRecorder } from "../src/lib/coach/pose/session.ts";
 import { finalScoreFor, fromStoredCoach, parseStoredCoach, toStoredCoach } from "../src/lib/coach/stored.ts";
 import { summarizeBody } from "../src/lib/pitch/body.ts";
-import { buildFeedback, FEEDBACK_FIXTURE } from "../src/lib/pitch/feedback.ts";
+import { buildFeedback } from "../src/lib/pitch/feedback.ts";
 import { PREVIEW_COACH } from "../src/lib/preview/coach.ts";
 import type { PitchAttemptRow } from "../src/lib/db/types.ts";
 
@@ -147,6 +147,5 @@ describe("tréner reči tela – uloženie k pokusu", () => {
     const data = buildFeedback(attempt, { number: 1, retryHref: "/app/nahravka/kamera" });
     assert.deepEqual(data.coach, PREVIEW_COACH);
     assert.equal(data.body, null);
-    assert.ok(FEEDBACK_FIXTURE.coach);
   });
 });

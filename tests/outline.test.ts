@@ -1,7 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { keywordStatus, matchPct, outlineByKeywords, outlineFromCheck, parseOutlinePoints, toOutline, type OutlineCheck } from "../src/lib/pitch/outline.ts";
-import { outlineFeedback } from "../src/lib/pitch/feedback.ts";
+import { buildFeedback } from "../src/lib/pitch/feedback.ts";
+import type { PitchAttemptRow } from "../src/lib/db/types.ts";
 import { buildContentPrompt } from "../src/lib/pitch/content.ts";
 import { buildOutlinePrompt } from "../src/lib/pitch/outline.ts";
 
@@ -70,11 +71,12 @@ describe("osnova pitchu", () => {
   });
 
   test("feedback bez AI označí porovnanie podľa kľúčových slov", () => {
-    const data = outlineFeedback(outlineByKeywords({ topic: "", points: ["Problém", "Pilot"] }, "Máme problém."));
-    assert.equal(data?.match?.byKeywords, true);
-    assert.equal(data?.match?.pct, 50);
-    assert.equal(data?.match?.clarity, null);
-    assert.equal(outlineFeedback(null), null);
+    const attempt = { id: "a", target_seconds: 60, outline: outlineByKeywords({ topic: "", points: ["Problém", "Pilot"] }, "Máme problém."), metrics: null, content: null, body: null, qa: null, shared_at: null } as unknown as PitchAttemptRow;
+    const data = buildFeedback(attempt, { number: 1, retryHref: "/app/nahravka" });
+    assert.equal(data.speech?.byKeywords, true);
+    assert.equal(data.outline?.pct, 50);
+    assert.equal(data.clarity, null);
+    assert.deepEqual(data.plan?.points, ["Problém", "Pilot"]);
   });
 
   test("téma ide ako záväzné zadanie do obsahového skóre aj porovnania s osnovou", () => {

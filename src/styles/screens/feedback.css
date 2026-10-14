@@ -32,3 +32,19 @@
 :root:not([data-theme="dark"]) .pi-fb .pz-e{background:#ECE6FF;color:#4A25C9}
 :root:not([data-theme="dark"]) .pi-fb .pz-w{background:#ECECE6;color:#54545E}
 }
+/* prepis po vetách: v poriadku zelená, drobnosť oranžová, chyba červená; zakoktanie podčiarknuté */
+.pi-fb .sn-ok{color:#B6F06A}
+.pi-fb .sn-minor{color:#FFC94D;text-decoration:underline wavy rgba(255,201,77,.7);text-underline-offset:5px}
+.pi-fb .sn-major{color:#FF8A7A;text-decoration:underline wavy rgba(255,107,91,.85);text-underline-offset:5px}
+.pi-fb .stt{text-decoration:underline dotted 2px;text-underline-offset:4px;font-style:italic}
+.pi-fb .mk{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:9px;font-size:11px;font-weight:700;vertical-align:4px;margin-left:3px;text-decoration:none}
+.pi-fb .mk-minor{background:rgba(255,201,77,.22);color:#FFC94D}
+.pi-fb .mk-major{background:rgba(255,107,91,.22);color:#FF8A7A}
+.pi-fb details.plan>summary{cursor:pointer;list-style:none}
+.pi-fb details.plan>summary::-webkit-details-marker{display:none}
+.pi-fb details.plan[open] .plan-arrow{transform:rotate(180deg)}
+:root[data-theme="light"] .pi-fb .sn-ok{color:#3F7A00}
+:root[data-theme="light"] .pi-fb .sn-minor{color:#9A6400}
+:root[data-theme="light"] .pi-fb .sn-major{color:#C0392B}
+:root[data-theme="light"] .pi-fb .mk-minor{color:#9A6400}
+:root[data-theme="light"] .pi-fb .mk-major{color:#C0392B}

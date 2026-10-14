@@ -1,38 +1,69 @@
-import { audienceLabel } from "@/lib/onboarding/plan";
 import { parseStoredCoach, type StoredCoach } from "@/lib/coach/stored";
-import { PREVIEW_COACH } from "@/lib/preview/coach";
 import { BODY_EVENT_LABELS, BODY_EVENT_LABELS_EN, bodyNarrative, clock, type BodySummary } from "@/lib/pitch/body";
 import { CATEGORY_LABELS, orderedCategories, type ContentScore } from "@/lib/pitch/content";
 import { decimal, pausesLabel, TEMPO_ADVICE, TEMPO_ADVICE_EN, tempoPosition, tempoVerdict, type PitchMetrics, type TranscriptToken } from "@/lib/pitch/metrics";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
-import type { PitchAttemptRow } from "@/lib/db/types";
 import { parseQaResult, type QaResult } from "@/lib/pitch/qa";
+import { parseSpeechAnalysis, stripSentenceRefs, type SentenceIssue, type SpeechAnalysis, type WasteKind } from "@/lib/pitch/speech-analysis";
+import type { PitchAttemptRow } from "@/lib/db/types";
 
 /*
-  Dáta pre obrazovku Feedback (dizajn „3 · Feedback“), odvodené z uloženého pokusu.
-  Čisté funkcie, aby sa dali otestovať a použiť aj v ukážke.
+  Dáta pre report prejavu, odvodené z uloženého pokusu. Poradie v reporte: osnova prezentácie
+  (zbalená), 1 téma, 2 osnova, 3 zrozumiteľnosť, 4 reč (celkové skóre, čo si poslucháč odnesie,
+  pokrytie osnovy, zbytočné časti), 5 tempo a pauzy, 6 prepis s označením, 7 obsahové skóre podľa
+  osnovy, 8 reč tela, 9 Q&A. Čisté funkcie, testované. Staršie pokusy (investorská rubrika) sa
+  zobrazia v rovnakej štruktúre.
 */
 
-export type FeedbackSection = "tempo" | "fillery" | "obsah";
 export type ScoreTone = "good" | "mid" | "low";
 export type BodyTone = "good" | "warn" | "alert";
+export type Severity = "ok" | "minor" | "major";
+
+export type ScoreRow = { score: number; tone: ScoreTone; note: string | null };
+
+export type MarkedToken = TranscriptToken & { stutter?: boolean };
+
+export type TranscriptSentence = {
+  tokens: MarkedToken[];
+  /** null = veta bez rozboru (AI nebola dostupná) */
+  severity: Severity | null;
+  issue: string | null;
+  note: string | null;
+  /** poradové číslo problému (odkaz na zoznam pod prepisom) */
+  marker: number | null;
+};
 
 export type FeedbackData = {
   attemptId: string;
   number: number;
-  audienceLabel: string;
-  /** jazyk pitchu, napr. „Slovenčina“ */
+  /** jazyk prejavu, napr. „Slovenčina“ */
   languageLabel: string;
-  audience: "investor" | "jury" | "customer" | "team";
   targetSeconds: number;
-  focus: FeedbackSection;
   retryHref: string;
+  /** téma a osnova pred nahrávaním (v reporte zbalené) */
+  plan: { topic: string; points: string[] } | null;
+  topic: (ScoreRow & { onTopicPct: number | null }) | null;
+  outline: (ScoreRow & { pct: number | null; order: { label: string; tone: ScoreTone } | null }) | null;
+  clarity: ScoreRow | null;
+  speech: {
+    overall: { score: number; tone: ScoreTone; summary: string } | null;
+    takeaway: string | null;
+    points: Array<{ text: string; status: PointStatus; note: string | null }>;
+    /** body nie sú z osnovy, ale odvodené z témy */
+    derivedPoints: boolean;
+    waste: Array<{ quote: string; label: string; note: string }>;
+    advice: string | null;
+    /** porovnanie len podľa kľúčových slov (bez AI) */
+    byKeywords: boolean;
+  } | null;
   tempo: { value: number; position: number; advice: string } | null;
   pauses: { count: number; label: string };
   fillers: { per60s: number; chips: Array<{ phrase: string; count: number }> };
-  tokens: TranscriptToken[];
-  content: Array<{ label: string; score: number; tone: ScoreTone; advice: string }> | null;
+  transcript: TranscriptSentence[];
+  /** v prepise sú označené vety (inak sa zobrazí len vyznačenie výplní a zakoktaní) */
+  transcriptReviewed: boolean;
+  content: { score: number | null; tone: ScoreTone; source: "outline" | "derived" | "rubric"; rows: Array<{ label: string; score: number; tone: ScoreTone; note: string }> } | null;
   body: {
     eyeContactPct: number;
     narrative: string;
@@ -42,42 +73,41 @@ export type FeedbackData = {
   } | null;
   /** Živý tréner reči tela z nahrávania s kamerou. */
   coach: StoredCoach | null;
-  /** Zhoda s témou a osnovou uloženou pred nahrávaním. */
-  outline: OutlineFeedback | null;
   /** Otázky po prejave a hodnotenie odpovedí. */
   qa: QaResult | null;
   shared: boolean;
   shareDefaults: { name: string; team: string; email: string };
 };
 
-export type OutlineFeedback = {
-  topic: string;
-  /** null = v nahrávke nebol prepis reči, osnova sa nedala porovnať */
-  match: {
-    pct: number | null;
-    tone: ScoreTone;
-    byKeywords: boolean;
-    onTopicPct: number | null;
-    order: { verdict: OrderVerdict; label: string; tone: ScoreTone } | null;
-    clarity: { score: number; tone: ScoreTone } | null;
-    takeaway: string | null;
-    advice: string | null;
-    digressions: string[];
-    points: Array<{ text: string; status: PointStatus; clarity: number | null; note: string | null }>;
-  } | null;
-  points: string[];
+export function scoreTone(score: number): ScoreTone {
+  if (score >= 7) return "good";
+  if (score >= 5) return "mid";
+  return "low";
+}
+
+const pctTone = (pct: number): ScoreTone => (pct >= 70 ? "good" : pct >= 45 ? "mid" : "low");
+
+const ORDER_LABELS: Record<"sk" | "en", Record<OrderVerdict, { label: string; tone: ScoreTone }>> = {
+  sk: {
+    kept: { label: "Poradie bodov si dodržal", tone: "good" },
+    minor: { label: "Drobné odbočky od poradia", tone: "mid" },
+    jumped: { label: "Preskakoval si medzi bodmi", tone: "low" },
+  },
+  en: {
+    kept: { label: "You kept the order of the points", tone: "good" },
+    minor: { label: "Small detours from the order", tone: "mid" },
+    jumped: { label: "You jumped between points", tone: "low" },
+  },
 };
 
-const ORDER_LABELS: Record<OrderVerdict, { label: string; tone: ScoreTone }> = {
-  kept: { label: "Poradie bodov si dodržal", tone: "good" },
-  minor: { label: "Drobné odbočky od poradia", tone: "mid" },
-  jumped: { label: "Preskakoval si medzi bodmi", tone: "low" },
+const ISSUE_LABELS: Record<"sk" | "en", Record<SentenceIssue, string>> = {
+  sk: { unclear: "Nezrozumiteľné", convoluted: "Zamotaná veta", stutter: "Zakoktanie", grammar: "Gramatika", offtopic: "Mimo témy", vague: "Všeobecné, bez obsahu" },
+  en: { unclear: "Unclear", convoluted: "Convoluted sentence", stutter: "Stutter", grammar: "Grammar", offtopic: "Off topic", vague: "Vague, no substance" },
 };
 
-const ORDER_LABELS_EN: Record<OrderVerdict, string> = {
-  kept: "You kept the order of the points",
-  minor: "Small detours from the order",
-  jumped: "You jumped between points",
+const WASTE_LABELS: Record<"sk" | "en", Record<WasteKind, string>> = {
+  sk: { offtopic: "Mimo témy", unnecessary: "Zbytočné", overexplain: "Príliš dlhé vysvetľovanie" },
+  en: { offtopic: "Off topic", unnecessary: "Unnecessary", overexplain: "Over-explaining" },
 };
 
 const CATEGORY_LABELS_EN: Record<keyof typeof CATEGORY_LABELS, string> = {
@@ -88,49 +118,44 @@ const CATEGORY_LABELS_EN: Record<keyof typeof CATEGORY_LABELS, string> = {
   ask: "Ask",
 };
 
-export const SECTION_LABELS_EN: Record<FeedbackSection, string> = { tempo: "Pace", fillery: "Filler words", obsah: "Content" };
+const normalizeWord = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
-const pctTone = (pct: number): ScoreTone => (pct >= 70 ? "good" : pct >= 45 ? "mid" : "low");
-
-export function outlineFeedback(value: unknown, locale: "sk" | "en" = "sk"): OutlineFeedback | null {
-  const result = parseOutlineResult(value);
-  if (!result) return null;
-  const check = result.check;
-  const pct = matchPct(result);
-  return {
-    topic: result.topic,
-    points: result.points,
-    match: check
-      ? {
-          pct,
-          tone: pctTone(pct ?? 0),
-          byKeywords: check.source === "keywords",
-          onTopicPct: check.onTopicPct,
-          order: check.order
-            ? { verdict: check.order, ...ORDER_LABELS[check.order], ...(locale === "en" ? { label: ORDER_LABELS_EN[check.order] } : {}) }
-            : null,
-          clarity: check.clarity !== null ? { score: check.clarity, tone: scoreTone(check.clarity) } : null,
-          takeaway: check.takeaway,
-          advice: check.advice,
-          digressions: check.digressions,
-          points: check.points,
-        }
-      : null,
-  };
+/**
+ * Zakoktanie v prepise: to isté slovo dvakrát za sebou („je je“) alebo nedokončený začiatok
+ * slova so spojovníkom pred celým slovom („prez- prezentácia“).
+ */
+export function markStutters(tokens: TranscriptToken[]): MarkedToken[] {
+  const out: MarkedToken[] = tokens.map((t) => ({ ...t }));
+  const words = out.map((t, i) => ({ t, i })).filter((x) => x.t.type === "word");
+  for (let k = 0; k + 1 < words.length; k++) {
+    const a = words[k].t as Extract<MarkedToken, { type: "word" }>;
+    const b = words[k + 1].t as Extract<MarkedToken, { type: "word" }>;
+    const na = normalizeWord(a.text);
+    const nb = normalizeWord(b.text);
+    if (!na || !nb) continue;
+    const repeated = na === nb && !/[.!?…,]$/.test(a.text);
+    // len so spojovníkom: „pre prezentáciu“ je predložka, nie zakoktanie
+    const fragment = /[-–—]$/.test(a.text) && na.length < nb.length && nb.startsWith(na);
+    if (repeated || fragment) a.stutter = true;
+  }
+  return out;
 }
 
-export const SECTION_LABELS: Record<FeedbackSection, string> = { tempo: "Tempo", fillery: "Vypĺňacie slová", obsah: "Obsah" };
+const SENTENCE_END = /[.!?…]["“”»)]*$/;
 
-/** Poradie sekcií podľa odpovede z onboardingu: vybraná ide prvá. */
-export function sectionOrder(first: FeedbackSection): Record<FeedbackSection, number> {
-  const ord = [first, ...(["tempo", "fillery", "obsah"] as const).filter((x) => x !== first)];
-  return { tempo: ord.indexOf("tempo"), fillery: ord.indexOf("fillery"), obsah: ord.indexOf("obsah") };
-}
-
-export function scoreTone(score: number): ScoreTone {
-  if (score >= 7) return "good";
-  if (score >= 5) return "mid";
-  return "low";
+/** Rozdelí slová prepisu na vety (rovnako ako `splitSentences` pri rozbore). */
+export function groupSentences(tokens: MarkedToken[]): MarkedToken[][] {
+  const out: MarkedToken[][] = [];
+  let current: MarkedToken[] = [];
+  for (const token of tokens) {
+    current.push(token);
+    if (token.type === "word" && SENTENCE_END.test(token.text)) {
+      out.push(current);
+      current = [];
+    }
+  }
+  if (current.length) out.push(current);
+  return out;
 }
 
 const BODY_TONES: Record<keyof typeof BODY_EVENT_LABELS, BodyTone> = {
@@ -166,6 +191,23 @@ function bodyStrip(events: BodySummary["events"], durationMs: number) {
   return strip.map((s) => ({ ...s, flex: Math.round(s.flex * 1000) / 100 }));
 }
 
+/** Texty rozboru bez odkazov na čísla viet. */
+function cleanAnalysis(a: SpeechAnalysis): SpeechAnalysis {
+  const c = stripSentenceRefs;
+  return {
+    ...a,
+    topic: { ...a.topic, note: c(a.topic.note) },
+    outline: { ...a.outline, note: c(a.outline.note) },
+    clarity: { ...a.clarity, note: c(a.clarity.note) },
+    overall: { ...a.overall, summary: c(a.overall.summary) },
+    takeaway: c(a.takeaway),
+    points: a.points.map((p) => ({ ...p, note: c(p.note) })),
+    waste: a.waste.map((w) => ({ ...w, note: c(w.note) })),
+    sentences: a.sentences.map((s) => ({ ...s, note: c(s.note) })),
+    advice: c(a.advice),
+  };
+}
+
 export function buildFeedback(
   attempt: PitchAttemptRow,
   extra: { number: number; retryHref: string; shareDefaults?: FeedbackData["shareDefaults"]; locale?: "sk" | "en" },
@@ -173,21 +215,103 @@ export function buildFeedback(
   const locale = extra.locale ?? "sk";
   const en = locale === "en";
   const metrics = attempt.metrics as PitchMetrics | null;
-  const content = attempt.content as ContentScore | null;
   const body = attempt.body as BodySummary | null;
   const longest = metrics?.longestPauseMs;
   const pauseCount = metrics?.pauses.length ?? 0;
   const events = body ? notableEvents(body) : [];
+  const stored = parseSpeechAnalysis(attempt.content);
+  const analysis = stored ? cleanAnalysis(stored.analysis) : null;
+  const rubric = !stored && attempt.content ? (attempt.content as ContentScore) : null;
+  const outlineResult = parseOutlineResult(attempt.outline);
+  const check = outlineResult?.check ?? null;
+  const pct = outlineResult ? matchPct(outlineResult) : null;
+  const hasPoints = !!outlineResult?.points.length;
+
+  // 1–3: téma, osnova, zrozumiteľnosť (nový rozbor, inak staršie porovnanie s osnovou)
+  const onTopicPct = analysis?.onTopicPct ?? check?.onTopicPct ?? null;
+  const topic: FeedbackData["topic"] = analysis
+    ? { score: analysis.topic.score, tone: scoreTone(analysis.topic.score), note: analysis.topic.note || null, onTopicPct }
+    : onTopicPct !== null
+      ? { score: Math.round(onTopicPct / 10), tone: pctTone(onTopicPct), note: null, onTopicPct }
+      : null;
+  const order = analysis?.outline.order ?? check?.order ?? null;
+  const outline: FeedbackData["outline"] = analysis
+    ? { score: analysis.outline.score, tone: scoreTone(analysis.outline.score), note: analysis.outline.note || null, pct: hasPoints ? pct : null, order: order ? ORDER_LABELS[locale][order] : null }
+    : hasPoints && pct !== null
+      ? { score: Math.round(pct / 10), tone: pctTone(pct), note: check?.advice ?? null, pct, order: order ? ORDER_LABELS[locale][order] : null }
+      : null;
+  const clarityScore = analysis?.clarity.score ?? check?.clarity ?? null;
+  const clarity: FeedbackData["clarity"] = clarityScore !== null ? { score: clarityScore, tone: scoreTone(clarityScore), note: analysis?.clarity.note || null } : null;
+
+  // 4: reč
+  const points = analysis
+    ? analysis.points.map((p) => ({ text: hasPoints ? (outlineResult!.points[p.index] ?? p.title) : p.title, status: p.status, note: p.note || null }))
+    : (check?.points.map((p) => ({ text: p.text, status: p.status, note: p.note })) ?? []);
+  const speech: FeedbackData["speech"] =
+    analysis || check
+      ? {
+          overall: analysis ? { score: analysis.overall.score, tone: scoreTone(analysis.overall.score), summary: analysis.overall.summary } : null,
+          takeaway: analysis?.takeaway ?? check?.takeaway ?? null,
+          points,
+          derivedPoints: stored?.derivedPoints ?? false,
+          waste: analysis
+            ? analysis.waste.map((w) => ({ quote: w.quote, label: WASTE_LABELS[locale][w.kind], note: w.note }))
+            : (check?.digressions ?? []).map((d) => ({ quote: "", label: WASTE_LABELS[locale].offtopic, note: d })),
+          advice: analysis?.advice ?? check?.advice ?? null,
+          byKeywords: !analysis && check?.source === "keywords",
+        }
+      : null;
+
+  // 6: prepis po vetách s označením
+  const sentences = groupSentences(markStutters(metrics?.tokens ?? []));
+  let marker = 0;
+  const transcript: TranscriptSentence[] = sentences.map((tokens, index) => {
+    // jedna veta môže mať viac problémov: spoja sa, platí horšia závažnosť
+    const flags = analysis?.sentences.filter((s) => s.index === index) ?? [];
+    const issues = [...new Set(flags.map((f) => ISSUE_LABELS[locale][f.issue]))];
+    const notes = [...new Set(flags.map((f) => f.note).filter(Boolean))];
+    return {
+      tokens,
+      severity: analysis ? (flags.length ? (flags.some((f) => f.severity === "major") ? "major" : "minor") : "ok") : null,
+      issue: issues.length ? issues.join(", ") : null,
+      note: notes.length ? notes.join(" ") : null,
+      marker: flags.length ? ++marker : null,
+    };
+  });
+
+  // 7: obsahové skóre podľa osnovy (staršie pokusy: rubrika)
+  const content: FeedbackData["content"] = analysis
+    ? {
+        score: attempt.content_score,
+        tone: scoreTone(attempt.content_score ?? 0),
+        source: stored?.derivedPoints ? "derived" : "outline",
+        rows: analysis.points.map((p) => ({
+          label: hasPoints ? (outlineResult!.points[p.index] ?? p.title) : p.title,
+          score: p.score,
+          tone: scoreTone(p.score),
+          note: p.note,
+        })),
+      }
+    : rubric
+      ? {
+          score: attempt.content_score,
+          tone: scoreTone(attempt.content_score ?? 0),
+          source: "rubric",
+          rows: orderedCategories(rubric).map((c) => ({ label: (en ? CATEGORY_LABELS_EN : CATEGORY_LABELS)[c.key], score: c.score, tone: scoreTone(c.score), note: c.advice })),
+        }
+      : null;
 
   return {
     attemptId: attempt.id,
     number: extra.number,
-    audience: attempt.audience,
-    audienceLabel: audienceLabel(attempt.audience, locale),
     languageLabel: en ? LANGUAGE_INFO[parseLanguage(attempt.language)].english : LANGUAGE_INFO[parseLanguage(attempt.language)].label,
     targetSeconds: attempt.target_seconds,
-    focus: attempt.focus,
     retryHref: extra.retryHref,
+    plan: outlineResult && (outlineResult.topic || outlineResult.points.length) ? { topic: outlineResult.topic, points: outlineResult.points } : null,
+    topic,
+    outline,
+    clarity,
+    speech,
     tempo:
       metrics?.tempo != null
         ? { value: metrics.tempo, position: tempoPosition(metrics.tempo), advice: (en ? TEMPO_ADVICE_EN : TEMPO_ADVICE)[tempoVerdict(metrics.tempo)] }
@@ -206,10 +330,9 @@ export function buildFeedback(
         .slice(0, 6)
         .map(([phrase, count]) => ({ phrase, count })),
     },
-    tokens: metrics?.tokens ?? [],
-    content: content
-      ? orderedCategories(content).map((c) => ({ label: (en ? CATEGORY_LABELS_EN : CATEGORY_LABELS)[c.key], score: c.score, tone: scoreTone(c.score), advice: c.advice }))
-      : null,
+    transcript,
+    transcriptReviewed: !!analysis,
+    content,
     body:
       body && body.frames > 0 && body.eyeContactPct !== null
         ? {
@@ -220,94 +343,8 @@ export function buildFeedback(
           }
         : null,
     coach: parseStoredCoach(body?.coach ?? null),
-    outline: outlineFeedback(attempt.outline, locale),
     qa: parseQaResult(attempt.qa),
     shared: attempt.shared_at !== null,
     shareDefaults: extra.shareDefaults ?? { name: "", team: "", email: "" },
   };
-}
-
-/** Ukážkové dáta z dizajnu pre /ukazka (bez prihlásenia a kľúčov). */
-export const FEEDBACK_FIXTURE: FeedbackData = {
-  attemptId: "ukazka",
-  number: 1,
-  audience: "investor",
-  audienceLabel: "Investorovi",
-  languageLabel: "Slovenčina",
-  targetSeconds: 60,
-  focus: "tempo",
-  retryHref: "/ukazka/nahravka/kamera",
-  tempo: { value: 4.6, position: 55, advice: TEMPO_ADVICE.target },
-  pauses: { count: 5, label: "pauzy nad 1 sekundu, najdlhšia 2,4 s" },
-  fillers: { per60s: 6, chips: [{ phrase: "akože", count: 3 }, { phrase: "vlastne", count: 2 }, { phrase: "ehm", count: 1 }] },
-  tokens: [
-    ...words("Každý rok [X] zakladateľov pripravuje pitch bez spätnej väzby"),
-    { type: "pause", ms: 2400, kind: "emphasis" },
-    { type: "word", text: "akože", filler: true },
-    ...words("sa spoliehajú na šťastie. Naša appka"),
-    { type: "pause", ms: 1300, kind: "hesitation" },
-    { type: "word", text: "vlastne", filler: true },
-    ...words("počúva tvoj pitch a za pätnásť sekúnd ti povie, kde strácaš pozornosť."),
-    { type: "word", text: "Ehm,", filler: true },
-    ...words("trh, na ktorý ideme, má v Európe hodnotu [X] miliárd"),
-    { type: "pause", ms: 1100, kind: "hesitation" },
-    ...words("a"),
-    { type: "word", text: "akože", filler: true },
-    ...words("rastie každým rokom."),
-  ],
-  content: [
-    { label: "Problém", score: 8, tone: "good", advice: "Problém je jasný a konkrétny. Pridaj jedno číslo, ktoré ukáže, aký je veľký." },
-    { label: "Riešenie", score: 7, tone: "good", advice: "Je zrozumiteľné, čo produkt robí. Povedz, prečo je lepší ako súčasný spôsob." },
-    { label: "Trh", score: 5, tone: "mid", advice: "Veľkosť trhu je spomenutá len okrajovo. Uveď zdroj a konkrétny segment, ktorý oslovíš ako prvý." },
-    { label: "Traction", score: 4, tone: "low", advice: "Chýbajú konkrétne výsledky. Povedz počet používateľov, tržby alebo prvé pilotné testy." },
-    { label: "Ask", score: 6, tone: "mid", advice: "Žiadosť zaznela, ale chýba suma a na čo ju použiješ. Zakonči jednou jasnou vetou." },
-  ],
-  body: {
-    eyeContactPct: 82,
-    narrative: "Držanie tela je otvorené a pokojné. Najčastejšie sa objavili otvorené dlane, raz si ukázal prstom na kameru.",
-    events: [
-      { at: "0:42", label: "Ukazovanie na kameru", tone: "alert" },
-      { at: "1:12", label: "Otvorené dlane", tone: "good" },
-      { at: "1:31", label: "Nepokojné ruky", tone: "warn" },
-    ],
-    strip: [
-      { flex: 3, tone: null },
-      { flex: 1, tone: "alert" },
-      { flex: 4, tone: null },
-      { flex: 1, tone: "good" },
-      { flex: 3, tone: null },
-      { flex: 1, tone: "warn" },
-      { flex: 2, tone: null },
-    ],
-  },
-  coach: PREVIEW_COACH,
-  outline: {
-    topic: "AI tréner, ktorý founderov pripraví na stretnutie s investorom",
-    points: ["Problém: founderi pitchujú bez spätnej väzby", "Riešenie: nahráš pitch a AI povie, čo zlepšiť", "Veľkosť trhu", "Výsledky z pilotu", "Čo od investora chceme"],
-    match: {
-      pct: 60,
-      tone: "mid",
-      byKeywords: false,
-      onTopicPct: 85,
-      order: { verdict: "minor", ...ORDER_LABELS.minor },
-      clarity: { score: 7, tone: "good" },
-      takeaway: "Poslucháč pochopí, že appka dáva founderom rýchlu spätnú väzbu na pitch. Nevie však, či to už niekto používa a koľko peňazí chcete.",
-      advice: "Po trhu povedz jednou vetou výsledok pilotu a zakonči konkrétnou sumou, ktorú hľadáš.",
-      digressions: ["Krátka odbočka o tom, ako vznikol tím na hackathone"],
-      points: [
-        { text: "Problém: founderi pitchujú bez spätnej väzby", status: "covered", clarity: 8, note: "Jasne a konkrétne, s príkladom zo Startup Weekendu." },
-        { text: "Riešenie: nahráš pitch a AI povie, čo zlepšiť", status: "covered", clarity: 8, note: "Je zrozumiteľné, čo produkt robí a za aký čas." },
-        { text: "Veľkosť trhu", status: "partial", clarity: 4, note: "Spomenul si Európu, ale bez čísla a segmentu." },
-        { text: "Výsledky z pilotu", status: "missing", clarity: 0, note: "Pilot v pitchi nezaznel." },
-        { text: "Čo od investora chceme", status: "partial", clarity: 5, note: "Zaznelo, že hľadáš investora, chýba suma a na čo ju použiješ." },
-      ],
-    },
-  },
-  qa: null,
-  shared: false,
-  shareDefaults: { name: "", team: "", email: "" },
-};
-
-function words(text: string): TranscriptToken[] {
-  return text.split(" ").map((w) => ({ type: "word" as const, text: w, filler: false }));
 }

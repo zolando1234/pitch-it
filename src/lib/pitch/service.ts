@@ -6,7 +6,6 @@ import { TranscriptionError, transcribeWithWords } from "@/lib/ai/transcription"
 import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
 import { canUseLength, FREE_PITCHES, PITCH_PACK, formatEur } from "@/lib/billing/pitch-pack";
-import { getProfile } from "@/lib/db/profile";
 import { getPitchContext } from "@/lib/db/pitch-context";
 import { insertPitchAttempt, updatePitchAttempt } from "@/lib/db/pitch";
 import type { PitchAttemptRow } from "@/lib/db/types";
@@ -14,13 +13,32 @@ import { consumePitch, getPitchBalance } from "@/lib/db/pitch-wallet";
 import { recordUsage } from "@/lib/db/usage";
 import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
-import { buildContentPrompt, CONTENT_SYSTEM, contentScoreSchema, overallScore } from "@/lib/pitch/content";
 import { contextForPrompt } from "@/lib/pitch/context";
 import { LANGUAGE_INFO, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
 import { mergeSegments, missingSegments } from "@/lib/pitch/segment-merge";
 import { dropSegments, loadSegments } from "@/lib/pitch/segments";
 import { buildMetrics } from "@/lib/pitch/metrics";
-import { buildOutlinePrompt, OUTLINE_SYSTEM, outlineByKeywords, outlineCheckSchema, outlineFromCheck, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
+import { outlineByKeywords, TRANSCRIPT_PROMPT_MAX, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
+import { buildSpeechPrompt, contentScoreOf, outlineFromAnalysis, SPEECH_SYSTEM, speechAnalysisSchema, splitSentences, type StoredSpeechAnalysis } from "@/lib/pitch/speech-analysis";
+
+const AUDIENCE_BRIEF: Record<PitchAttemptRow["audience"], string> = {
+  investor: "investori",
+  jury: "publikum alebo porota na verejnom vystúpení",
+  customer: "zákazníci alebo partneri",
+  team: "vlastný tím",
+};
+
+/** Vety do promptu najviac do limitu (aj dlhý prejav). */
+function capSentences(sentences: string[]): string[] {
+  const out: string[] = [];
+  let length = 0;
+  for (const sentence of sentences) {
+    length += sentence.length + 8;
+    if (length > TRANSCRIPT_PROMPT_MAX) break;
+    out.push(sentence);
+  }
+  return out;
+}
 
 export class PitchServiceError extends Error {
   constructor(
@@ -145,7 +163,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
 
     const metrics = transcript ? buildMetrics({ text: transcript.text, words: transcript.words, durationMs: input.durationMs, language }) : null;
 
-    let content = null;
+    let content: StoredSpeechAnalysis | null = null;
     let score: number | null = null;
     let model: string | null = null;
     const llm = getLlmProvider();
@@ -153,71 +171,56 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     // bez prepisu sa osnova porovnať nedá, uložíme ju aspoň na zobrazenie
     let outlineResult: OutlineResult | null = outline ? { version: 1, ...outline, check: null } : null;
 
-    const contentTask = async () => {
-      if (!llm || !transcript) return;
+    // jeden rozbor AI (téma, osnova, zrozumiteľnosť, vety, obsah podľa osnovy) namiesto viacerých volaní
+    const analysisTask = async () => {
+      if (!transcript) return;
+      // bez AI aspoň zhoda kľúčových slov s osnovou
+      if (outline) outlineResult = outlineByKeywords(outline, transcript.text);
+      if (!llm) return;
       try {
-        const [profile, context] = await Promise.all([getProfile(userId), getPitchContext(userId)]);
+        const context = await getPitchContext(userId);
+        const sentences = capSentences(splitSentences(transcript.text));
         const result = await llm.generateStructured({
           purpose: "pitch_content",
-          system: CONTENT_SYSTEM,
+          system: SPEECH_SYSTEM,
           messages: [
             {
               role: "user",
-              content: buildContentPrompt({
-                transcript: transcript.text,
-                audience: input.audience,
+              content: buildSpeechPrompt({
+                sentences,
+                audience: AUDIENCE_BRIEF[input.audience],
                 targetSeconds: input.targetSeconds,
-                notes: profile?.pitch_notes ?? null,
-                topic: outline?.topic || null,
-                outline: outline?.points ?? null,
+                durationMs: input.durationMs,
                 language: LANGUAGE_INFO[language].english,
-                context: contextForPrompt(context),
                 feedbackLocale: ui,
+                outline,
+                context: contextForPrompt(context),
               }),
             },
           ],
-          schema: contentScoreSchema,
+          schema: speechAnalysisSchema,
           effort: "low",
-          maxTokens: 3_000,
+          maxTokens: 5_000,
           speed: "interactive",
         });
-        content = result.data;
-        score = overallScore(result.data, input.audience);
+        const stored: StoredSpeechAnalysis = { version: 2, analysis: result.data, derivedPoints: !outline?.points.length };
+        content = stored;
+        score = contentScoreOf(result.data);
         model = result.model;
+        if (outline) outlineResult = outlineFromAnalysis(outline, result.data);
         await recordUsage(userId, "exercise_evaluation", 1, null);
       } catch (error) {
-        console.error("[pitch] obsahové skóre zlyhalo:", error instanceof LlmError ? error.code : error);
+        console.error("[pitch] rozbor prejavu zlyhal:", error instanceof LlmError ? error.code : error);
       }
     };
 
-    const outlineTask = async () => {
-      if (!outline || !transcript) return;
-      // bez AI aspoň zhoda kľúčových slov
-      outlineResult = outlineByKeywords(outline, transcript.text);
-      if (!llm) return;
-      try {
-        const result = await llm.generateStructured({
-          purpose: "pitch_outline",
-          system: OUTLINE_SYSTEM,
-          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience, language: LANGUAGE_INFO[language].english, feedbackLocale: ui }) }],
-          schema: outlineCheckSchema,
-          effort: "low",
-          maxTokens: 3_000,
-          speed: "interactive",
-        });
-        outlineResult = outlineFromCheck(outline, result.data, transcript.text);
-      } catch (error) {
-        console.error("[pitch] porovnanie s osnovou zlyhalo:", error instanceof LlmError ? error.code : error);
-      }
-    };
-
-    await Promise.all([contentTask(), outlineTask()]);
+    await analysisTask();
 
     const patch = {
       status: "ready" as const,
       transcript: transcript ? transcript.text.slice(0, 20_000) : null,
       metrics,
-      content,
+      content: content as Record<string, unknown> | null,
       content_score: score,
       body,
       outline: outlineResult as Record<string, unknown> | null,
