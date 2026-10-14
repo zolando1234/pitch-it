@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useLocale } from "@/components/i18n/locale-provider";
 
 const LABELS_EN: Record<string, string> = {
+  admin: "Admin",
   dokumenty: "Documents",
   nastavenia: "Settings",
   progres: "Progress",
@@ -13,6 +14,7 @@ const LABELS_EN: Record<string, string> = {
 const DETAIL_LABELS_EN: Record<string, string> = {};
 
 const LABELS: Record<string, string> = {
+  admin: "Administrácia",
   dokumenty: "Dokumenty",
   nastavenia: "Nastavenia",
   progres: "Progres",

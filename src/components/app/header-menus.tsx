@@ -44,7 +44,7 @@ function MenuPanel({ id, label, children, className = "" }: { id: string; label:
 
 /* ───────────── Účet ───────────── */
 
-export type AccountSummary = { name: string; email: string | null; initials: string; role: string };
+export type AccountSummary = { name: string; email: string | null; initials: string; role: string; /** vidí administráciu */ admin?: boolean };
 
 export function AccountMenu({ account, compact = false }: { account: AccountSummary; compact?: boolean }) {
   const en = useLocale() === "en";
@@ -105,6 +105,12 @@ export function AccountMenu({ account, compact = false }: { account: AccountSumm
                 <Icon name="user" className="size-[18px] text-mute" />
                 {en ? "Account settings" : "Nastavenia účtu"}
               </Link>
+              {account.admin ? (
+                <Link href="/app/admin" onClick={() => setOpen(false)} className={linkClass}>
+                  <Icon name="settings" className="size-[18px] text-mute" />
+                  {en ? "Admin" : "Administrácia"}
+                </Link>
+              ) : null}
               <Link href="/app/nastavenia#plan" onClick={() => setOpen(false)} className={linkClass}>
                 <Icon name="card" className="size-[18px] text-mute" />
                 {en ? "Pitches and payments" : "Pitche a platby"}

@@ -3,6 +3,7 @@ import { HeaderRow } from "@/components/app/header-row";
 import { MobileNavToggle } from "@/components/app/mobile-nav";
 import { Wordmark } from "@/components/wordmark";
 import { getCurrentUser } from "@/lib/auth/session";
+import { isAdminEmail } from "@/lib/admin/access";
 import { getProfile } from "@/lib/db/profile";
 
 export function initials(name: string | null, email: string | null): string {
@@ -46,7 +47,7 @@ export async function TopBarLoader() {
   return (
     <TopBar
       firstName={name ? name.split(/\s+/)[0] : null}
-      account={{ name: name ?? user.email?.split("@")[0] ?? "Účet", email: user.email, initials: initials(name, user.email), role: "Founder" }}
+      account={{ name: name ?? user.email?.split("@")[0] ?? "Účet", email: user.email, initials: initials(name, user.email), role: "Founder", admin: isAdminEmail(user.email) }}
     />
   );
 }
