@@ -42,6 +42,16 @@ test("administrácia: platení, minuté zadarmo, aktivácia a tržby", () => {
   assert.equal(o.daily.length, 30);
   assert.equal(o.daily.at(-2)?.pitches, 1);
   assert.equal(o.documentsUsers, 1);
+  // vývoj: dnes všetci 3, aktívni za 7 dní 2 (a, c), opakovane platiaci zatiaľ nikto (c zaplatil raz)
+  assert.equal(o.growth.length, 90);
+  assert.deepEqual(o.growth.at(-1), { date: "2026-10-14", total: 3, active: 2, repeatPayers: 0 });
+  assert.deepEqual(o.now, { active: 2, repeatPayers: 0 });
+  // pred 20 dňami: len c registrovaný, nikto aktívny
+  assert.equal(o.growth.at(-21)?.total, 1);
+
+  const again = buildAdminOverview({ ...raw, purchases: [...raw.purchases, { user_id: "c", created_at: ago(1), amount: 100, credits: 10 }] }, now);
+  assert.equal(again.now.repeatPayers, 1);
+  assert.equal(again.growth.at(-3)?.repeatPayers, 0);
 });
 
 test("administrátor podľa e-mailu (bez ohľadu na veľké písmená)", () => {

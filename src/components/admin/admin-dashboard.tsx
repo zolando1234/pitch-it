@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import type { AdminOverview, AdminPlan, AdminUserRow } from "@/lib/admin/overview";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
+import { TrendChart } from "@/components/admin/trend-chart";
 
 /*
   Administrácia: používatelia, platiaci, využitie a zoznam účtov s vyhľadávaním.
@@ -30,6 +31,14 @@ const TX = {
     purchases: "dokončených nákupov",
     usedUp: "minuli pitche zadarmo, nekúpili",
     documents: "pridali Dokumenty",
+    growth: "Vývoj",
+    range: (d: number) => `${d} dní`,
+    totalUsers: "Všetci používatelia",
+    activeUsers: "Aktívni používatelia",
+    activeUsersNote: "pitch za posledných 7 dní",
+    repeatPayers: "Zaplatili viac ako raz",
+    repeatNote: (n: number) => `z ${n} platiacich`,
+    totalNote: "dnes",
     daily: "Posledných 30 dní",
     signups: "registrácie",
     pitchesLegend: "pitche",
@@ -62,6 +71,14 @@ const TX = {
     purchases: "purchases completed",
     usedUp: "used up free pitches, didn't buy",
     documents: "added Documents",
+    growth: "Trend",
+    range: (d: number) => `${d} days`,
+    totalUsers: "Total users",
+    activeUsers: "Active users",
+    activeUsersNote: "a pitch in the last 7 days",
+    repeatPayers: "Paid more than once",
+    repeatNote: (n: number) => `of ${n} paying`,
+    totalNote: "today",
     daily: "Last 30 days",
     signups: "sign-ups",
     pitchesLegend: "pitches",
@@ -106,6 +123,8 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
   const tx = TX[locale];
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | AdminPlan>("all");
+  const [days, setDays] = useState<30 | 90>(30);
+  const growth = data.growth.slice(-days);
   const fmtDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString(locale === "en" ? "en-GB" : "sk-SK", { day: "numeric", month: "numeric", year: "2-digit" }) : "–";
   const eur = (cents: number) => (locale === "en" ? `€${(cents / 100).toFixed(2)}` : `${(cents / 100).toFixed(2).replace(".", ",")} €`);
@@ -131,6 +150,39 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
         <Tile label={tx.active} value={data.activation.withPitch} note={tx.activeNote(data.activation.pct)} />
         <Tile label={tx.pitches} value={data.pitches.total} note={tx.pitchesNote(data.pitches.last7, data.pitches.last30)} />
         <Tile label={tx.paying} value={data.paying.users} note={tx.payingNote(data.paying.pct, eur(data.paying.revenueCents))} />
+      </section>
+
+      <section aria-labelledby="vyvoj-nadpis" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="vyvoj-nadpis" className="text-[17px] font-bold text-paper">
+            {tx.growth}
+          </h2>
+          <div className="flex gap-2" role="radiogroup" aria-label={tx.growth}>
+            {([30, 90] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                role="radio"
+                aria-checked={days === d}
+                onClick={() => setDays(d)}
+                className={`rounded-full border-2 px-3 py-1 text-[13px] font-bold ${days === d ? "border-signal bg-signal/10 text-paper" : "border-line text-mute"}`}
+              >
+                {tx.range(d)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          <TrendChart title={tx.totalUsers} value={data.users.total} note={tx.totalNote} points={growth.map((g) => ({ date: g.date, value: g.total }))} formatDate={fmtDate} />
+          <TrendChart title={tx.activeUsers} value={data.now.active} note={tx.activeUsersNote} points={growth.map((g) => ({ date: g.date, value: g.active }))} formatDate={fmtDate} />
+          <TrendChart
+            title={tx.repeatPayers}
+            value={data.now.repeatPayers}
+            note={tx.repeatNote(data.paying.users)}
+            points={growth.map((g) => ({ date: g.date, value: g.repeatPayers }))}
+            formatDate={fmtDate}
+          />
+        </div>
       </section>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">

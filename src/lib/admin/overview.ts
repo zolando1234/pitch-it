@@ -53,10 +53,17 @@ export type AdminOverview = {
   languages: Array<{ code: string; count: number }>;
   /** posledných 30 dní (najstarší prvý) */
   daily: Array<{ date: string; signups: number; pitches: number }>;
+  /** vývoj za posledných 90 dní ku koncu každého dňa: všetci, aktívni (pitch za 7 dní), opakovane platiaci */
+  growth: Array<{ date: string; total: number; active: number; repeatPayers: number }>;
+  /** dnes: aktívni za 7 dní a koľkí zaplatili viac ako raz */
+  now: { active: number; repeatPayers: number };
   rows: AdminUserRow[];
 };
 
 const DAY = 86_400_000;
+/** aktívny = aspoň jeden vyhodnotený pitch za posledných 7 dní */
+export const ACTIVE_DAYS = 7;
+const GROWTH_DAYS = 90;
 const dayKey = (iso: string) => iso.slice(0, 10);
 
 export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOverview {
@@ -113,6 +120,26 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
     });
   }
 
+  // vývoj v čase: koniec dňa = posledná milisekunda dňa (UTC)
+  const purchasesByUser = new Map<string, string[]>();
+  for (const p of raw.purchases) if (p.user_id) purchasesByUser.set(p.user_id, [...(purchasesByUser.get(p.user_id) ?? []), p.created_at]);
+  const growthAt = (end: number) => {
+    const endIso = new Date(end).toISOString();
+    const fromIso = new Date(end - ACTIVE_DAYS * DAY).toISOString();
+    return {
+      total: raw.users.filter((u) => u.created_at <= endIso).length,
+      active: new Set(ready.filter((a) => a.created_at <= endIso && a.created_at > fromIso).map((a) => a.user_id)).size,
+      repeatPayers: [...purchasesByUser.values()].filter((dates) => dates.filter((d) => d <= endIso).length >= 2).length,
+    };
+  };
+  const growth: AdminOverview["growth"] = [];
+  for (let i = GROWTH_DAYS - 1; i >= 0; i--) {
+    const day = new Date(t - i * DAY).toISOString().slice(0, 10);
+    const end = i === 0 ? t : Date.parse(`${day}T23:59:59.999Z`);
+    growth.push({ date: day, ...growthAt(end) });
+  }
+  const today = growthAt(t);
+
   const pct = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
   return {
     generatedAt: now.toISOString(),
@@ -140,6 +167,8 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
     documentsUsers: raw.contexts.filter((c) => c.documents > 0 || c.hasAbout).length,
     languages: [...languages.entries()].map(([code, count]) => ({ code, count })).sort((a, b) => b.count - a.count),
     daily,
+    growth,
+    now: { active: today.active, repeatPayers: today.repeatPayers },
     rows,
   };
 }
