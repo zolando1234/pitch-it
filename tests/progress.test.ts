@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import type { PitchAttemptRow } from "../src/lib/db/types.ts";
-import { firstAndLast, improved, pitchStatCards, progressRows } from "../src/lib/pitch/progress.ts";
+import { filterRows, firstAndLast, improved, pitchStatCards, progressRows, topicsOf } from "../src/lib/pitch/progress.ts";
 
 const attempt = (id: string, createdAt: string, patch: Partial<PitchAttemptRow>): PitchAttemptRow =>
   ({
@@ -62,5 +62,32 @@ describe("progres pitchov", () => {
     assert.equal(fillers.value, "3,0");
     assert.equal(fillers.delta?.verdict, "better");
     assert.equal(cards.find((c) => c.key === "body")!.value, null);
+  });
+});
+
+describe("progres podľa typu tréningu a témy", () => {
+  const outline = (topic: string) => ({ version: 1, topic, points: [], check: null });
+  const rows = progressRows([
+    attempt("a", "2026-10-10T10:00:00Z", { mode: "public", outline: outline("PitchIt investorom") as never }),
+    attempt("b", "2026-10-11T10:00:00Z", { mode: "client", outline: outline("Ponuka pre Tatra banku") as never, qa: { version: 1, language: "sk", answers: [], score: 6.5, summary: null } as never }),
+    attempt("c", "2026-10-12T10:00:00Z", { mode: "public", outline: outline("  pitchit   INVESTOROM ") as never }),
+    attempt("d", "2026-10-13T10:00:00Z", { mode: "meeting" }),
+  ]);
+
+  test("typ, téma a skóre odpovedí sa prenesú do riadkov", () => {
+    assert.deepEqual(rows.map((r) => r.mode), ["public", "client", "public", "meeting"]);
+    assert.equal(rows[1].qa, 6.5);
+    // rovnaká téma s inými medzerami a písmenami = rovnaký kľúč
+    assert.equal(rows[0].topicKey, rows[2].topicKey);
+    assert.equal(rows[3].topicKey, "");
+  });
+
+  test("filter prečísluje pokusy a témy sú zoradené podľa počtu", () => {
+    const publicRows = filterRows(rows, { kind: "public" });
+    assert.deepEqual(publicRows.map((r) => [r.id, r.number]), [["a", 1], ["c", 2]]);
+    const topics = topicsOf(rows);
+    assert.equal(topics[0].count, 2);
+    assert.equal(topics.length, 2);
+    assert.deepEqual(filterRows(rows, { topicKey: topics[1].key }).map((r) => r.id), ["b"]);
   });
 });

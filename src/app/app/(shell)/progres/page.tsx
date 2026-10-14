@@ -6,7 +6,19 @@ import { requireUser } from "@/lib/auth/session";
 import { listOwnPitchAttempts } from "@/lib/db/pitch";
 import { formatDateTime, formatNumber, formatShortDate, plural } from "@/lib/format";
 import { TEMPO_TARGET } from "@/lib/pitch/metrics";
-import { firstAndLast, improved, METRICS, metricText, progressRows, type MetricKey, type PitchProgressRow } from "@/lib/pitch/progress";
+import {
+  filterRows,
+  firstAndLast,
+  improved,
+  METRICS,
+  metricText,
+  progressRows,
+  topicsOf,
+  TRAINING_KINDS,
+  type MetricKey,
+  type PitchProgressRow,
+  type TrainingKind,
+} from "@/lib/pitch/progress";
 import { getLocale } from "@/lib/i18n/server";
 import { LANGUAGE_INFO, PITCH_LANGUAGES } from "@/lib/pitch/language";
 
@@ -23,7 +35,36 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getLocale()) === "en" ? "Progress" : "Progres" };
 }
 
-const ORDER: MetricKey[] = ["body", "content", "fillers", "tempo", "outline"];
+const ORDER: MetricKey[] = ["body", "content", "fillers", "tempo", "outline", "qa"];
+
+const KIND_LABELS: Record<Locale, Record<TrainingKind, string>> = {
+  sk: { public: "Verejné vystúpenie", client: "Tréning s AI klientom", meeting: "Skutočné stretnutie" },
+  en: { public: "Public speaking", client: "AI client practice", meeting: "Real meeting" },
+};
+
+/** Odkaz na progres s filtrom (prázdne hodnoty sa vynechajú). */
+function filterHref(kind: TrainingKind | null, topicKey: string | null): string {
+  const params = new URLSearchParams();
+  if (kind) params.set("typ", kind);
+  if (topicKey) params.set("tema", topicKey);
+  const query = params.toString();
+  return query ? `/app/progres?${query}` : "/app/progres";
+}
+
+function FilterChip({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      aria-current={active ? "true" : undefined}
+      className={`inline-flex max-w-full items-center gap-2 truncate rounded-full border-2 px-3.5 py-1.5 text-[13px] font-bold transition ${
+        active ? "border-signal bg-signal/10 text-paper" : "border-line text-mute hover:border-faint"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 const fmt = (key: MetricKey, value: number, locale: Locale = "sk") =>
   locale === "en" ? value.toFixed(METRICS[key].digits) : formatNumber(value, METRICS[key].digits);
@@ -38,8 +79,8 @@ function points(rows: PitchProgressRow[], key: MetricKey, locale: Locale): LineP
       xLabel: `${r.number}.`,
       value: r[key] as number,
       detail: en
-        ? `Pitch ${r.number} · ${shortDateEn.format(new Date(r.createdAt))} · ${lengthLabel(r.targetSeconds)}`
-        : `${r.number}. pitch · ${formatShortDate(r.createdAt)} · ${lengthLabel(r.targetSeconds)}`,
+        ? `Attempt ${r.number} · ${shortDateEn.format(new Date(r.createdAt))} · ${lengthLabel(r.targetSeconds)}`
+        : `${r.number}. pokus · ${formatShortDate(r.createdAt)} · ${lengthLabel(r.targetSeconds)}`,
     }));
 }
 
@@ -60,25 +101,34 @@ function SummaryCard({ rows, metric, locale }: { rows: PitchProgressRow[]; metri
       <p className={`mt-2 text-[13px] font-semibold ${tone}`}>
         {range.count > 1 ? (
           <>
-            {arrow} {en ? `from ${fmt(metric, range.first, locale)} on your first pitch` : `z ${fmt(metric, range.first)} pri prvom pitchi`}
+            {arrow} {en ? `from ${fmt(metric, range.first, locale)} on your first attempt` : `z ${fmt(metric, range.first)} pri prvom pokuse`}
           </>
         ) : en ? (
-          "Just one pitch so far"
+          "Just one attempt so far"
         ) : (
-          "Zatiaľ jeden pitch"
+          "Zatiaľ jeden pokus"
         )}
       </p>
     </div>
   );
 }
 
-export default async function ProgressPage() {
+export default async function ProgressPage({ searchParams }: PageProps<"/app/progres">) {
   const user = await requireUser("/app/progres");
-  const rows = progressRows(await listOwnPitchAttempts(user.id, 200));
+  const allRows = progressRows(await listOwnPitchAttempts(user.id, 200));
   const locale = await getLocale();
   const en = locale === "en";
+  const params = await searchParams;
+  const kind = TRAINING_KINDS.find((k) => k === params.typ) ?? null;
+  // témy podľa zvoleného typu, aby ponuka obsahovala len to, čo sa dá vybrať
+  const kindRows = filterRows(allRows, { kind });
+  const topics = topicsOf(kindRows);
+  const topicKey = typeof params.tema === "string" && topics.some((t) => t.key === params.tema) ? params.tema : null;
+  const rows = filterRows(allRows, { kind, topicKey });
+  const kindCounts = Object.fromEntries(TRAINING_KINDS.map((k) => [k, allRows.filter((r) => r.mode === k).length])) as Record<TrainingKind, number>;
+  const untitled = en ? "Without a topic" : "Bez témy";
 
-  if (!rows.length) {
+  if (!allRows.length) {
     return (
       <>
         <PageHeader
@@ -115,7 +165,41 @@ export default async function ProgressPage() {
         }
       />
 
-      <section aria-label={en ? "Summary" : "Súhrn"} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <section aria-label={en ? "Filter" : "Filter"} className="dash-card mb-6 flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[13px] font-semibold text-mute">{en ? "Training type" : "Typ tréningu"}</span>
+          <FilterChip href={filterHref(null, null)} active={!kind}>
+            {en ? "All" : "Všetko"} <span className="text-faint">{allRows.length}</span>
+          </FilterChip>
+          {TRAINING_KINDS.filter((k) => kindCounts[k] > 0).map((k) => (
+            <FilterChip key={k} href={filterHref(k, null)} active={kind === k}>
+              {KIND_LABELS[locale][k]} <span className="text-faint">{kindCounts[k]}</span>
+            </FilterChip>
+          ))}
+        </div>
+        {topics.length ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-[13px] font-semibold text-mute">{en ? "Topic" : "Téma"}</span>
+            <FilterChip href={filterHref(kind, null)} active={!topicKey}>
+              {en ? "All topics" : "Všetky témy"}
+            </FilterChip>
+            {topics.map((t) => (
+              <FilterChip key={t.key} href={filterHref(kind, t.key)} active={topicKey === t.key}>
+                <span className="truncate" title={t.topic}>
+                  {t.topic.length > 48 ? `${t.topic.slice(0, 48)}…` : t.topic}
+                </span>
+                <span className="text-faint">{t.count}</span>
+              </FilterChip>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      {!rows.length ? (
+        <p className="dash-card p-5 text-[15px] text-mute">{en ? "No attempts match the filter." : "Filtru nezodpovedá žiadny pokus."}</p>
+      ) : null}
+
+      <section aria-label={en ? "Summary" : "Súhrn"} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         {metrics.map((key) => (
           <SummaryCard key={key} rows={rows} metric={key} locale={locale} />
         ))}
@@ -138,21 +222,23 @@ export default async function ProgressPage() {
 
       <section aria-labelledby="pokusy" className="dash-card mt-6 p-5">
         <h2 id="pokusy" className="text-[17px] font-bold text-paper">
-          {en ? "All pitches" : "Všetky pitche"}
+          {en ? "All attempts" : "Všetky pokusy"}
         </h2>
         <ul className="mt-3 divide-y divide-line/70">
           {[...rows].reverse().map((r) => (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold text-paper">
-                  {en ? `Pitch ${r.number}` : `${r.number}. pitch`} · {lengthLabel(r.targetSeconds)} · {en ? languageEn(r.languageLabel) : r.languageLabel}
+                  {en ? `Attempt ${r.number}` : `${r.number}. pokus`} · {KIND_LABELS[locale][r.mode]} · {lengthLabel(r.targetSeconds)} · {en ? languageEn(r.languageLabel) : r.languageLabel}
                 </p>
+                <p className="truncate text-[13px] text-paper/80">{r.topic || untitled}</p>
                 <p className="text-[13px] text-mute">
                   {en ? dateTimeEn.format(new Date(r.createdAt)) : formatDateTime(r.createdAt)}
                   {r.body !== null ? ` · ${en ? "body language" : "reč tela"} ${fmt("body", r.body, locale)}` : ""}
                   {r.content !== null ? ` · ${en ? "content" : "obsah"} ${fmt("content", r.content, locale)}/10` : ""}
                   {r.fillers !== null ? ` · ${en ? "fillers" : "výplne"} ${fmt("fillers", r.fillers, locale)}/min` : ""}
                   {r.outline !== null ? ` · ${en ? "outline" : "osnova"} ${r.outline} %` : ""}
+                  {r.qa !== null ? ` · ${en ? "answers" : "odpovede"} ${fmt("qa", r.qa, locale)}/10` : ""}
                 </p>
               </div>
               <Link href={`/app/nahravka/${r.id}`} className="text-[14px] font-semibold text-accent hover:underline">
