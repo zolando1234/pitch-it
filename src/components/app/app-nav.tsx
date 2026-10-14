@@ -7,7 +7,7 @@ import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { Icon } from "@/components/app/icons";
 import { useMobileNav } from "@/components/app/mobile-nav";
-import { APP_NAV, navLabel, PREVIEW_NAV, type NavItem } from "@/components/app/nav-items";
+import { APP_NAV, navLabel, type NavItem } from "@/components/app/nav-items";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { Wordmark } from "@/components/wordmark";
 
@@ -60,10 +60,10 @@ function Navigation({ items, onNavigate }: { items: NavItem[]; onNavigate?: () =
  * Bočný panel na desktope a výsuvné menu na mobile (tlačidlo je v hornej lište).
  * `footer` je serverový obsah (karta plánu), preto sa podáva zvonku.
  */
-export function AppSidebar({ footer, variant = "app" }: { footer: ReactNode; variant?: "app" | "preview" }) {
+export function AppSidebar({ footer }: { footer: ReactNode }) {
   const { open, setOpen, panelId } = useMobileNav();
-  const items = variant === "preview" ? PREVIEW_NAV : APP_NAV;
-  const homeHref = variant === "preview" ? "/ukazka/prehlad" : "/app";
+  const items = APP_NAV;
+  const homeHref = "/app";
 
   return (
     <>

@@ -61,6 +61,14 @@ export const TABLES: Record<string, TableSpec> = {
     read: own("id"),
     update: own("id"),
   },
+  /** O čom používateľ hovorí: text o firme či prezentácii a text z nahraných dokumentov (podklady pre hodnotenie a Q&A). */
+  pitch_contexts: {
+    pk: ["user_id"],
+    defaults: () => ({ about: "", documents: [] }),
+    updatedAt: true,
+    refs: [user()],
+    read: own("user_id"),
+  },
   pitch_wallets: {
     pk: ["user_id"],
     defaults: () => ({ free_used: 0, credits: 0 }),

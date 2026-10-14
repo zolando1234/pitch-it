@@ -1,12 +1,9 @@
-import "server-only";
-
 import { extractText, getDocumentProxy } from "unpdf";
 import type { ExtractedSlide } from "@/lib/documents/extract-pptx";
 
 /*
   Text z PDF po stranách (strana = slide). Pitch decky exportované z nástrojov
-  ako Keynote alebo Canva majú textovú vrstvu. Naskenované PDF bez textu
-  rozpozná AI analýza priamo z PDF (Claude číta aj obrázky).
+  ako Keynote alebo Canva majú textovú vrstvu. Beží aj v prehliadači.
 */
 
 const MAX_PAGES = 200;

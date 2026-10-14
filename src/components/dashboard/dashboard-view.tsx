@@ -2,34 +2,14 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { GettingStarted, type ChecklistItem } from "@/components/app/getting-started";
 import { Icon, PlayIcon, type IconName } from "@/components/app/icons";
-import type { ActivityItem, ProgressSeries, ReportTile, StatCard, Tip } from "@/lib/dashboard/overview";
-import type { Currency, Stage } from "@/lib/domain/labels";
-
-export type DashboardStartup = {
-  id: string;
-  name: string;
-  oneLiner: string | null;
-  stage: Stage;
-  traction: string | null;
-  raiseAmount: number | null;
-  raiseCurrency: Currency;
-};
+import type { StatCard } from "@/lib/dashboard/stat-card";
 
 export type DashboardViewData = {
-  trainingHref: string;
   stats: StatCard[];
-  startup: DashboardStartup | null;
-  activity: ActivityItem[];
-  reports: ReportTile[];
-  progress: ProgressSeries;
-  tip: Tip;
-  latestReportHref: string | null;
-  /** ISO čas vykreslenia (rovnaké body grafu na serveri aj klientovi). */
-  now: string;
   notice?: ReactNode;
   /** Prvé kroky nového účtu; hotové sa neukážu. */
   checklist?: ChecklistItem[];
-  /** Prepis odkazov (ukážka mapuje /app na /ukazka). */
+  /** Prepis odkazov. */
   href?: (path: string) => string;
   /** jazyk rozhrania */
   locale?: "sk" | "en";

@@ -4,9 +4,7 @@ import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getCurrentUser, type AuthUser } from "@/lib/auth/session";
 import { DbError } from "@/lib/db/core";
-import { DocumentServiceError } from "@/lib/documents/service";
 import { consumeRateLimit, type RateLimitRule } from "@/lib/security/rate-limit";
-import { SessionServiceError } from "@/lib/session/service";
 
 /*
   Spoločné správanie API: overenie používateľa, validácia tela, limit pokusov
@@ -50,9 +48,6 @@ export { isUuid } from "@/lib/validation/ids";
 
 /** Známe chyby → zrozumiteľná odpoveď; neznáme → 500 bez detailov (detail iba do logu). */
 export function handleRouteError(error: unknown, context: string): NextResponse<ApiError> {
-  if (error instanceof SessionServiceError || error instanceof DocumentServiceError) {
-    return apiError(error.status, error.code, error.message);
-  }
   if (error instanceof DbError) {
     if (error.code === "not_found") return apiError(404, "not_found", "Záznam neexistuje.");
     if (error.code === "forbidden") return apiError(403, "forbidden", "Na túto akciu nemáš oprávnenie.");

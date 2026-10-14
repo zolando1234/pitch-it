@@ -1,12 +1,9 @@
-import { AccountMenu, NotificationsMenu, type AccountSummary } from "@/components/app/header-menus";
+import { AccountMenu, type AccountSummary } from "@/components/app/header-menus";
 import { HeaderRow } from "@/components/app/header-row";
 import { MobileNavToggle } from "@/components/app/mobile-nav";
 import { Wordmark } from "@/components/wordmark";
 import { getCurrentUser } from "@/lib/auth/session";
-import { buildNotifications, type NotificationItem } from "@/lib/dashboard/notifications";
-import { listRecentReportExercises } from "@/lib/db/exercises";
 import { getProfile } from "@/lib/db/profile";
-import { listNotificationSessions } from "@/lib/db/sessions";
 
 export function initials(name: string | null, email: string | null): string {
   const source = name?.trim() || email?.split("@")[0] || "?";
@@ -18,30 +15,23 @@ export function initials(name: string | null, email: string | null): string {
 export function TopBar({
   account,
   firstName,
-  notifications,
-  variant = "app",
 }: {
   account: AccountSummary;
   firstName: string | null;
-  notifications: NotificationItem[];
-  variant?: "app" | "preview";
 }) {
   return (
     <>
       <div className="sticky top-0 z-40 flex h-16 items-center justify-between gap-3 border-b border-line bg-ink/95 px-4 backdrop-blur lg:hidden">
         <div className="flex min-w-0 items-center gap-3">
           <MobileNavToggle />
-          <Wordmark href={variant === "preview" ? "/ukazka/prehlad" : "/app"} className="[&_svg]:h-7 [&>span]:text-[22px]" />
+          <Wordmark href="/app" className="[&_svg]:h-7 [&>span]:text-[22px]" />
         </div>
         <div className="flex items-center gap-2.5">
-          <NotificationsMenu items={notifications} />
-          <AccountMenu account={account} compact variant={variant} />
+          <AccountMenu account={account} compact />
         </div>
       </div>
-      <HeaderRow firstName={firstName} dashboardPath={variant === "preview" ? "/ukazka/prehlad" : "/app"}>
-        <NotificationsMenu items={notifications} />
-        <span aria-hidden="true" className="mx-5 h-11 w-px bg-header-line" />
-        <AccountMenu account={account} variant={variant} />
+      <HeaderRow firstName={firstName} dashboardPath="/app">
+        <AccountMenu account={account} />
       </HeaderRow>
     </>
   );
@@ -51,17 +41,12 @@ export function TopBar({
 export async function TopBarLoader() {
   const user = await getCurrentUser();
   if (!user) return <TopBarSkeleton />;
-  const [profile, sessions, exercises] = await Promise.all([
-    getProfile(user.id),
-    listNotificationSessions(user.id),
-    listRecentReportExercises(user.id),
-  ]);
+  const profile = await getProfile(user.id);
   const name = profile?.display_name?.trim() || null;
   return (
     <TopBar
       firstName={name ? name.split(/\s+/)[0] : null}
       account={{ name: name ?? user.email?.split("@")[0] ?? "Účet", email: user.email, initials: initials(name, user.email), role: "Founder" }}
-      notifications={buildNotifications(sessions, exercises)}
     />
   );
 }

@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { LanguageSwitch, useLocale } from "@/components/i18n/locale-provider";
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Icon } from "@/components/app/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
-import type { NotificationItem } from "@/lib/dashboard/notifications";
 import { signOut } from "@/lib/auth/actions";
 
 /** Zatvorí rozbalené menu po kliknutí mimo neho alebo klávesou Escape. */
@@ -43,115 +42,11 @@ function MenuPanel({ id, label, children, className = "" }: { id: string; label:
   );
 }
 
-/* ───────────── Upozornenia ───────────── */
-
-const SEEN_KEY = "pitchit:notifications-seen-at";
-const SEEN_EVENT = "pitchit:notifications-seen";
-const SERVER = "__server__";
-
-function subscribeSeen(callback: () => void) {
-  window.addEventListener("storage", callback);
-  window.addEventListener(SEEN_EVENT, callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener(SEEN_EVENT, callback);
-  };
-}
-
-function readSeen(): string | null {
-  try {
-    return window.localStorage.getItem(SEEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function markSeen(at: string) {
-  try {
-    window.localStorage.setItem(SEEN_KEY, at);
-  } catch {
-    // Súkromné okno alebo zakázané úložisko: bodka sa iba neuloží.
-  }
-  window.dispatchEvent(new Event(SEEN_EVENT));
-}
-
-export function NotificationsMenu({ items }: { items: NotificationItem[] }) {
-  const en = useLocale() === "en";
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panelId = useId();
-  const seen = useSyncExternalStore(subscribeSeen, readSeen, () => SERVER);
-  const newest = items[0]?.at ?? null;
-  const unread = seen !== SERVER && newest !== null && (seen === null || newest > seen);
-
-  useDismiss(open, () => setOpen(false), root, trigger);
-
-  const toggle = () => {
-    if (!open && newest) markSeen(newest);
-    setOpen(!open);
-  };
-
-  return (
-    <div ref={root} className="relative">
-      <button
-        ref={trigger}
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        aria-label={en ? (unread ? "Notifications, you have new ones" : "Notifications") : unread ? "Upozornenia, máš nové" : "Upozornenia"}
-        className="relative inline-flex size-10 items-center justify-center rounded-full border border-header-line text-paper transition-colors hover:bg-panel-2 lg:size-11"
-      >
-        <Icon name="bell" className="size-[21px]" strokeWidth={1.6} />
-        {unread ? (
-          <span aria-hidden="true" className="absolute top-[3px] right-[3px] size-[9px] rounded-full bg-signal ring-2 ring-ink lg:top-1 lg:right-1" />
-        ) : null}
-      </button>
-      {open ? (
-        <MenuPanel id={panelId} label={en ? "Notifications" : "Upozornenia"} className="w-[min(22rem,calc(100vw-2rem))]">
-          <p className="px-3 pt-2 pb-1.5 text-[13px] font-semibold text-paper">{en ? "Notifications" : "Upozornenia"}</p>
-          {items.length === 0 ? (
-            <p className="px-3 pb-3 text-[13.5px] leading-relaxed text-mute">
-              {en ? "Nothing new yet. When a review is ready, you'll find it here." : "Zatiaľ nič nové. Keď bude rozbor tréningu hotový, nájdeš ho tu."}
-            </p>
-          ) : (
-            <ul>
-              {items.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className="flex items-start gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-panel-2"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full ${
-                        item.kind === "report" ? "bg-violet-tint text-violet-soft" : "bg-amber-tint text-marker"
-                      }`}
-                    >
-                      <Icon name={item.kind === "report" ? "file" : "bolt"} className="size-4" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[14px] font-medium text-paper">{item.title}</span>
-                      <span className="block truncate text-[12.5px] text-mute">{item.detail}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </MenuPanel>
-      ) : null}
-    </div>
-  );
-}
-
 /* ───────────── Účet ───────────── */
 
 export type AccountSummary = { name: string; email: string | null; initials: string; role: string };
 
-export function AccountMenu({ account, compact = false, variant = "app" }: { account: AccountSummary; compact?: boolean; variant?: "app" | "preview" }) {
+export function AccountMenu({ account, compact = false }: { account: AccountSummary; compact?: boolean }) {
   const en = useLocale() === "en";
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -205,11 +100,6 @@ export function AccountMenu({ account, compact = false, variant = "app" }: { acc
             <span className="text-[13px] text-mute">{en ? "Language" : "Jazyk"}</span>
             <LanguageSwitch />
           </div>
-          {variant === "preview" ? (
-            <p className="px-3 py-3 text-[13px] leading-relaxed text-mute">
-              {en ? "Demo account. Settings and sign-out only work in the app." : "Ukážkový účet. Nastavenia a odhlásenie fungujú iba v aplikácii."}
-            </p>
-          ) : (
             <div className="pt-1">
               <Link href="/app/nastavenia" onClick={() => setOpen(false)} className={linkClass}>
                 <Icon name="user" className="size-[18px] text-mute" />
@@ -226,7 +116,6 @@ export function AccountMenu({ account, compact = false, variant = "app" }: { acc
                 </button>
               </form>
             </div>
-          )}
         </MenuPanel>
       ) : null}
     </div>

@@ -1,5 +1,5 @@
 import { finalScoreFor, parseStoredCoach } from "@/lib/coach/stored";
-import type { StatCard, StatDelta } from "@/lib/dashboard/overview";
+import type { StatCard, StatDelta } from "@/lib/dashboard/stat-card";
 import type { PitchAttemptRow } from "@/lib/db/types";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import type { PitchMetrics } from "@/lib/pitch/metrics";

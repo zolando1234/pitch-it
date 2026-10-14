@@ -6,41 +6,23 @@ import { usePathname } from "next/navigation";
 import { useLocale } from "@/components/i18n/locale-provider";
 
 const LABELS_EN: Record<string, string> = {
-  projekty: "Projects",
-  novy: "New",
-  podklady: "Materials",
-  trening: "Training",
-  cvicenia: "Exercises",
-  historia: "Reports",
-  porovnanie: "Comparison",
+  dokumenty: "Documents",
   nastavenia: "Settings",
   progres: "Progress",
 };
-const DETAIL_LABELS_EN: Record<string, string> = { projekty: "Project", trening: "Review", cvicenia: "Exercise" };
+const DETAIL_LABELS_EN: Record<string, string> = {};
 
 const LABELS: Record<string, string> = {
-  projekty: "Projekty",
-  novy: "Nový",
-  podklady: "Podklady",
-  trening: "Tréning",
-  cvicenia: "Cvičenia",
-  historia: "Reporty",
-  porovnanie: "Porovnanie",
+  dokumenty: "Dokumenty",
   nastavenia: "Nastavenia",
   progres: "Progres",
 };
 
 /** Názov detailu podľa rodičovskej sekcie (ID v URL nemá ľudský názov). */
-const DETAIL_LABELS: Record<string, string> = {
-  projekty: "Projekt",
-  trening: "Rozbor",
-  cvicenia: "Cvičenie",
-};
+const DETAIL_LABELS: Record<string, string> = {};
 
 /** Sekcie bez vlastnej stránky: odkazujú na najbližšiu existujúcu. */
-const SECTION_HREF: Record<string, string> = {
-  "/app/trening": "/app/historia",
-};
+const SECTION_HREF: Record<string, string> = {};
 
 export type Crumb = { href: string; label: string };
 

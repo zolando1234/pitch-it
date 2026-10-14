@@ -72,7 +72,7 @@ export async function signUp(_previous: AuthFormState, formData: FormData): Prom
 
   let account;
   try {
-    // Iba vo vývoji: opakovaná registrácia s tým istým e-mailom nahradí starý účet (testovanie onboardingu).
+    // Iba vo vývoji: opakovaná registrácia s tým istým e-mailom nahradí starý účet.
     if (process.env.NODE_ENV === "development") {
       const existing = await findAccountByEmail(parsed.data.email);
       if (existing) await deleteAccount(existing.id);
@@ -101,7 +101,7 @@ export async function signUp(_previous: AuthFormState, formData: FormData): Prom
 
   await trackEvent(account.id, "signup_completed", { email_confirmation: false });
   await startSession(account);
-  redirect("/app/vitaj");
+  redirect("/app");
 }
 
 export async function signIn(_previous: AuthFormState, formData: FormData): Promise<AuthFormState> {
