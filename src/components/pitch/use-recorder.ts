@@ -28,7 +28,11 @@ export type RecorderSetup = {
 /** Hotová nahrávka: úseky sú už odoslané pod `draftId`. */
 export type Recording = { draftId: string; segments: number; durationMs: number };
 
-export type MediaState = "idle" | "requesting" | "ready" | "denied" | "unsupported";
+/** missing = žiadny mikrofón nie je pripojený, lost = mikrofón sa odpojil */
+export type MediaState = "idle" | "requesting" | "ready" | "denied" | "unsupported" | "missing" | "lost";
+
+/** Má stream živú zvukovú stopu (mikrofón je pripojený a beží)? */
+export const hasLiveAudio = (stream: MediaStream | null) => !!stream?.getAudioTracks().some((t) => t.readyState === "live" && t.enabled);
 
 export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   const [media, setMedia] = useState<MediaState>("idle");
@@ -41,6 +45,15 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   /** zvuk z mobilu: jeho stopy nezastavujeme, spojenie riadi usePhoneMic */
   const externalRef = useRef(false);
+
+  /** Odpojenie mikrofónu (vytiahnutý kábel, vypnutý mobil) sa hneď prejaví v stave. */
+  const watchTracks = useCallback((next: MediaStream) => {
+    for (const track of next.getAudioTracks()) {
+      track.addEventListener("ended", () => {
+        if (streamRef.current === next) setMedia("lost");
+      });
+    }
+  }, []);
 
   /** Úroveň hlasu pre vlnu z daného zvuku. */
   const watch = useCallback((next: MediaStream) => {
@@ -76,15 +89,23 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
         audio: { echoCancellation: true, noiseSuppression: true },
         video: video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
       });
+      if (!hasLiveAudio(next)) {
+        next.getTracks().forEach((track) => track.stop());
+        setMedia("missing");
+        return;
+      }
       streamRef.current = next;
       externalRef.current = false;
       setStream(next);
       setMedia("ready");
       watch(next);
-    } catch {
-      setMedia("denied");
+      watchTracks(next);
+    } catch (error) {
+      // NotFoundError = v počítači nie je žiadny mikrofón; NotAllowedError = prístup zamietnutý
+      const name = (error as { name?: string })?.name;
+      setMedia(name === "NotAllowedError" || name === "SecurityError" ? "denied" : "missing");
     }
-  }, [video, watch]);
+  }, [video, watch, watchTracks]);
 
   /** Nahrávanie z iného zdroja zvuku (mobil ako mikrofón) namiesto mikrofónu počítača. */
   const attach = useCallback(
@@ -94,11 +115,24 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
       streamRef.current = next;
       externalRef.current = true;
       setStream(next);
-      setMedia("ready");
+      setMedia(hasLiveAudio(next) ? "ready" : "lost");
       watch(next);
+      watchTracks(next);
     },
-    [watch],
+    [watch, watchTracks],
   );
+
+  // pripojený alebo odpojený mikrofón: po pripojení ho hneď zapneme, po odpojení stav „lost“
+  useEffect(() => {
+    const devices = navigator.mediaDevices;
+    if (!devices?.addEventListener) return;
+    const onChange = () => {
+      if (externalRef.current) return;
+      if (!hasLiveAudio(streamRef.current)) void open();
+    };
+    devices.addEventListener("devicechange", onChange);
+    return () => devices.removeEventListener("devicechange", onChange);
+  }, [open]);
 
   useEffect(() => {
     return () => {
@@ -111,7 +145,7 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   /** Začne nahrávať; úseky idú hneď na prepis. Vráti false, ak zvuk nie je k dispozícii. */
   const start = useCallback(async (language: PitchLanguage) => {
     const current = streamRef.current;
-    if (!current || !current.getAudioTracks().length) return false;
+    if (!current || !hasLiveAudio(current)) return false;
     const uploader = new SegmentUploader(crypto.randomUUID(), language);
     try {
       captureRef.current = await startCapture(current, (segment) => uploader.add(segment));
@@ -153,7 +187,10 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     setStream(null);
   }, []);
 
-  return { media, stream, level, open, attach, start, pause, resume, stop, discard, release };
+  /** Je mikrofón práve pripojený (kontrola tesne pred štartom). */
+  const micLive = useCallback(() => hasLiveAudio(streamRef.current), []);
+
+  return { media, stream, level, open, attach, start, pause, resume, stop, discard, release, micLive };
 }
 
 /** Výsledok odoslania na analýzu. */

@@ -85,6 +85,7 @@ export function QaSession({
   failed,
   language,
   stream,
+  level = 0,
   homeHref,
   onDone,
 }: {
@@ -93,6 +94,8 @@ export function QaSession({
   failed: boolean;
   language: PitchLanguage;
   stream: MediaStream | null;
+  /** hlasitosť mikrofónu 0–1 (aby bolo vidno, že odpoveď sa nahráva) */
+  level?: number;
   homeHref: string;
   onDone: (answers: QaAnswerRecording[]) => void;
 }) {
@@ -154,16 +157,21 @@ export function QaSession({
     else onDone(answers.current);
   }, [questions, question, index, onDone]);
 
-  // čas odpovede a automatický koniec po limite
+  // čas odpovede a automatický koniec po limite. `next` cez ref: rodič sa prekresľuje často
+  // (ukazovateľ hlasitosti) a nový časovač pri každom prekreslení by nikdy nestihol tiknúť.
+  const nextRef = useRef(next);
+  useEffect(() => {
+    nextRef.current = next;
+  }, [next]);
   useEffect(() => {
     if (stage !== "answering") return;
     const id = setInterval(() => {
       const ms = performance.now() - startedAt.current;
       setElapsed(ms);
-      if (ms >= QA_ANSWER_MAX_MS) void next();
+      if (ms >= QA_ANSWER_MAX_MS) void nextRef.current();
     }, 250);
     return () => clearInterval(id);
-  }, [stage, next]);
+  }, [stage, index]);
 
   /** Otázku znova: odpoveď sa medzitým nenahráva, aby v nej nebol hlas otázky. */
   const replay = async () => {
@@ -202,7 +210,13 @@ export function QaSession({
                   <span className="h-3 w-3 animate-pulse rounded-full bg-danger" aria-hidden="true" />
                   {tx.answer} · <span className="font-mono">{fmt(elapsed)}</span>
                 </p>
-                {!stream ? <p className="text-sm text-marker">{tx.noMic}</p> : null}
+                {stream ? (
+                  <div className="h-2.5 w-64 overflow-hidden rounded-full bg-line" aria-hidden="true">
+                    <div className="h-full rounded-full bg-signal transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
+                  </div>
+                ) : (
+                  <p className="text-sm text-marker">{tx.noMic}</p>
+                )}
                 <button type="button" className="btn btn-p" onClick={() => void next()} style={{ minHeight: "56px", padding: "12px 32px", fontSize: "17px" }}>
                   {last ? tx.finish : tx.next} →
                 </button>

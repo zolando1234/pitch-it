@@ -10,7 +10,7 @@ import type { usePhoneMic } from "@/components/pitch/use-phone-mic";
 
 type PhoneMic = ReturnType<typeof usePhoneMic>;
 
-export function PhoneMicPanel({ phone, level }: { phone: PhoneMic; level: number }) {
+export function PhoneMicPanel({ phone, level, mic = "ready" }: { phone: PhoneMic; level: number; /** stav mikrofónu počítača */ mic?: "ready" | "missing" | "other" }) {
   const [copied, setCopied] = useState(false);
   const en = useLocale() === "en";
   const usePhone = phone.state !== "idle";
@@ -68,6 +68,23 @@ export function PhoneMicPanel({ phone, level }: { phone: PhoneMic; level: number
           if (!usePhone) void phone.start();
         })}
       </div>
+
+      {!usePhone ? (
+        <div className="mt-5 flex flex-col gap-2" aria-live="polite">
+          {mic === "ready" ? (
+            <>
+              <p className="text-sm text-mute">{en ? "Say a few words, the meter should move." : "Povedz pár slov, ukazovateľ by sa mal pohnúť."}</p>
+              <div className="h-2.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
+                <div className="h-full rounded-full bg-signal transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
+              </div>
+            </>
+          ) : mic === "missing" ? (
+            <p role="alert" className="text-sm font-bold text-coral">
+              {en ? "No microphone is connected." : "Nie je pripojený žiadny mikrofón."}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {usePhone ? (
         <div className="mt-5 flex flex-col gap-3" aria-live="polite">

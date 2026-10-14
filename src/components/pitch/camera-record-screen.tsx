@@ -18,7 +18,7 @@ import { QaSession, type QaAnswerRecording } from "@/components/pitch/qa-session
 import { QaSettings, useQaPrefs } from "@/components/pitch/qa-settings";
 import { SegmentUploader, segmentsFromFile } from "@/components/pitch/speech-capture";
 import { usePhoneMic } from "@/components/pitch/use-phone-mic";
-import { uploadPitchWithRetry, usePitchRecorder, type Recording, type RecorderSetup } from "@/components/pitch/use-recorder";
+import { hasLiveAudio, uploadPitchWithRetry, usePitchRecorder, type Recording, type RecorderSetup } from "@/components/pitch/use-recorder";
 import { VideoSourcePicker, type VideoAnalysis } from "@/components/pitch/video-source-picker";
 import { canUseLength, CUSTOM_MAX_SECONDS, FREE_MAX_SECONDS, type PitchBalance } from "@/lib/billing/pitch-pack";
 import { keepLocalSession } from "@/lib/coach/local-session";
@@ -64,6 +64,9 @@ const TX = {
     micDenied: "Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a obnov stránku.",
     noRecorder: "Tento prehliadač nevie nahrávať. Skús Chrome, Edge alebo Safari.",
     micStarting: "Zapínam mikrofón…",
+    micMissing: "Nie je pripojený žiadny mikrofón. Pripoj mikrofón (alebo mobil ako mikrofón) a nahrávanie sa dá spustiť.",
+    noMicQa: "Na odpovede v Q&A treba mikrofón. Pripoj ho, alebo Q&A vypni.",
+    micLost: "Mikrofón sa odpojil, nahrávanie sme zastavili. Pripoj mikrofón a spusti nahrávanie znova.",
     pickVideo: "Vyber video.",
     startRecording: "Spustiť nahrávanie",
     analyzeVideo: "Analyzovať video",
@@ -115,6 +118,9 @@ const TX = {
     micDenied: "Microphone access is denied. Allow it in your browser settings and reload the page.",
     noRecorder: "This browser can't record. Try Chrome, Edge or Safari.",
     micStarting: "Starting the microphone…",
+    micMissing: "No microphone is connected. Connect a microphone (or use your phone as one) to start recording.",
+    noMicQa: "Q&A answers need a microphone. Connect one or turn Q&A off.",
+    micLost: "The microphone disconnected, so we stopped the recording. Connect it and start again.",
     pickVideo: "Choose a video.",
     startRecording: "Start recording",
     analyzeVideo: "Analyze video",
@@ -318,8 +324,10 @@ export function CameraRecordScreen({
   );
 
   const phoneSelected = phone.state !== "idle";
-  // pri nahratom videe sa mikrofón na nahrávanie nepoužíva, zvuk je z videa
-  const micReady = videoMode || (phoneSelected ? phone.state === "connected" : recorder.media === "ready");
+  // mikrofón musí byť pripojený: pri nahrávaní vždy, pri nahratom videe len kvôli odpovediam v Q&A
+  const micConnected = phoneSelected ? phone.state === "connected" && hasLiveAudio(recorder.stream) : recorder.media === "ready";
+  const micNeeded = !videoMode || qa.enabled;
+  const micReady = !micNeeded || micConnected;
   const sourceReady = !videoMode || !!videoFile;
   const hint = !sourceReady
     ? tx.pickVideo
@@ -331,10 +339,19 @@ export function CameraRecordScreen({
           ? tx.micDenied
           : recorder.media === "unsupported"
             ? tx.noRecorder
-            : tx.micStarting;
+            : recorder.media === "missing" || recorder.media === "lost"
+              ? videoMode
+                ? tx.noMicQa
+                : tx.micMissing
+              : tx.micStarting;
 
   const start = () => {
-    if (!micReady || !sourceReady) return;
+    if (!sourceReady) return;
+    // posledná kontrola tesne pred štartom: mikrofón mohol medzitým vypadnúť
+    if (micNeeded && !recorder.micLive()) {
+      setError(videoMode ? tx.noMicQa : tx.micMissing);
+      return;
+    }
     // celú obrazovku smie prehliadač zapnúť len priamo po kliknutí (pri „Len analyzovať“ netreba)
     const quiet = videoMode && analysis === "quick";
     if (fullscreen && !quiet && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
@@ -358,8 +375,27 @@ export function CameraRecordScreen({
         .catch(() => null);
       return;
     }
-    audioStarted.current = recorder.start(language);
+    audioStarted.current = recorder.start(language).then((ok) => {
+      // bez zvuku nemá nahrávanie zmysel: zastavíme ho a vrátime sa na nastavenie
+      if (!ok) abortForMic();
+      return ok;
+    });
   };
+
+  /** Mikrofón nie je alebo vypadol: nahrávanie sa zastaví a ukáže sa, čo urobiť. */
+  const abortForMic = () => {
+    recorder.discard();
+    audioStarted.current = null;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    setError(tx.micLost);
+    setPhase("setup");
+  };
+
+  // odpojený mikrofón počas nahrávania (kábel, slúchadlá, mobil) zastaví nahrávanie
+  useEffect(() => {
+    if (phase !== "live" || videoFile) return;
+    if (recorder.media === "lost" || recorder.media === "missing") abortForMic();
+  });
 
   /** Otázky do Q&A po prejave (z podkladov, témy a prepisu). */
   const loadQuestions = async (recording: Recording | null) => {
@@ -536,7 +572,7 @@ export function CameraRecordScreen({
   }
 
   if (phase === "qa") {
-    return <QaSession questions={questions} failed={questionsFailed} language={language} stream={recorder.stream} homeHref={homeHref} onDone={(a) => void onQaDone(a)} />;
+    return <QaSession questions={questions} failed={questionsFailed} language={language} stream={recorder.stream} level={recorder.level} homeHref={homeHref} onDone={(a) => void onQaDone(a)} />;
   }
 
   const done = k >= 5 && !!attemptId;
@@ -615,7 +651,7 @@ export function CameraRecordScreen({
             </div>
             {!videoMode ? (
               <div className="mt-6">
-                <PhoneMicPanel phone={phone} level={recorder.level} />
+                <PhoneMicPanel phone={phone} level={recorder.level} mic={recorder.media === "ready" ? "ready" : recorder.media === "missing" || recorder.media === "lost" ? "missing" : "other"} />
               </div>
             ) : null}
           </Section>
