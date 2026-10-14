@@ -5,7 +5,7 @@ import { getPitchContext } from "@/lib/db/pitch-context";
 import { apiError, apiOk, handleRouteError, parseJson, rateLimited, requireApiUser } from "@/lib/http/route";
 import { contextForPrompt } from "@/lib/pitch/context";
 import { LANGUAGE_INFO, PITCH_LANGUAGES } from "@/lib/pitch/language";
-import { buildQuestionsPrompt, QA_MAX_QUESTIONS, QUESTIONS_SYSTEM, questionsSchema } from "@/lib/pitch/qa";
+import { buildQuestionsPrompt, CLIENT_QUESTIONS_SYSTEM, QA_MAX_QUESTIONS, QUESTIONS_SYSTEM, questionsSchema } from "@/lib/pitch/qa";
 import { MAX_SEGMENTS, mergeSegments } from "@/lib/pitch/segment-merge";
 import { loadSegments } from "@/lib/pitch/segments";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
@@ -19,6 +19,9 @@ const bodySchema = z.object({
   segments: z.number().int().min(0).max(MAX_SEGMENTS),
   topic: z.string().max(2_000).nullable(),
   outline: z.array(z.string().max(300)).max(20).nullable(),
+  /** stretnutie s klientom: otázka počas výkladu */
+  mode: z.enum(["public", "client"]).optional(),
+  asked: z.array(z.string().max(300)).max(10).optional(),
 });
 
 /** Otázky do Q&A po prejave: z podkladov, témy a toho, čo už bolo prepísané. */
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
     const transcript = segments.length ? mergeSegments(segments).text : null;
     const result = await llm.generateStructured({
       purpose: "qa_questions",
-      system: QUESTIONS_SYSTEM,
+      system: body.mode === "client" ? CLIENT_QUESTIONS_SYSTEM : QUESTIONS_SYSTEM,
       messages: [
         {
           role: "user",
@@ -48,6 +51,8 @@ export async function POST(request: Request) {
             context: contextForPrompt(context),
             transcript,
             seed: Math.floor(Math.random() * 1000),
+            asked: body.asked,
+            client: body.mode === "client",
           }),
         },
       ],

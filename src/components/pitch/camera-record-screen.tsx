@@ -24,6 +24,8 @@ import { canUseLength, CUSTOM_MAX_SECONDS, FREE_MAX_SECONDS, type PitchBalance }
 import { keepLocalSession } from "@/lib/coach/local-session";
 import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
 import { toStoredCoach } from "@/lib/coach/stored";
+import { maxQuestionsFor } from "@/lib/pitch/meeting";
+import { CLIENT_MAX_QUESTIONS } from "@/lib/pitch/qa";
 
 /*
   Tréning: najprv typ (verejné vystúpenie, stretnutie s klientom, online prezentácia), potom
@@ -40,12 +42,19 @@ const TX = {
     modesLead: "Každý typ hodnotí niečo iné. Začni verejným vystúpením, ďalšie pribudnú čoskoro.",
     modes: {
       public: ["Verejné vystúpenie pred publikom", "Pitch, prednáška či prejav na pódiu. Reč tela, hlas, obsah a voliteľne otázky z publika."],
-      client: ["Stretnutie s klientom", "Predaj a vyjednávanie pri stole. Čoskoro."],
+      client: ["Stretnutie s klientom", "Vysvetľuješ ponuku pri stole a klient ťa priebežne preruší otázkami."],
       online: ["Online prezentácia", "Prezentácia cez kameru a zdieľanú obrazovku. Čoskoro."],
     },
     soon: "Čoskoro",
     heading: "Verejné vystúpenie",
     lead: "Nastav si tréning. Všetko sa pamätá, nabudúce môžeš rovno začať.",
+    clientHeading: "Stretnutie s klientom",
+    clientLead: "Vysvetľuješ klientovi svoju ponuku. Klient ťa v náhodných chvíľach preruší otázkou k tomu, čo si práve povedal. Odpovieš a pokračuješ ďalej.",
+    clientQuestions: "Otázky klienta počas výkladu",
+    clientQuestionsNote: (max: number) =>
+      max ? `Klient sa ozve v prirodzenej pauze, najskôr po chvíli výkladu. Na túto dĺžku stretnutia najviac ${max}, na viac otázok zvoľ dlhšie stretnutie.` : "Stretnutie je na otázky príliš krátke. Zvoľ aspoň 1 minútu.",
+    clientBefore: ["Sadni si za stôl tak, aby ťa kamera videla od pása hore.", "Ruky maj na stole alebo nad ním, nie pod ním.", "Hovor ku kamere, ako keby oproti sedel klient."],
+    clientTitle: "Stretnutie s klientom",
     changeMode: "Iný typ tréningu",
     back: "Prehľad",
     howSpeak: "Mikrofón",
@@ -94,12 +103,19 @@ const TX = {
     modesLead: "Each type scores something different. Start with public speaking, more are coming soon.",
     modes: {
       public: ["Public speaking", "A pitch, lecture or talk on stage. Body language, voice, content and optional audience questions."],
-      client: ["Client meeting", "Selling and negotiating at the table. Coming soon."],
+      client: ["Client meeting", "You explain your offer at the table and the client interrupts you with questions."],
       online: ["Online presentation", "Presenting on camera with a shared screen. Coming soon."],
     },
     soon: "Coming soon",
     heading: "Public speaking",
     lead: "Set up your training. Everything is remembered, next time you can start right away.",
+    clientHeading: "Client meeting",
+    clientLead: "You explain your offer to a client. At random moments the client interrupts with a question about what you just said. You answer and carry on.",
+    clientQuestions: "Client questions during the talk",
+    clientQuestionsNote: (max: number) =>
+      max ? `The client speaks up in a natural pause, after a while of talking. For this meeting length at most ${max}; for more questions pick a longer meeting.` : "The meeting is too short for questions. Pick at least 1 minute.",
+    clientBefore: ["Sit at a table so the camera sees you from the waist up.", "Keep your hands on or above the table, not under it.", "Talk to the camera as if the client sat opposite you."],
+    clientTitle: "Client meeting",
     changeMode: "Another training type",
     back: "Overview",
     howSpeak: "Microphone",
@@ -147,6 +163,7 @@ const TX = {
 
 const FULLSCREEN_KEY = "pitchit-pitch-fullscreen";
 const ANALYSIS_KEY = "pitchit-video-analysis";
+const CLIENT_COUNT_KEY = "pitchit-client-questions";
 
 const fmtTarget = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -224,10 +241,25 @@ export function CameraRecordScreen({
   const language = languageState.language;
   // dlhšie ako 3 minúty len s kúpenými pitchami; inak najdlhšia bezplatná dĺžka
   const targetSeconds = canUseLength(lengthState.length, wallet.balance) ? lengthState.length : FREE_MAX_SECONDS;
-  const pitchSetup = useMemo(() => ({ ...setup, targetSeconds, language, uiLocale: locale }), [setup, targetSeconds, language, locale]);
+  const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
+  const pitchSetup = useMemo(
+    () => ({ ...setup, targetSeconds, language, uiLocale: locale, mode: trainingMode === "client" ? ("client" as const) : ("public" as const) }),
+    [setup, targetSeconds, language, locale, trainingMode],
+  );
   const { outline } = outlineState;
 
-  const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
+  const client = trainingMode === "client";
+  const [clientCount, setClientCount] = useState(3);
+  useEffect(() => {
+    const saved = Number(readPref(CLIENT_COUNT_KEY));
+    if (saved >= 1 && saved <= CLIENT_MAX_QUESTIONS) setClientCount(saved); // eslint-disable-line react-hooks/set-state-in-effect -- localStorage je len na klientovi
+  }, []);
+  const chooseClientCount = (n: number) => {
+    writePref(CLIENT_COUNT_KEY, String(n));
+    setClientCount(n);
+  };
+  /** odpovede klientovi počas stretnutia (vyhodnotia sa ako Q&A) */
+  const meetingAnswers = useRef<QaAnswerRecording[]>([]);
   const [videoMode, setVideoMode] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<VideoAnalysis>("quick");
@@ -281,7 +313,9 @@ export function CameraRecordScreen({
     }),
     [targetSeconds, videoFile, maxVideoSeconds, tx.liveTitle],
   );
-  const ruleFilter = useMemo(() => ruleFilterFor(mode, false), [mode]);
+  // pri stole sa sedí: bez pravidiel pódia a nôh
+  const ruleFilter = useMemo(() => ruleFilterFor(mode, false, client), [mode, client]);
+  const maxClientQuestions = maxQuestionsFor(targetSeconds * 1000);
 
   // mikrofón: na nahrávanie aj na odpovede v Q&A (aj pri nahratom videe)
   useEffect(() => {
@@ -362,6 +396,7 @@ export function CameraRecordScreen({
     if (fullscreen && !quiet && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
     // zvuk sa odomkne priamo kliknutím (Safari inak nahrávanie aj odpovede v Q&A nespustí)
     primeAudio();
+    meetingAnswers.current = [];
     setError(null);
     setNotice(null);
     audioStarted.current = null;
@@ -464,8 +499,8 @@ export function CameraRecordScreen({
   };
 
   const onFinish = async (result: CoachResult) => {
-    const coach = toStoredCoach(result.summary, { teleprompter: false, micMode: prefs.micMode });
-    const withQa = qa.enabled && (recorder.media === "ready" || !!phoneStream);
+    const coach = toStoredCoach(result.summary, { teleprompter: false, micMode: client ? false : prefs.micMode, seated: client });
+    const withQa = !client && qa.enabled && (recorder.media === "ready" || !!phoneStream);
     setPhase(withQa ? "qa" : "analyze");
     setK(1);
     if (withQa) setQuestions(null);
@@ -482,6 +517,8 @@ export function CameraRecordScreen({
     pending.current = { recording: final, coach, summary: result.summary, videoUrl: result.recording?.url ?? null };
     runAnalysis();
     if (withQa) void loadQuestions(recording);
+    // stretnutie s klientom: odpovede počas výkladu sa vyhodnotia ako Q&A
+    else if (client && meetingAnswers.current.length) void onQaDone(meetingAnswers.current);
     else {
       release();
       await showResult();
@@ -552,10 +589,26 @@ export function CameraRecordScreen({
       <PitchStudio
         key={take}
         mode={mode}
-        title={videoFile ? tx.videoTitle : tx.liveTitle}
+        title={client ? tx.clientTitle : videoFile ? tx.videoTitle : tx.liveTitle}
         subtitle={tx.subtitle(fmtTarget(targetSeconds))}
-        prefs={prefs}
+        prefs={client ? { ...prefs, micMode: false } : prefs}
         outline={outline}
+        meeting={
+          client
+            ? {
+                questions: clientCount,
+                language,
+                stream: recorder.stream,
+                level: recorder.level,
+                topic: outline?.topic || null,
+                outline: outline?.points ?? null,
+                transcript: recorder.draft,
+                onAnswers: (answers) => {
+                  meetingAnswers.current = answers;
+                },
+              }
+            : null
+        }
         startFull={fullscreen && !(videoFile && analysis === "quick")}
         file={videoFile}
         quiet={!!videoFile && analysis === "quick"}
@@ -599,7 +652,7 @@ export function CameraRecordScreen({
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {(["public", "client", "online"] as const).map((m) => {
-              const available = m === "public";
+              const available = m === "public" || m === "client";
               return (
                 <button
                   key={m}
@@ -630,17 +683,18 @@ export function CameraRecordScreen({
           <h1 className="h text-4xl leading-tight md:text-6xl">{tx.heading}</h1>
           <PitchPaywall paymentsEnabled={wallet.paymentsEnabled} confirming={wallet.confirming} />
         </main>
-      ) : phase === "setup" && trainingMode === "public" ? (
+      ) : phase === "setup" && (trainingMode === "public" || trainingMode === "client") ? (
         <main id="obsah" className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10 md:px-8">
           <div className="flex flex-col gap-3">
             <button type="button" onClick={() => setPhase("mode")} className="w-fit text-sm font-bold uppercase tracking-[0.3em] text-accent">
               ← {tx.changeMode}
             </button>
-            <h1 className="h text-4xl leading-tight md:text-6xl">{tx.heading}</h1>
-            <p className="max-w-2xl text-lg text-mute">{tx.lead}</p>
+            <h1 className="h text-4xl leading-tight md:text-6xl">{client ? tx.clientHeading : tx.heading}</h1>
+            <p className="max-w-2xl text-lg text-mute">{client ? tx.clientLead : tx.lead}</p>
             {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance, locale)}</p> : null}
           </div>
 
+          {!client ? (
           <VideoSourcePicker
             file={videoFile}
             onFile={setVideoFile}
@@ -650,14 +704,17 @@ export function CameraRecordScreen({
             analysis={analysis}
             onAnalysis={chooseAnalysis}
           />
+          ) : null}
 
           <Section title={tx.howSpeak}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Choice active={!prefs.micMode} onClick={() => prefs.onMic(false)} title={tx.noMic[0]} text={tx.noMic[1]} />
-              <Choice active={prefs.micMode} onClick={() => prefs.onMic(true)} title={tx.withMic[0]} text={tx.withMic[1]} />
-            </div>
+            {!client ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Choice active={!prefs.micMode} onClick={() => prefs.onMic(false)} title={tx.noMic[0]} text={tx.noMic[1]} />
+                <Choice active={prefs.micMode} onClick={() => prefs.onMic(true)} title={tx.withMic[0]} text={tx.withMic[1]} />
+              </div>
+            ) : null}
             {!videoMode ? (
-              <div className="mt-6">
+              <div className={client ? "" : "mt-6"}>
                 <PhoneMicPanel phone={phone} level={recorder.level} mic={recorder.media === "ready" ? "ready" : recorder.media === "missing" || recorder.media === "lost" ? "missing" : "other"} />
               </div>
             ) : null}
@@ -674,13 +731,39 @@ export function CameraRecordScreen({
           {!videoMode ? <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref="/app/nastavenia#plan" /> : null}
           <LanguagePicker {...languageState} />
           <OutlineEditor {...outlineState} />
-          <QaSettings {...qa} />
+          {client ? (
+            <Section title={tx.clientQuestions}>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={tx.clientQuestions}>
+                {Array.from({ length: CLIENT_MAX_QUESTIONS }, (_, i) => i + 1).map((n) => {
+                  const allowed = n <= maxClientQuestions;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={clientCount === n}
+                      disabled={!allowed}
+                      onClick={() => chooseClientCount(n)}
+                      className={`h-11 w-11 rounded-full border-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:border-dashed disabled:opacity-40 ${
+                        clientCount === n && allowed ? "border-signal bg-signal/10 text-paper" : "border-line text-mute hover:border-faint"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-sm text-mute">{tx.clientQuestionsNote(maxClientQuestions)}</p>
+            </Section>
+          ) : (
+            <QaSettings {...qa} />
+          )}
 
           {!videoMode ? (
             <>
               <section className="rounded-3xl border border-line p-5 md:p-6">
                 <ul className="grid gap-2 text-mute sm:grid-cols-3">
-                  {tx.before.map((tip) => (
+                  {(client ? tx.clientBefore : tx.before).map((tip) => (
                     <li key={tip}>• {tip}</li>
                   ))}
                 </ul>

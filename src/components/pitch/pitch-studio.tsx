@@ -10,6 +10,7 @@ import { PI_BACKGROUND } from "@/components/pitch/pi-topbar";
 import { useLiveTranscript } from "@/components/pitch/use-live-transcript";
 import { Wordmark } from "@/components/wordmark";
 import type { TalkMode } from "@/lib/coach/modes";
+import { useClientQuestions, type MeetingSetup } from "@/components/pitch/client-questions";
 import type { FeedbackState, Status } from "@/lib/coach/pose/feedback";
 import type { Metrics } from "@/lib/coach/pose/metrics";
 import { STATUS_COLOR, STATUS_TEXT } from "@/lib/coach/pose/renderer";
@@ -245,6 +246,7 @@ export function PitchStudio({
   language = "sk",
   file = null,
   quiet = false,
+  meeting = null,
   ruleFilter,
   onLive,
   onPause,
@@ -268,6 +270,8 @@ export function PitchStudio({
   file?: File | null;
   /** len analýza videa: bez zvuku, rád a titulkov, iba priebeh */
   quiet?: boolean;
+  /** stretnutie s klientom: otázky počas výkladu */
+  meeting?: MeetingSetup | null;
   ruleFilter: (id: string) => boolean;
   /** začiatok nahrávania; pri nahratom videe dostane zvuk videa */
   onLive?: (sourceAudio: MediaStream | null) => void;
@@ -305,6 +309,12 @@ export function PitchStudio({
     },
   });
   const { phase, fb, metrics, count, waitingForPerson, elapsedMs, durationMs, stageApi } = session;
+  const client = useClientQuestions({ meeting, live: phase === "live", elapsedMs, durationMs, pause: session.pause, resume: session.resume });
+  /** Koniec: rozpracovaná odpoveď klientovi sa uloží. */
+  const finishAll = async () => {
+    if (client.active) await client.finishAnswer();
+    void session.finish();
+  };
   const recording = phase === "live";
   // živé titulky počúvajú mikrofón v miestnosti, pri nahratom videe by nesedeli
   const transcript = useLiveTranscript(recording && !file, LANGUAGE_INFO[language].bcp47);
@@ -346,7 +356,7 @@ export function PitchStudio({
   }, []);
   const stop = () => {
     exitFull();
-    void session.finish();
+    void finishAll();
   };
 
   const [ownPoints, setPoints] = useState<Point[]>(defaultPoints);
@@ -413,7 +423,7 @@ export function PitchStudio({
           <button
             type="button"
             className="btn btn-p"
-            onClick={() => void session.finish()}
+            onClick={() => void finishAll()}
             disabled={phase !== "live" && phase !== "paused"}
             style={{ minHeight: "44px", padding: "10px 18px", fontSize: "14px", opacity: phase === "live" || phase === "paused" ? 1 : 0.4 }}
           >
@@ -592,6 +602,8 @@ export function PitchStudio({
                 )}
               </div>
 
+
+              {client.overlay}
 
               {quiet && (phase === "live" || phase === "paused") ? (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-5 bg-[#17142e]/95 px-6 text-center text-white">

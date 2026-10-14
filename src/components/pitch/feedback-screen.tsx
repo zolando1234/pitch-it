@@ -68,6 +68,7 @@ const FB = {
     done: "Hotovo.",
     mentorSees: "Mentor teraz vidí tvoj pokus a ďalšie, ktoré spravíš.",
     plan: "Osnova prezentácie",
+    clientChip: "Stretnutie s klientom",
     planHint: "Téma a body, podľa ktorých sme prejav hodnotili. Rozklikni.",
     planTopic: "Téma",
     planPoints: "Osnova",
@@ -156,6 +157,7 @@ const FB = {
     done: "Done.",
     mentorSees: "Your mentor can now see this attempt and the ones you make next.",
     plan: "Presentation outline",
+    clientChip: "Client meeting",
     planHint: "The topic and points we scored your talk against. Click to open.",
     planTopic: "Topic",
     planPoints: "Outline",
@@ -285,6 +287,8 @@ const QA_TX = {
   sk: {
     title: "Q&A",
     sub: "Odpovede na otázky po prejave",
+    clientTitle: "Otázky klienta",
+    clientSub: "Odpovede na otázky počas stretnutia",
     avg: "priemer odpovedí",
     answer: "Tvoja odpoveď",
     none: "Bez odpovede.",
@@ -295,6 +299,8 @@ const QA_TX = {
   en: {
     title: "Q&A",
     sub: "Your answers to the questions after the talk",
+    clientTitle: "Client questions",
+    clientSub: "Your answers to the questions during the meeting",
     avg: "average of answers",
     answer: "Your answer",
     none: "No answer.",
@@ -304,16 +310,16 @@ const QA_TX = {
   },
 };
 
-function QaCard({ qa }: { qa: QaResult }) {
+function QaCard({ qa, client = false }: { qa: QaResult; client?: boolean }) {
   const locale = useLocale();
   const tx = QA_TX[locale];
   return (
     <section className="card rv" style={{ animationDelay: "450ms" }} aria-labelledby="qa-nadpis">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
         <h2 id="qa-nadpis" className="h" style={{ fontSize: "26px" }}>
-          9 · {tx.title}
+          9 · {client ? tx.clientTitle : tx.title}
         </h2>
-        <span className="muted">{tx.sub}</span>
+        <span className="muted">{client ? tx.clientSub : tx.sub}</span>
       </div>
       {qa.score !== null ? (
         <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "16px" }}>
@@ -466,6 +472,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span className="chip">{data.targetSeconds >= 60 ? `${Math.round((data.targetSeconds / 60) * 10) / 10} min` : `${data.targetSeconds} s`}</span>
               <span className="chip">{data.languageLabel}</span>
+              {data.mode === "client" ? <span className="chip">{tx.clientChip}</span> : null}
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -822,7 +829,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
           ) : null}
 
           {/* 9 · Q&A */}
-          {data.qa ? <QaCard qa={data.qa} /> : null}
+          {data.qa ? <QaCard qa={data.qa} client={data.mode === "client"} /> : null}
         </div>
 
         <div className="card" id="zdielat" style={{ marginTop: "20px", padding: "28px" }}>

@@ -8,7 +8,7 @@ import { parseLocale } from "@/lib/i18n/locale";
 import { getLocale } from "@/lib/i18n/server";
 import { contextForPrompt } from "@/lib/pitch/context";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
-import { ANSWERS_SYSTEM, answerScoreSchema, buildAnswersPrompt, buildQaResult, QA_ANSWER_MAX_MS, QA_MAX_QUESTIONS, type AnswerScore } from "@/lib/pitch/qa";
+import { ANSWERS_SYSTEM, answerScoreSchema, buildAnswersPrompt, buildQaResult, MAX_ANSWERS, QA_ANSWER_MAX_MS, type AnswerScore } from "@/lib/pitch/qa";
 import { MAX_SEGMENTS, mergeSegments } from "@/lib/pitch/segment-merge";
 import { dropSegments, loadSegments } from "@/lib/pitch/segments";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
@@ -27,7 +27,7 @@ const bodySchema = z.object({
       }),
     )
     .min(1)
-    .max(QA_MAX_QUESTIONS),
+    .max(MAX_ANSWERS),
 });
 
 /** Vyhodnotenie Q&A po prejave: odpovede (prepísané úseky) → skóre a rady ku každej. */
@@ -64,7 +64,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/pitch/[atte
           messages: [{ role: "user", content: buildAnswersPrompt({ answers, language: LANGUAGE_INFO[language].english, feedbackLocale: ui, context: contextForPrompt(context) }) }],
           schema: answerScoreSchema,
           effort: "low",
-          maxTokens: 2_000,
+          maxTokens: 3_500,
           speed: "interactive",
         });
         scores = result.data;

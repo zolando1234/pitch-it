@@ -52,7 +52,7 @@ const TX = {
 const fmt = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`;
 
 /** Prečíta otázku: ElevenLabs, pri chybe hlas prehliadača. Resolve po dočítaní. */
-async function speak(text: string, language: PitchLanguage, cache: Map<string, string>): Promise<void> {
+export async function speak(text: string, language: PitchLanguage, cache: Map<string, string>): Promise<void> {
   try {
     let url = cache.get(text);
     if (!url) {

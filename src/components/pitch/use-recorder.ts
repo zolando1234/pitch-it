@@ -23,6 +23,8 @@ export type RecorderSetup = {
   language?: PitchLanguage;
   /** jazyk rozhrania (hlášky a spätná väzba od AI) */
   uiLocale?: "sk" | "en";
+  /** typ tréningu */
+  mode?: "public" | "client";
 };
 
 /** Hotová nahrávka: úseky sú už odoslané pod `draftId`. */
@@ -189,10 +191,13 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     setStream(null);
   }, []);
 
+  /** Priebežný prepis: koncept a koľko úsekov už odišlo (otázky klienta počas výkladu). */
+  const draft = useCallback(() => (uploaderRef.current ? { draftId: uploaderRef.current.draftId, segments: uploaderRef.current.count } : null), []);
+
   /** Je mikrofón práve pripojený (kontrola tesne pred štartom). */
   const micLive = useCallback(() => hasLiveAudio(streamRef.current), []);
 
-  return { media, stream, level, open, attach, start, pause, resume, stop, discard, release, micLive };
+  return { media, stream, level, open, attach, start, pause, resume, stop, discard, release, micLive, draft };
 }
 
 /** Výsledok odoslania na analýzu. */
@@ -214,6 +219,7 @@ export async function uploadPitch(
   form.set("focus", setup.focus);
   form.set("language", setup.language ?? "sk");
   if (setup.uiLocale) form.set("uiLocale", setup.uiLocale);
+  if (setup.mode) form.set("mode", setup.mode);
   if (coach) form.set("coach", JSON.stringify(coach));
   if (outline) form.set("outline", JSON.stringify(outline));
   try {

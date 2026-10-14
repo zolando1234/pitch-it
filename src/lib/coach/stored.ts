@@ -17,6 +17,8 @@ export const storedCoachSchema = z.object({
   version: z.literal(2),
   teleprompter: z.boolean(),
   micMode: z.boolean(),
+  /** stretnutie za stolom: bez pravidiel pódia a nôh */
+  seated: z.boolean().optional(),
   summary: z.object({
     durationMs: z.number().min(0),
     personMs: z.number().min(0),
@@ -46,11 +48,12 @@ function downsample<T>(arr: T[], max: number): T[] {
 }
 
 /** Zo súhrnu tréningu spraví malý záznam na odoslanie (bez fotiek). */
-export function toStoredCoach(summary: SessionSummary, opts: { teleprompter: boolean; micMode: boolean }): StoredCoach {
+export function toStoredCoach(summary: SessionSummary, opts: { teleprompter: boolean; micMode: boolean; seated?: boolean }): StoredCoach {
   return {
     version: 2,
     teleprompter: opts.teleprompter,
     micMode: opts.micMode,
+    ...(opts.seated ? { seated: true } : {}),
     summary: {
       ...summary,
       issues: summary.issues.slice(0, 60),
@@ -67,7 +70,7 @@ export function fromStoredCoach(stored: StoredCoach): SessionSummary {
 
 /** Výsledné skóre pitchu: hodnotia sa všetky pravidlá ako pri bežnom prejave. */
 export function finalScoreFor(stored: StoredCoach, locale: "sk" | "en" = "sk"): FinalScore {
-  return computeFinalScore(fromStoredCoach(stored), ruleFilterFor(TALK_MODES[0], stored.teleprompter), locale);
+  return computeFinalScore(fromStoredCoach(stored), ruleFilterFor(TALK_MODES[0], stored.teleprompter, stored.seated ?? false), locale);
 }
 
 export function parseStoredCoach(value: unknown): StoredCoach | null {

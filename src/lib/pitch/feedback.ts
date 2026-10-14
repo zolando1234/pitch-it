@@ -39,6 +39,8 @@ export type FeedbackData = {
   /** jazyk prejavu, napr. „Slovenčina“ */
   languageLabel: string;
   targetSeconds: number;
+  /** typ tréningu */
+  mode: "public" | "client";
   retryHref: string;
   /** téma a osnova pred nahrávaním (v reporte zbalené) */
   plan: { topic: string; points: string[] } | null;
@@ -314,6 +316,7 @@ export function buildFeedback(
     number: extra.number,
     languageLabel: en ? LANGUAGE_INFO[parseLanguage(attempt.language)].english : LANGUAGE_INFO[parseLanguage(attempt.language)].label,
     targetSeconds: attempt.target_seconds,
+    mode: attempt.mode === "client" ? "client" : "public",
     retryHref: extra.retryHref,
     plan: outlineResult && (outlineResult.topic || outlineResult.points.length) ? { topic: outlineResult.topic, points: outlineResult.points } : null,
     topic,

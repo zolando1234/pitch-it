@@ -131,6 +131,7 @@ export async function POST(request: Request) {
       outline,
       language: parseLanguage(form.get("language")),
       uiLocale: parseLocale(form.get("uiLocale")) ?? (await getLocale()),
+      mode: form.get("mode") === "client" ? "client" : "public",
     });
     // celý výsledok ide aj klientovi, feedback sa tak zobrazí aj bez trvalého úložiska
     return apiOk({ attemptId: attempt.id, attempt }, 201);

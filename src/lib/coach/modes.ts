@@ -146,10 +146,17 @@ export const DRILLS: Drill[] = [
 /** pravidlá, ktoré platia vždy (nastavenie kamery a mikrofónu) */
 const ALWAYS_ON = new Set(["too-close", "too-far", "mic-away"]);
 
+/**
+ * Pri stretnutí za stolom sa sedí: neplatí pohyb po pódiu, postoj a nohy, ani ruky dole
+ * (na stole ležia nižšie ako power zóna na pódiu).
+ */
+export const SEATED_OFF = new Set(["edge", "pacing", "sway", "rooted", "legs-crossed", "narrow-stance", "hands-low"]);
+
 /** Ktoré pravidlá sa v danom režime ozývajú. */
-export function ruleFilterFor(mode: SessionMode, teleprompter: boolean): (id: string) => boolean {
+export function ruleFilterFor(mode: SessionMode, teleprompter: boolean, seated = false): (id: string) => boolean {
   const focus = mode.kind === "drill" ? new Set(mode.focusRules) : null;
   return (id) => {
+    if (seated && SEATED_OFF.has(id)) return false;
     // pri čítaní z telepromptra sa prirodzene pozeráš stále do stredu
     if (teleprompter && id === "gaze-stuck") return false;
     if (!focus) return true;

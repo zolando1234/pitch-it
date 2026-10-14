@@ -72,6 +72,8 @@ export type PitchInput = {
   language?: PitchLanguage;
   /** jazyk rozhrania: v ňom sú chybové hlášky aj spätná väzba od AI */
   uiLocale?: "sk" | "en";
+  /** typ tréningu: verejné vystúpenie alebo stretnutie s klientom */
+  mode?: "public" | "client";
 };
 
 /**
@@ -122,7 +124,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     target_seconds: input.targetSeconds,
     focus: input.focus,
     with_camera: Boolean(input.vision?.length || input.coach),
-    mode: "public",
+    mode: input.mode ?? "public",
     duration_ms: input.durationMs,
   });
 
@@ -188,7 +190,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
               role: "user",
               content: buildSpeechPrompt({
                 sentences,
-                audience: AUDIENCE_BRIEF[input.audience],
+                audience: input.mode === "client" ? "klient na obchodnom stretnutí za stolom (rečník mu vysvetľuje ponuku; klient ho priebežne prerušuje otázkami)" : AUDIENCE_BRIEF[input.audience],
                 targetSeconds: input.targetSeconds,
                 durationMs: input.durationMs,
                 language: LANGUAGE_INFO[language].english,

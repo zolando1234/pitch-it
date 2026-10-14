@@ -8,6 +8,10 @@ import type { PitchLanguage } from "@/lib/pitch/language";
 */
 
 export const QA_MAX_QUESTIONS = 4;
+/** otázky klienta počas stretnutia */
+export const CLIENT_MAX_QUESTIONS = 10;
+/** najviac hodnotených odpovedí (Q&A aj stretnutie s klientom) */
+export const MAX_ANSWERS = CLIENT_MAX_QUESTIONS;
 /** najdlhšia odpoveď na jednu otázku */
 export const QA_ANSWER_MAX_MS = 120_000;
 
@@ -20,6 +24,13 @@ Po prejave kladieš otázky, ktoré by reálne padli v Q&A: overujú tvrdenia, p
 alebo na to, čo v prejave chýbalo. Každá otázka je krátka (jedna veta, najviac 25 slov), konkrétna a týka sa témy.
 Neopakuj rovnaký typ otázky. Žiadne úvody ani číslovanie, iba text otázky.`;
 
+/** Otázky klienta počas stretnutia: prerušia výklad a viažu sa na to, čo práve zaznelo. */
+export const CLIENT_QUESTIONS_SYSTEM = `Si klient na obchodnom stretnutí za stolom. Rečník ti vysvetľuje svoju ponuku, produkt alebo riešenie
+a ty ho v prirodzenej chvíli prerušíš otázkou, ako to robia skutoční klienti: čo to znamená pre tvoju firmu, koľko to stojí, ako dlho trvá zavedenie,
+aké sú riziká, ako je to v porovnaní s tým, čo používaš teraz, alebo si necháš vysvetliť niečo, čo nebolo jasné.
+Otázka sa musí viazať na to, čo rečník povedal naposledy (koniec prepisu), nie na niečo, čo ešte nezaznelo.
+Jedna krátka veta, najviac 25 slov, hovorovo, bez úvodov a bez číslovania. Neopakuj otázky, ktoré už padli.`;
+
 export function buildQuestionsPrompt(input: {
   count: number;
   language: string;
@@ -29,13 +40,23 @@ export function buildQuestionsPrompt(input: {
   transcript?: string | null;
   /** náhodné semienko, aby sa otázky pri ďalšom pokuse menili */
   seed: number;
+  /** otázky, ktoré už padli (stretnutie s klientom) */
+  asked?: string[];
+  /** klient prerušuje počas výkladu: dôležitý je koniec prepisu */
+  client?: boolean;
 }): string {
+  const transcript = input.transcript?.trim() ?? "";
   return [
     `Polož presne ${input.count} ${input.count === 1 ? "otázku" : "otázky"}. Otázky napíš v jazyku: ${input.language}.`,
     input.topic ? `Téma prejavu:\n"""${input.topic.slice(0, 1500)}"""` : null,
     input.outline?.length ? `Osnova:\n${input.outline.map((p) => `- ${p}`).join("\n")}` : null,
     input.context ? `Podklady o firme a prezentácii:\n"""${input.context}"""` : null,
-    input.transcript ? `Čo v prejave zaznelo (prepis, môže byť neúplný):\n"""${input.transcript.slice(0, 6_000)}"""` : null,
+    transcript && input.client
+      ? `Čo rečník doteraz povedal (prepis; najdôležitejší je koniec, na ten nadviaž):\n"""${transcript.length > 6_000 ? `…${transcript.slice(-6_000)}` : transcript}"""`
+      : transcript
+        ? `Čo v prejave zaznelo (prepis, môže byť neúplný):\n"""${transcript.slice(0, 6_000)}"""`
+        : null,
+    input.asked?.length ? `Už položené otázky (neopakuj ich ani ich obmenu):\n${input.asked.map((q) => `- ${q}`).join("\n")}` : null,
     !input.topic && !input.context && !input.transcript ? "O téme nič nevieme: polož všeobecné otázky, aké padajú po prezentácii projektu." : null,
     `Variant ${input.seed}: vyber iné uhly pohľadu ako pri bežných otázkach.`,
   ]
@@ -47,14 +68,14 @@ export const answerScoreSchema = z.object({
   answers: z
     .array(
       z.object({
-        index: z.number().int().min(0).max(QA_MAX_QUESTIONS - 1),
+        index: z.number().int().min(0).max(MAX_ANSWERS - 1),
         score: z.number().int().min(0).max(10),
         strength: z.string().max(280),
         improve: z.string().min(1).max(280),
       }),
     )
     .min(1)
-    .max(QA_MAX_QUESTIONS),
+    .max(MAX_ANSWERS),
   summary: z.string().min(1).max(400),
 });
 export type AnswerScore = z.infer<typeof answerScoreSchema>;
