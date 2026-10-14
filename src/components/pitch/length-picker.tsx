@@ -62,8 +62,9 @@ export function LengthPicker({
     if (isValidLength(seconds)) choose(seconds);
   };
 
-  const chip = (active: boolean, locked: boolean, label: string, onClick: () => void, paidTag: boolean) => (
+  const chip = (key: string, active: boolean, locked: boolean, label: string, onClick: () => void, paidTag: boolean) => (
     <button
+      key={key}
       type="button"
       role="radio"
       aria-checked={active}
@@ -89,12 +90,12 @@ export function LengthPicker({
       </h2>
       <div className="mt-4 flex flex-wrap gap-2" role="radiogroup" aria-labelledby="dlzka-nadpis">
         {RECORD_LENGTHS.map((l) =>
-          chip(length === l && !customOpen, l > FREE_MAX_SECONDS && paidLocked, lengthLabel(l), () => {
+          chip(String(l), length === l && !customOpen, l > FREE_MAX_SECONDS && paidLocked, lengthLabel(l), () => {
             setCustomOpen(false);
             choose(l);
           }, l > FREE_MAX_SECONDS),
         )}
-        {chip(showCustom, paidLocked, en ? "Custom" : "Vlastná", () => {
+        {chip("custom", showCustom, paidLocked, en ? "Custom" : "Vlastná", () => {
           setCustomOpen(true);
           applyMinutes(minutes);
         }, true)}
