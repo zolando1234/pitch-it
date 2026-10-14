@@ -6,17 +6,19 @@ import { parseLocale } from "@/lib/i18n/locale";
 import { getLocale } from "@/lib/i18n/server";
 import { analyzePitch, MAX_PITCH_AUDIO_BYTES, PitchServiceError } from "@/lib/pitch/service";
 import { AUDIENCES } from "@/lib/onboarding/plan";
-import { apiError, apiOk, handleRouteError, rateLimited, requireApiUser } from "@/lib/http/route";
+import { CUSTOM_MAX_SECONDS, isValidLength } from "@/lib/billing/pitch-pack";
+import { MAX_SEGMENTS } from "@/lib/pitch/segment-merge";
+import { apiError, apiOk, handleRouteError, isUuid, rateLimited, requireApiUser } from "@/lib/http/route";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
 
 export const maxDuration = 120;
 
-const AUDIO_TYPES = new Set(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-m4a", "video/webm"]);
+const AUDIO_TYPES = new Set(["audio/wav", "audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-m4a", "video/webm"]);
 
 const metaSchema = z.object({
-  durationMs: z.coerce.number().int().min(1_000).max(5 * 60 * 1000),
+  durationMs: z.coerce.number().int().min(1_000).max(CUSTOM_MAX_SECONDS * 1000 + 60_000),
   audience: z.enum(AUDIENCES),
-  targetSeconds: z.coerce.number().pipe(z.union([z.literal(30), z.literal(60), z.literal(180), z.literal(240)])),
+  targetSeconds: z.coerce.number().int().refine(isValidLength),
   focus: z.enum(["tempo", "fillery", "obsah"]),
 });
 
@@ -60,10 +62,15 @@ export async function POST(request: Request) {
 
   try {
     const form = await request.formData();
-    const audio = form.get("audio");
-    if (!(audio instanceof Blob)) return reject(400, "invalid_request", "Chýba nahrávka.", { audio: typeof audio });
-    const baseType = audio.type.split(";")[0];
-    if (!AUDIO_TYPES.has(baseType)) return reject(415, "unsupported", "Nepodporovaný formát nahrávky.", { type: audio.type });
+    // nový klient posiela úseky priebežne (draftId), starší celú nahrávku naraz
+    const draftId = String(form.get("draftId") ?? "");
+    const segmentCount = Number(form.get("segments") ?? 0);
+    const draft = isUuid(draftId) && Number.isInteger(segmentCount) && segmentCount >= 0 && segmentCount <= MAX_SEGMENTS ? { id: draftId, segments: segmentCount } : null;
+    const rawAudio = form.get("audio");
+    const audio = rawAudio instanceof Blob ? rawAudio : null;
+    if (!audio && !draft) return reject(400, "invalid_request", "Chýba nahrávka.", { audio: typeof rawAudio });
+    const baseType = audio ? audio.type.split(";")[0] : "audio/wav";
+    if (audio && !AUDIO_TYPES.has(baseType)) return reject(415, "unsupported", "Nepodporovaný formát nahrávky.", { type: audio.type });
     const rawMeta = Object.fromEntries(["durationMs", "audience", "targetSeconds", "focus"].map((k) => [k, form.get(k)]));
     const meta = metaSchema.safeParse(rawMeta);
     if (!meta.success) {
@@ -113,6 +120,7 @@ export async function POST(request: Request) {
     const extension = baseType === "audio/mp4" || baseType === "audio/x-m4a" ? "m4a" : baseType.split("/")[1];
     const attempt = await analyzePitch(user.id, {
       audio,
+      draft,
       fileName: `pitch.${extension}`,
       durationMs: meta.data.durationMs,
       audience: meta.data.audience,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Audience } from "@/lib/onboarding/plan";
+import { TRANSCRIPT_PROMPT_MAX } from "@/lib/pitch/outline";
 
 /*
   Obsahové skóre podľa pitch rubriky: Problém, Riešenie, Trh, Traction, Ask (0–10).
@@ -58,7 +59,7 @@ export function weakestCategory(content: ContentScore): ContentCategory {
   return [...orderedCategories(content)].sort((a, b) => a.score - b.score)[0].key;
 }
 
-export const CONTENT_SYSTEM = `Si skúsený mentor startupov a hodnotíš krátky nahraný pitch zakladateľa (30 sekúnd až 3 minúty) podľa rubriky.
+export const CONTENT_SYSTEM = `Si skúsený mentor startupov a hodnotíš nahraný prejav zakladateľa (od 30 sekúnd po desiatky minút) podľa rubriky.
 Hodnotíš iba to, čo v prepise naozaj zaznelo. Nič si nedomýšľaj a nevymýšľaj čísla.
 Kategórie: problem (Problém), solution (Riešenie), market (Trh), traction (Traction), ask (Ask – žiadosť: suma a na čo).
 Pre každú kategóriu daj celé skóre 0–10 (0 = vôbec nezaznelo, 5 = spomenuté všeobecne, 8+ = konkrétne s číslom alebo dôkazom)
@@ -81,8 +82,10 @@ export function buildContentPrompt(input: {
   notes: string | null;
   topic?: string | null;
   outline?: string[] | null;
-  /** jazyk pitchu v lokáli, napr. „angličtine“ */
+  /** jazyk pitchu po anglicky, napr. „English“ */
   language?: string | null;
+  /** podklady zo sekcie Dokumenty (o firme, prezentácia) */
+  context?: string | null;
   /** jazyk spätnej väzby (rozhranie) */
   feedbackLocale?: "sk" | "en";
 }): string {
@@ -92,13 +95,16 @@ export function buildContentPrompt(input: {
     `Cieľová dĺžka: ${input.targetSeconds} sekúnd.`,
     input.feedbackLocale === "en"
       ? "IMPORTANT: Write every advice text in English (informal, friendly second person), regardless of the pitch language or the instructions above."
-      : input.language && input.language !== "slovenčine"
-        ? `Pitch je v ${input.language}. Hodnoť ho v tomto jazyku, spätnú väzbu (advice) však píš po slovensky.`
+      : input.language && input.language !== "Slovak"
+        ? `Pitch je v jazyku: ${input.language}. Hodnoť ho v tomto jazyku, spätnú väzbu (advice) však píš po slovensky.`
         : null,
     input.topic ? `Téma pitchu (záväzné zadanie od zakladateľa):\n"""${input.topic.slice(0, 1500)}"""` : null,
     input.outline?.length ? `Osnova, ktorú si zakladateľ pripravil:\n${input.outline.map((p) => `- ${p}`).join("\n")}` : null,
+    input.context
+      ? `Podklady, ktoré zakladateľ nahral o firme a prezentácii (fakty; porovnaj, čo z nich v prejave naozaj zaznelo, a rady opri o ne):\n"""${input.context}"""`
+      : null,
     input.notes ? `Poznámky, ktoré si zakladateľ pripravil (porovnaj, čo z nich naozaj povedal):\n"""${input.notes.slice(0, 4000)}"""` : null,
-    `Prepis pitchu:\n"""${input.transcript.slice(0, 12000)}"""`,
+    `Prepis pitchu:\n"""${input.transcript.slice(0, TRANSCRIPT_PROMPT_MAX)}"""`,
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -1,43 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
 import type { PitchAttemptRow } from "@/lib/db/types";
 import { keepLocalAttempt } from "@/lib/pitch/local-attempt";
 import type { PitchLanguage } from "@/lib/pitch/language";
 import type { PitchOutline } from "@/lib/pitch/outline";
+import { SegmentUploader, startCapture, type SpeechCapture } from "@/components/pitch/speech-capture";
 
 /*
-  Nahrávanie pitchu v prehliadači: mikrofón (a voliteľne kamera), úroveň hlasu pre vlnu,
-  MediaRecorder na audio a odoslanie na /api/pitch. Nahrávka sa nikde neukladá.
+  Nahrávanie prejavu v prehliadači: mikrofón (alebo zvuk z mobilu či videa), úroveň hlasu
+  pre vlnu a priebežné posielanie ~30-sekundových úsekov na prepis. Na konci sa pošle už len
+  súhrn a server spojí prepísané úseky. Nahrávka sa nikde neukladá.
 */
 
 export type RecorderSetup = {
   audience: "investor" | "jury" | "customer" | "team";
-  targetSeconds: 30 | 60 | 180 | 240;
+  /** cieľová dĺžka v sekundách */
+  targetSeconds: number;
   focus: "tempo" | "fillery" | "obsah";
-  /** jazyk pitchu; bez neho slovenčina */
+  /** jazyk prejavu; bez neho slovenčina */
   language?: PitchLanguage;
   /** jazyk rozhrania (hlášky a spätná väzba od AI) */
   uiLocale?: "sk" | "en";
 };
 
-export type MediaState = "idle" | "requesting" | "ready" | "denied" | "unsupported";
+/** Hotová nahrávka: úseky sú už odoslané pod `draftId`. */
+export type Recording = { draftId: string; segments: number; durationMs: number };
 
-function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find((type) => MediaRecorder.isTypeSupported(type));
-}
+export type MediaState = "idle" | "requesting" | "ready" | "denied" | "unsupported";
 
 export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   const [media, setMedia] = useState<MediaState>("idle");
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [level, setLevel] = useState(0);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const startedAtRef = useRef(0);
-  const pausedAtRef = useRef(0);
+  const captureRef = useRef<SpeechCapture | null>(null);
+  const uploaderRef = useRef<SegmentUploader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -110,58 +108,43 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     };
   }, []);
 
-  const start = useCallback(() => {
+  /** Začne nahrávať; úseky idú hneď na prepis. Vráti false, ak zvuk nie je k dispozícii. */
+  const start = useCallback(async (language: PitchLanguage) => {
     const current = streamRef.current;
-    if (!current) return false;
-    const audioOnly = new MediaStream(current.getAudioTracks());
-    const mimeType = pickMimeType();
-    chunksRef.current = [];
-    let recorder: MediaRecorder;
+    if (!current || !current.getAudioTracks().length) return false;
+    const uploader = new SegmentUploader(crypto.randomUUID(), language);
     try {
-      // 64 kb/s stačí na reč a 4-minútový pitch ostane pod limitom požiadavky na Verceli (4,5 MB)
-      recorder = new MediaRecorder(audioOnly, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 64_000 });
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      };
-      recorder.start(1000);
+      captureRef.current = await startCapture(current, (segment) => uploader.add(segment));
     } catch {
       // mikrofón medzitým vypadol; volajúci pokračuje bez zvuku
       return false;
     }
-    recorderRef.current = recorder;
-    startedAtRef.current = performance.now();
-    pausedAtRef.current = 0;
+    uploaderRef.current = uploader;
     return true;
   }, []);
 
-  /** Pauza: čas pauzy sa nezapočíta do dĺžky nahrávky. */
-  const pause = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (recorder?.state !== "recording") return;
-    recorder.pause();
-    pausedAtRef.current = performance.now();
+  /** Pauza: čas pauzy sa do nahrávky nezapočíta. */
+  const pause = useCallback(() => captureRef.current?.pause(), []);
+  const resume = useCallback(() => captureRef.current?.resume(), []);
+
+  /** Zastaví nahrávanie a počká, kým sa odošlú všetky úseky. */
+  const stop = useCallback(async (): Promise<(Recording & { complete: boolean }) | null> => {
+    const capture = captureRef.current;
+    const uploader = uploaderRef.current;
+    captureRef.current = null;
+    uploaderRef.current = null;
+    if (!capture || !uploader) return null;
+    const durationMs = await capture.stop();
+    const complete = await uploader.finish();
+    return { draftId: uploader.draftId, segments: uploader.count, durationMs, complete };
   }, []);
 
-  const resume = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (recorder?.state !== "paused") return;
-    recorder.resume();
-    startedAtRef.current += performance.now() - pausedAtRef.current;
-    pausedAtRef.current = 0;
+  /** Zahodí rozbehnuté nahrávanie (bez čakania na odoslanie). */
+  const discard = useCallback(() => {
+    void captureRef.current?.stop();
+    captureRef.current = null;
+    uploaderRef.current = null;
   }, []);
-
-  /** Zastaví nahrávanie a vráti audio s dĺžkou. */
-  const stop = useCallback(
-    () =>
-      new Promise<{ audio: Blob; durationMs: number } | null>((resolve) => {
-        const recorder = recorderRef.current;
-        if (!recorder || recorder.state === "inactive") return resolve(null);
-        const durationMs = Math.round((pausedAtRef.current || performance.now()) - startedAtRef.current);
-        recorder.onstop = () => resolve({ audio: new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }), durationMs });
-        recorder.stop();
-      }),
-    [],
-  );
 
   const release = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -170,26 +153,28 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     setStream(null);
   }, []);
 
-  return { media, stream, level, open, attach, start, pause, resume, stop, release };
+  return { media, stream, level, open, attach, start, pause, resume, stop, discard, release };
 }
 
-/** Odošle nahrávku na analýzu. Vráti id pokusu alebo chybovú správu. */
+/** Výsledok odoslania na analýzu. */
+export type UploadResult = { ok: true; attemptId: string } | { ok: false; message: string; retryable: boolean };
+
+/** Dokončí analýzu: server spojí prepísané úseky a vyhodnotí prejav. */
 export async function uploadPitch(
-  recording: { audio: Blob; durationMs: number },
+  recording: Recording,
   setup: RecorderSetup,
-  vision: VisionSample[] | null,
   coach: StoredCoach | null = null,
   outline: PitchOutline | null = null,
-): Promise<{ ok: true; attemptId: string } | { ok: false; message: string; retryable: boolean }> {
+): Promise<UploadResult> {
   const form = new FormData();
-  form.set("audio", recording.audio, "pitch");
+  form.set("draftId", recording.draftId);
+  form.set("segments", String(recording.segments));
   form.set("durationMs", String(Math.max(1000, recording.durationMs)));
   form.set("audience", setup.audience);
   form.set("targetSeconds", String(setup.targetSeconds));
   form.set("focus", setup.focus);
   form.set("language", setup.language ?? "sk");
   if (setup.uiLocale) form.set("uiLocale", setup.uiLocale);
-  if (vision?.length) form.set("vision", JSON.stringify(vision));
   if (coach) form.set("coach", JSON.stringify(coach));
   if (outline) form.set("outline", JSON.stringify(outline));
   try {
@@ -200,7 +185,7 @@ export async function uploadPitch(
       return { ok: true, attemptId: data.attemptId };
     }
     const fallback = setup.uiLocale === "en" ? "The analysis failed. Try again." : "Analýza zlyhala. Skús to znova.";
-    return { ok: false, message: data?.error?.message ?? fallback, retryable: response.status >= 500 || !data };
+    return { ok: false, message: data?.error?.message ?? fallback, retryable: response.status >= 500 || response.status === 409 || !data };
   } catch {
     const message =
       setup.uiLocale === "en"

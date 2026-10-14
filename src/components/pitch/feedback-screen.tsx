@@ -130,6 +130,7 @@ const FB = {
   },
 };
 import type { PointStatus } from "@/lib/pitch/outline";
+import type { QaResult } from "@/lib/pitch/qa";
 
 /*
   Feedback 1:1 podľa dizajnu PitchIt („3 · Feedback“). Čísla nabehnú za 2,6 s (bez animácie
@@ -221,6 +222,84 @@ function StatusIcon({ status }: { status: PointStatus }) {
 }
 
 /** Zhoda s témou a osnovou, ktorú si founder uložil pred nahrávaním. */
+const QA_TX = {
+  sk: {
+    title: "Q&A",
+    sub: "Odpovede na otázky po prejave",
+    avg: "priemer odpovedí",
+    answer: "Tvoja odpoveď",
+    none: "Bez odpovede.",
+    seconds: (s: number) => `${s} s`,
+    fillers: (n: number) => `${n} ${n === 1 ? "vypĺňacie slovo" : n >= 2 && n <= 4 ? "vypĺňacie slová" : "vypĺňacích slov"}`,
+    improve: "Ako lepšie",
+  },
+  en: {
+    title: "Q&A",
+    sub: "Your answers to the questions after the talk",
+    avg: "average of answers",
+    answer: "Your answer",
+    none: "No answer.",
+    seconds: (s: number) => `${s} s`,
+    fillers: (n: number) => `${n} filler ${n === 1 ? "word" : "words"}`,
+    improve: "Do better",
+  },
+};
+
+function QaCard({ qa }: { qa: QaResult }) {
+  const locale = useLocale();
+  const tx = QA_TX[locale];
+  return (
+    <section className="card rv" style={{ animationDelay: "450ms", order: 4 }} aria-labelledby="qa-nadpis">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
+        <h2 id="qa-nadpis" className="h" style={{ fontSize: "26px" }}>
+          {tx.title}
+        </h2>
+        <span className="muted">{tx.sub}</span>
+      </div>
+      {qa.score !== null ? (
+        <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "16px" }}>
+          <span className="big">{locale === "en" ? qa.score.toFixed(1) : qa.score.toFixed(1).replace(".", ",")}</span>
+          <span className="muted">/ 10 · {tx.avg}</span>
+        </div>
+      ) : null}
+      {qa.summary ? <p style={{ margin: "10px 0 0", fontSize: "15px", lineHeight: "1.55" }}>{qa.summary}</p> : null}
+      <div style={{ marginTop: "12px" }}>
+        {qa.answers.map((a, i) => {
+          const tone = a.score === null ? null : a.score >= 7 ? "good" : a.score >= 4 ? "mid" : "low";
+          const color = tone ? SCORE_COLOR[tone] : null;
+          return (
+            <div key={i} style={{ padding: "18px 0", borderTop: "1px solid var(--color-line)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
+                <b style={{ fontSize: "16px", lineHeight: "1.4" }}>{a.question}</b>
+                {a.score !== null && color ? (
+                  <span className="h" style={{ fontSize: "24px", color: color.text, whiteSpace: "nowrap" }}>
+                    {a.score}
+                    <span className="muted" style={{ fontSize: "14px" }}>
+                      {" "}
+                      / 10
+                    </span>
+                  </span>
+                ) : null}
+              </div>
+              <p className="muted" style={{ margin: "8px 0 0", fontSize: "13px" }}>
+                {tx.answer} · {tx.seconds(Math.round(a.durationMs / 1000))}
+                {a.fillers ? ` · ${tx.fillers(a.fillers)}` : ""}
+              </p>
+              <p style={{ margin: "6px 0 0", fontSize: "14px", lineHeight: "1.55", fontStyle: "italic" }}>{a.transcript.trim() ? `„${a.transcript.trim()}“` : tx.none}</p>
+              {a.strength ? <p style={{ margin: "10px 0 0", fontSize: "14px", lineHeight: "1.55", color: "var(--color-mint)" }}>{a.strength}</p> : null}
+              {a.improve ? (
+                <p className="muted" style={{ margin: "6px 0 0", fontSize: "14px", lineHeight: "1.55" }}>
+                  <b>{tx.improve}:</b> {a.improve}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function OutlineCard({ outline, progress }: { outline: OutlineFeedback; progress: (delay: number, dur: number) => number }) {
   const tx = FB[useLocale()];
   const m = outline.match;
@@ -579,6 +658,8 @@ export function FeedbackScreen({ data, preview = false }: { data: FeedbackData; 
               )}
             </div>
           </section>
+
+          {data.qa ? <QaCard qa={data.qa} /> : null}
 
           {data.coach ? (
             <CoachFeedbackCard attemptId={data.attemptId} coach={data.coach} />

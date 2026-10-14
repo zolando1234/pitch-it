@@ -13,7 +13,7 @@ export type LlmEffort = "low" | "medium" | "high";
 
 export type StructuredRequest<T> = {
   /** Na čo volanie slúži (pre logy a metriky, nie pre model). */
-  purpose: "deck_analysis" | "report" | "hint" | "text_investor" | "exercise_evaluation" | "exercise_generation" | "pitch_content" | "pitch_outline";
+  purpose: "deck_analysis" | "report" | "hint" | "text_investor" | "exercise_evaluation" | "exercise_generation" | "pitch_content" | "pitch_outline" | "qa_questions" | "qa_evaluation" | "context_summary";
   system: string;
   messages: LlmMessage[];
   schema: z.ZodType<T>;

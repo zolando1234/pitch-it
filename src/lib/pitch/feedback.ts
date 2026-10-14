@@ -7,6 +7,7 @@ import { decimal, pausesLabel, TEMPO_ADVICE, TEMPO_ADVICE_EN, tempoPosition, tem
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
 import type { PitchAttemptRow } from "@/lib/db/types";
+import { parseQaResult, type QaResult } from "@/lib/pitch/qa";
 
 /*
   Dáta pre obrazovku Feedback (dizajn „3 · Feedback“), odvodené z uloženého pokusu.
@@ -43,6 +44,8 @@ export type FeedbackData = {
   coach: StoredCoach | null;
   /** Zhoda s témou a osnovou uloženou pred nahrávaním. */
   outline: OutlineFeedback | null;
+  /** Otázky po prejave a hodnotenie odpovedí. */
+  qa: QaResult | null;
   shared: boolean;
   shareDefaults: { name: string; team: string; email: string };
 };
@@ -218,6 +221,7 @@ export function buildFeedback(
         : null,
     coach: parseStoredCoach(body?.coach ?? null),
     outline: outlineFeedback(attempt.outline, locale),
+    qa: parseQaResult(attempt.qa),
     shared: attempt.shared_at !== null,
     shareDefaults: extra.shareDefaults ?? { name: "", team: "", email: "" },
   };
@@ -299,6 +303,7 @@ export const FEEDBACK_FIXTURE: FeedbackData = {
       ],
     },
   },
+  qa: null,
   shared: false,
   shareDefaults: { name: "", team: "", email: "" },
 };

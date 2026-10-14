@@ -42,7 +42,7 @@ function Hero({ recordHref, en }: { recordHref: string; en: boolean }) {
           <span className="block text-accent">{en ? "starts here" : "začína tu"}</span>
         </h2>
         <p className="mt-3 text-[15px] leading-relaxed text-slide sm:text-[16px]">
-          {en ? "Record a pitch on camera and get tailored feedback." : "Nahraj pitch pred kamerou a dostaneš spätnú väzbu na mieru."}
+          {en ? "Pick a training type, record yourself and get tailored feedback." : "Vyber typ tréningu, nahraj sa a dostaneš spätnú väzbu na mieru."}
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
           <Link
@@ -50,7 +50,7 @@ function Hero({ recordHref, en }: { recordHref: string; en: boolean }) {
             className="dash-cta inline-flex h-11 items-center gap-3 rounded-full bg-signal pr-5 pl-[26px] text-[15px] font-bold text-on-signal transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0"
         >
             <PlayIcon className="size-[17px]" />
-            {en ? "Record pitch" : "Nahrať pitch"}
+            {en ? "Start training" : "Začať tréning"}
             <Icon name="chevronRight" className="size-[18px]" strokeWidth={2.2} />
           </Link>
         </div>

@@ -89,7 +89,8 @@ export type StageApi = {
    * Nahraté video: spustí prehrávanie od začiatku a vráti zvuk videa ako MediaStream
    * (nahráva sa rovnako ako mikrofón). Volať priamo z kliknutia, inak prehliadač zvuk nepustí.
    */
-  playSource: () => Promise<MediaStream | null>;
+  /** spustí nahraté video; `muted` = bez zvuku (analýza na pozadí) */
+  playSource: (muted?: boolean) => Promise<MediaStream | null>;
 };
 
 type Props = {
@@ -266,9 +267,20 @@ export default function CameraStage({
   }, [micMode, micHand]);
 
   useImperativeHandle(ref, () => ({
-    async playSource() {
+    async playSource(muted = false) {
       const video = videoRef.current;
       if (!source || !video) return null;
+      if (muted) {
+        video.muted = true;
+        video.currentTime = 0;
+        try {
+          await video.play();
+          return new MediaStream();
+        } catch (e) {
+          console.error(e);
+          return null;
+        }
+      }
       try {
         if (!audioCtxRef.current) {
           // zvuk videa ide do nahrávania aj do reproduktorov (počuješ svoj pitch)

@@ -7,6 +7,7 @@ import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
 import { canUseLength, FREE_PITCHES, PITCH_PACK, formatEur } from "@/lib/billing/pitch-pack";
 import { getProfile } from "@/lib/db/profile";
+import { getPitchContext } from "@/lib/db/pitch-context";
 import { insertPitchAttempt, updatePitchAttempt } from "@/lib/db/pitch";
 import type { PitchAttemptRow } from "@/lib/db/types";
 import { consumePitch, getPitchBalance } from "@/lib/db/pitch-wallet";
@@ -14,13 +15,16 @@ import { recordUsage } from "@/lib/db/usage";
 import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
 import { buildContentPrompt, CONTENT_SYSTEM, contentScoreSchema, overallScore } from "@/lib/pitch/content";
-import { LANGUAGE_INFO, type PitchLanguage } from "@/lib/pitch/language";
+import { contextForPrompt } from "@/lib/pitch/context";
+import { LANGUAGE_INFO, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
+import { mergeSegments, missingSegments } from "@/lib/pitch/segment-merge";
+import { dropSegments, loadSegments } from "@/lib/pitch/segments";
 import { buildMetrics } from "@/lib/pitch/metrics";
 import { buildOutlinePrompt, OUTLINE_SYSTEM, outlineByKeywords, outlineCheckSchema, outlineFromCheck, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
 
 export class PitchServiceError extends Error {
   constructor(
-    readonly code: "invalid" | "transcription_failed" | "limit_reached",
+    readonly code: "invalid" | "transcription_failed" | "limit_reached" | "segments_missing",
     message: string,
     readonly status = 400,
   ) {
@@ -33,8 +37,11 @@ export class PitchServiceError extends Error {
 export const MAX_PITCH_AUDIO_BYTES = 8 * 1024 * 1024;
 
 export type PitchInput = {
-  audio: Blob;
+  /** celá nahrávka naraz (staršie klienty); inak úseky prepísané počas prejavu (draft) */
+  audio: Blob | null;
   fileName: string;
+  /** koncept s priebežne prepísanými úsekmi */
+  draft?: { id: string; segments: number } | null;
   durationMs: number;
   audience: PitchAttemptRow["audience"];
   targetSeconds: PitchAttemptRow["target_seconds"];
@@ -58,9 +65,19 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
   const ui = input.uiLocale ?? "sk";
   const L = (sk: string, en: string) => (ui === "en" ? en : sk);
   const hasBody = Boolean(input.vision?.length || input.coach);
+  const audioSize = input.audio?.size ?? 0;
+  const hasSpeech = audioSize > 0 || (input.draft?.segments ?? 0) > 0;
   // pokus s kamerou má reč tela aj bez zvuku, prázdny zvuk ho preto nezastaví
-  if ((input.audio.size === 0 && !hasBody) || input.audio.size > MAX_PITCH_AUDIO_BYTES) {
-    throw new PitchServiceError("invalid", L("Nahrávka je prázdna alebo príliš dlhá (najviac 4 minúty).", "The recording is empty or too long (4 minutes at most)."));
+  if ((!hasSpeech && !hasBody) || audioSize > MAX_PITCH_AUDIO_BYTES) {
+    throw new PitchServiceError("invalid", L("Nahrávka je prázdna alebo príliš veľká.", "The recording is empty or too large."));
+  }
+  // úseky prepísané počas prejavu; chýbajúce pošle prehliadač znova
+  const segments = input.draft ? await loadSegments(userId, input.draft.id, input.draft.segments) : [];
+  if (input.draft) {
+    const missing = missingSegments(segments.map((x) => x.index), input.draft.segments);
+    if (missing.length) {
+      throw new PitchServiceError("segments_missing", L("Časť nahrávky ešte nie je prepísaná. Skús to znova.", "Part of the recording isn't transcribed yet. Try again."), 409);
+    }
   }
   const balance = await getPitchBalance(userId);
   if (!canUseLength(input.targetSeconds, balance)) {
@@ -87,6 +104,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     target_seconds: input.targetSeconds,
     focus: input.focus,
     with_camera: Boolean(input.vision?.length || input.coach),
+    mode: "public",
     duration_ms: input.durationMs,
   });
 
@@ -95,7 +113,10 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
 
     let transcript: Awaited<ReturnType<typeof transcribeWithWords>> | null = null;
     try {
-      if (input.audio.size > 0) transcript = await transcribeWithWords(input.audio, input.fileName, language);
+      if (input.draft) {
+        const merged = mergeSegments(segments);
+        transcript = { text: merged.text, words: merged.words, provider: (merged.provider as SttProvider | null) ?? "elevenlabs" };
+      } else if (input.audio && input.audio.size > 0) transcript = await transcribeWithWords(input.audio, input.fileName, language);
     } catch (error) {
       const notConfigured = error instanceof TranscriptionError && error.code === "not_configured";
       if (!body) {
@@ -135,7 +156,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     const contentTask = async () => {
       if (!llm || !transcript) return;
       try {
-        const profile = await getProfile(userId);
+        const [profile, context] = await Promise.all([getProfile(userId), getPitchContext(userId)]);
         const result = await llm.generateStructured({
           purpose: "pitch_content",
           system: CONTENT_SYSTEM,
@@ -149,7 +170,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
                 notes: profile?.pitch_notes ?? null,
                 topic: outline?.topic || null,
                 outline: outline?.points ?? null,
-                language: LANGUAGE_INFO[language].adjective,
+                language: LANGUAGE_INFO[language].english,
+                context: contextForPrompt(context),
                 feedbackLocale: ui,
               }),
             },
@@ -177,7 +199,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
         const result = await llm.generateStructured({
           purpose: "pitch_outline",
           system: OUTLINE_SYSTEM,
-          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience, language: LANGUAGE_INFO[language].adjective, feedbackLocale: ui }) }],
+          messages: [{ role: "user", content: buildOutlinePrompt({ outline, transcript: transcript.text, audience: input.audience, language: LANGUAGE_INFO[language].english, feedbackLocale: ui }) }],
           schema: outlineCheckSchema,
           effort: "low",
           maxTokens: 3_000,
@@ -206,6 +228,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     await updatePitchAttempt(attempt.id, patch);
     // pitch sa započíta až po hotovej analýze
     await consumePitch(userId);
+    if (input.draft) await dropSegments(userId, input.draft.id, input.draft.segments).catch(() => {});
     await trackEvent(userId, "pitch_analyzed", {
       audience: input.audience,
       target: input.targetSeconds,

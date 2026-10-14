@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getElevenLabsSttConfig, getMistralTranscriptionConfig, getOpenAiRealtimeConfig } from "@/config/server-env";
-import { sttOrder, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
+import { LANGUAGE_INFO, sttOrder, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
 
 /*
   Prepis krátkej nahrávky z cvičenia (OpenAI Audio API, bez kľúča Mistral Voxtral).
@@ -50,7 +50,7 @@ export async function transcribeAudio(audio: Blob, fileName: string, language: "
 export type TimedTranscript = { text: string; words: Array<{ word: string; start: number; end: number }> };
 
 /** Nápoveda pre Whisper, aby zachoval zaváhania (inak ich vynecháva). */
-const HESITATION_HINT: Record<PitchLanguage, string> = {
+const HESITATION_HINT: Partial<Record<PitchLanguage, string>> = {
   sk: "Ehm, takže, akože… vlastne, no, eee.",
   cs: "Ehm, takže, jakoby… vlastně, no, eee.",
   en: "Um, uh, so, like… you know, basically.",
@@ -99,7 +99,7 @@ async function transcribeWithElevenLabs(audio: Blob, fileName: string, language:
   const form = new FormData();
   form.set("file", audio, fileName);
   form.set("model_id", config.model);
-  form.set("language_code", language);
+  form.set("language_code", LANGUAGE_INFO[language].scribe);
   form.set("timestamps_granularity", "word");
   form.set("tag_audio_events", "false");
 
@@ -148,7 +148,8 @@ async function transcribeWithWhisper(audio: Blob, fileName: string, language: Pi
   form.append("timestamp_granularities[]", "word");
   form.append("timestamp_granularities[]", "segment");
   // Nápoveda, aby model zachoval zaváhania (inak ich vynecháva).
-  form.set("prompt", HESITATION_HINT[language]);
+  const hint = HESITATION_HINT[language];
+  if (hint) form.set("prompt", hint);
 
   let response: Response;
   try {

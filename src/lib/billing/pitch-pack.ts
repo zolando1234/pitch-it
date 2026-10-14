@@ -54,16 +54,27 @@ export function balanceLabel(balance: PitchBalance, locale: "sk" | "en" = "sk"):
   return parts.length ? `Zostáva ti ${parts.join(" a ")}.` : "Nemáš žiadne pitche.";
 }
 
-/** Dĺžky nahrávania pitchu (sekundy). Najdlhšia je len pre platiacich (kúpený balík). */
+/** Predvolené dĺžky nahrávania (sekundy). Dlhšie ako 3 minúty sú len pre platiacich (kúpený balík). */
 export const RECORD_LENGTHS = [30, 60, 180, 240] as const;
-export type RecordLength = (typeof RECORD_LENGTHS)[number];
-export const PAID_LENGTH: RecordLength = 240;
+export type RecordLength = number;
+export const PAID_LENGTH = 240;
+/** najdlhšie bezplatné nahrávanie */
+export const FREE_MAX_SECONDS = 180;
+/** vlastná dĺžka (platená verzia): celé minúty */
+export const CUSTOM_MIN_SECONDS = 60;
+export const CUSTOM_MAX_SECONDS = 30 * 60;
 
 export function lengthLabel(seconds: number): string {
-  return seconds >= 60 ? `${seconds / 60} min` : `${seconds} s`;
+  return seconds >= 60 ? `${Math.round((seconds / 60) * 10) / 10} min` : `${seconds} s`;
 }
 
-/** 4-minútový pitch smie nahrať, kto má kúpené pitche (null = bez paywallu, napr. ukážka). */
+/** Platná dĺžka nahrávania: predvolená alebo vlastná v celých minútach. */
+export function isValidLength(seconds: number): boolean {
+  if ((RECORD_LENGTHS as readonly number[]).includes(seconds)) return true;
+  return Number.isInteger(seconds) && seconds % 60 === 0 && seconds >= CUSTOM_MIN_SECONDS && seconds <= CUSTOM_MAX_SECONDS;
+}
+
+/** Dlhšie ako 3 minúty smie nahrať, kto má kúpené pitche (null = bez paywallu). */
 export function canUseLength(seconds: number, balance: PitchBalance | null): boolean {
-  return seconds !== PAID_LENGTH || balance === null || balance.credits > 0;
+  return seconds <= FREE_MAX_SECONDS || balance === null || balance.credits > 0;
 }

@@ -53,6 +53,14 @@ export function getElevenLabsSttConfig(): { apiKey: string; model: string } | nu
   return apiKey ? { apiKey, model: read("ELEVENLABS_STT_MODEL") ?? "scribe_v2" } : null;
 }
 
+/** ElevenLabs hlas (otázky v Q&A). Flash v2.5 je rýchly a vie aj slovenčinu a maďarčinu. */
+export function getElevenLabsTtsConfig(): { apiKey: string; model: string; voiceId: string } | null {
+  const apiKey = read("ELEVENLABS_API_KEY");
+  return apiKey
+    ? { apiKey, model: read("ELEVENLABS_TTS_MODEL") ?? "eleven_flash_v2_5", voiceId: read("ELEVENLABS_VOICE_ID") ?? "JBFqnCBsd6RMkjVDRZzb" }
+    : null;
+}
+
 /** Mistral (Voxtral): náhradný prepis, keď chýba OPENAI_API_KEY. */
 export function getMistralTranscriptionConfig(): { apiKey: string; model: string } | null {
   const apiKey = read("MISTRAL_API_KEY");

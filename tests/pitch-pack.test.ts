@@ -33,6 +33,13 @@ describe("dĺžka pitchu", () => {
     assert.equal(canUseLength(240, { freeLeft: 0, credits: 5, canPitch: true }), true);
     assert.equal(canUseLength(180, { freeLeft: 1, credits: 0, canPitch: true }), true);
     assert.equal(canUseLength(240, null), true);
+    // vlastná dĺžka len v celých minútach do 30 min
+    const { isValidLength } = await import("../src/lib/billing/pitch-pack.ts");
+    assert.equal(isValidLength(30), true);
+    assert.equal(isValidLength(600), true);
+    assert.equal(isValidLength(90), false);
+    assert.equal(isValidLength(31 * 60), false);
+    assert.equal(canUseLength(600, { freeLeft: 3, credits: 0, canPitch: true }), false);
     assert.equal(lengthLabel(240), "4 min");
     assert.equal(lengthLabel(30), "30 s");
   });

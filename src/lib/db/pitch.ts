@@ -10,7 +10,7 @@ import { getAdminDb, getUserDb } from "@/lib/store/client";
   účastník vidí svoje pokusy, organizátor pokusy zdieľané do svojej akcie.
 */
 
-export async function insertPitchAttempt(row: Pick<PitchAttemptRow, "user_id" | "audience" | "target_seconds" | "focus" | "with_camera" | "duration_ms">): Promise<PitchAttemptRow> {
+export async function insertPitchAttempt(row: Pick<PitchAttemptRow, "user_id" | "audience" | "target_seconds" | "focus" | "with_camera" | "duration_ms" | "mode">): Promise<PitchAttemptRow> {
   const result = await getAdminDb().from("pitch_attempts").insert(row).select("*").single<PitchAttemptRow>();
   return must(result, "pitch.insert");
 }

@@ -1,3 +1,4 @@
+import type { PitchLanguage } from "@/lib/pitch/language";
 import type {
   Currency,
   EndReason,
@@ -281,8 +282,11 @@ export type PitchAttemptRow = {
   id: string;
   user_id: string;
   audience: "investor" | "jury" | "customer" | "team";
-  target_seconds: 30 | 60 | 180 | 240;
+  /** cieľová dĺžka v sekundách (predvolená alebo vlastná v celých minútach) */
+  target_seconds: number;
   focus: "tempo" | "fillery" | "obsah";
+  /** typ tréningu (zatiaľ len verejné vystúpenie) */
+  mode: "public" | "client" | "online";
   with_camera: boolean;
   duration_ms: number | null;
   status: "analyzing" | "ready" | "failed";
@@ -297,7 +301,9 @@ export type PitchAttemptRow = {
   /** Tvar `OutlineResult` (src/lib/pitch/outline.ts): téma, osnova a zhoda s pitchom. */
   outline: Record<string, unknown> | null;
   /** jazyk pitchu (src/lib/pitch/language.ts) */
-  language: "sk" | "cs" | "en" | "de" | "pl" | "hu";
+  language: PitchLanguage;
+  /** Tvar `QaResult` (src/lib/pitch/qa.ts): otázky po prejave, odpovede a ich hodnotenie. */
+  qa: Record<string, unknown> | null;
   /** model, ktorý pitch prepísal (napr. „elevenlabs“) */
   stt_model: string | null;
   model: string | null;

@@ -1,5 +1,5 @@
 import { countFillers, fillerWordsFor, tokenizeWords } from "@/lib/analytics/speech/text-metrics";
-import type { PitchLanguage } from "@/lib/pitch/language";
+import { LANGUAGE_INFO, type PitchLanguage } from "@/lib/pitch/language";
 
 /*
   Merania nahraného pitchu z prepisu so slovnými časmi (Whisper).
@@ -46,6 +46,7 @@ const SYLLABIC = "rlŕĺ";
 const DIPHTHONGS = ["ia", "ie", "iu", "ô"];
 
 /** Samohlásky jazykov bez vlastných pravidiel: slabika = skupina samohlások za sebou. */
+const GENERIC_VOWELS = "aeiouyàáâãäåæèéêëìíîïòóôõöøùúûüýÿāăąēėęěīįıōőœūůűųəаеёиоуыэюяіїєαεηιουωάέήίόύώϊϋΐΰ";
 const VOWEL_GROUPS: Partial<Record<PitchLanguage, string>> = {
   en: "aeiouy",
   de: "aeiouyäöü",
@@ -57,7 +58,7 @@ const VOWEL_GROUPS: Partial<Record<PitchLanguage, string>> = {
 export function countSyllables(word: string, language: PitchLanguage = "sk"): number {
   const w = word.toLowerCase().replace(/[^\p{L}]/gu, "");
   if (!w) return 0;
-  const groups = VOWEL_GROUPS[language];
+  const groups = VOWEL_GROUPS[language] ?? (language === "sk" || language === "cs" ? undefined : GENERIC_VOWELS);
   if (groups) {
     let n = 0;
     for (let i = 0; i < w.length; i++) if (groups.includes(w[i]) && (i === 0 || !groups.includes(w[i - 1]))) n++;
@@ -120,7 +121,8 @@ export function buildMetrics(input: { text: string; words: TimedWord[]; duration
   const syllables = spokenWords.reduce((sum, w) => sum + countSyllables(w.word, language), 0);
   const span = words.length > 1 ? Math.round((words[words.length - 1].end - words[0].start) * 1000) : input.durationMs;
   const speechMs = Math.max(0, span - pausedMs);
-  const tempo = speechMs >= 4_000 ? Math.round((syllables / (speechMs / 1000)) * 10) / 10 : null;
+  // jazyky bez abecedných samohlások (japončina…) tempo v slabikách nemajú
+  const tempo = speechMs >= 4_000 && LANGUAGE_INFO[language].syllables ? Math.round((syllables / (speechMs / 1000)) * 10) / 10 : null;
 
   const fillers = countFillers(input.text, language);
   const tokens: TranscriptToken[] = [];

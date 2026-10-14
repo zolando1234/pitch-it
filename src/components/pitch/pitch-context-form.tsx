@@ -20,7 +20,7 @@ const TX = {
     docs: "Dokumenty",
     drop: "Pretiahni sem PDF alebo PPTX",
     dropOr: "alebo klikni a vyber súbor",
-    dropNote: `Najviac ${MAX_DOCUMENTS} dokumenty, každý do 25 MB. Súbor sa nikam nenahráva, uloží sa len jeho text.`,
+    dropNote: `Najviac ${MAX_DOCUMENTS} dokumentov, každý do 25 MB. Súbor sa nikam nenahráva, uloží sa len jeho text.`,
     reading: (name: string) => `Čítam ${name}…`,
     pages: (n: number) => `${n} ${n === 1 ? "strana" : n < 5 ? "strany" : "strán"}`,
     chars: (n: number) => `${n.toLocaleString("sk-SK")} znakov`,

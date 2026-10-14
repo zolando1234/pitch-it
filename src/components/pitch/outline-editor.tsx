@@ -57,12 +57,24 @@ export function OutlineEditor({ topic, text, onTopic, onText }: PitchOutlineStat
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="osnova-nadpis">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="osnova-nadpis" className="text-sm font-bold uppercase tracking-widest text-mute">
-          {en ? "What do you want to pitch about" : "O čom chceš pitchovať"}
+          {en ? "What do you want to pitch about" : "O čom chceš hovoriť"}
         </h2>
-        <span className="text-xs text-faint">
-          {en ? "Optional. At the end you see how much of the topic and outline you covered." : "Nepovinné. Na konci uvidíš, koľko z témy a osnovy si odprezentoval."}
-        </span>
+        <span className="text-xs text-faint">{en ? "Optional, but the feedback is much more accurate with it." : "Nepovinné, ale hodnotenie je s tým oveľa presnejšie."}</span>
       </div>
+      <ul className="mt-3 grid gap-2 text-sm text-mute sm:grid-cols-2">
+        <li className="rounded-2xl bg-white/[0.03] p-3">
+          <b className="text-paper">{en ? "Topic" : "Téma"}</b> ·{" "}
+          {en
+            ? "One to three sentences: what you're talking about and what the audience should remember. Your talk is scored against it and Q&A questions are based on it."
+            : "Jedna až tri vety: o čom hovoríš a čo si má publikum zapamätať. Prejav sa hodnotí voči téme a podľa nej vzniknú aj otázky v Q&A."}
+        </li>
+        <li className="rounded-2xl bg-white/[0.03] p-3">
+          <b className="text-paper">{en ? "Outline" : "Osnova"}</b> ·{" "}
+          {en
+            ? "The main points in the order you want to say them, one per line. While you speak you see which points you've covered; the report shows what you skipped."
+            : "Hlavné body v poradí, v akom ich chceš povedať, jeden na riadok. Počas prejavu vidíš, ktoré body si už povedal, a v reporte, čo si vynechal."}
+        </li>
+      </ul>
       <label htmlFor="pitch-tema" className="mt-4 block text-sm font-bold">
         {en ? "Topic" : "Téma"} <span className="font-normal text-mute">{en ? "(your pitch is scored against it)" : "(podľa nej sa pitch hodnotí)"}</span>
       </label>

@@ -199,6 +199,9 @@ const AUDIENCE_BRIEF: Record<Audience, string> = {
   team: "vlastný tím",
 };
 
+/** Prepis do promptu (aj dlhý prejav, ~30 min reči). */
+export const TRANSCRIPT_PROMPT_MAX = 60_000;
+
 export function buildOutlinePrompt(input: {
   outline: PitchOutline;
   transcript: string;
@@ -210,14 +213,14 @@ export function buildOutlinePrompt(input: {
     `Publikum: ${AUDIENCE_BRIEF[input.audience]}.`,
     input.feedbackLocale === "en"
       ? "IMPORTANT: Write all text fields (note, takeaway, advice, digressions) in English (informal, friendly second person), regardless of the pitch language or the instructions above."
-      : input.language && input.language !== "slovenčine"
-        ? `Pitch je v ${input.language}. Všetky texty (note, takeaway, advice, digressions) píš po slovensky.`
+      : input.language && input.language !== "Slovak"
+        ? `Pitch je v jazyku: ${input.language}. Všetky texty (note, takeaway, advice, digressions) píš po slovensky.`
         : null,
     input.outline.topic ? `Téma pitchu (záväzné zadanie):\n"""${input.outline.topic}"""` : "Téma pitchu nie je zadaná, odvoď ju z osnovy.",
     input.outline.points.length
       ? `Osnova (index: bod):\n${input.outline.points.map((p, i) => `${i}: ${p}`).join("\n")}`
       : "Osnova nemá body.",
-    `Prepis pitchu:\n"""${input.transcript.slice(0, 12000)}"""`,
+    `Prepis pitchu:\n"""${input.transcript.slice(0, TRANSCRIPT_PROMPT_MAX)}"""`,
   ]
     .filter(Boolean)
     .join("\n\n");

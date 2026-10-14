@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import CameraStage from "@/components/coach/CameraStage";
 import { bubbleAnchor, type Anchor, type CoachPrefs } from "@/components/coach/coach-live";
 import FeedbackBubble from "@/components/coach/FeedbackBubble";
-import Teleprompter from "@/components/coach/Teleprompter";
 import { fmtClock, INITIAL_FB, useCoachSession, type CoachResult } from "@/components/coach/use-coach-session";
 import { PI_BACKGROUND } from "@/components/pitch/pi-topbar";
 import { useLiveTranscript } from "@/components/pitch/use-live-transcript";
@@ -154,6 +153,8 @@ const STUDIO = {
     loadingVideoModel: "Načítavam video a model…",
     loadingCameraModel: "Načítavam kameru a model…",
     videoIntro: "Tréner pozrie celé video tak, ako ho uvidí publikum. Analýza trvá rovnako dlho ako video.",
+    quietTitle: "Analyzujem video…",
+    quietNote: "Reč tela sa vyhodnocuje počas prehrávania, prepis reči beží súčasne. Report sa otvorí sám.",
     startingAnalysis: "Spúšťam…",
     startAnalysis: "Spustiť analýzu",
     stepIn: "Postav sa do záberu",
@@ -206,6 +207,8 @@ const STUDIO = {
     loadingVideoModel: "Loading video and model…",
     loadingCameraModel: "Loading camera and model…",
     videoIntro: "The coach watches the whole video the way your audience will. The analysis takes as long as the video.",
+    quietTitle: "Analyzing the video…",
+    quietNote: "Body language is scored while the video plays and the speech is transcribed at the same time. The report opens by itself.",
     startingAnalysis: "Starting…",
     startAnalysis: "Start analysis",
     stepIn: "Step into the frame",
@@ -241,6 +244,7 @@ export function PitchStudio({
   startFull = false,
   language = "sk",
   file = null,
+  quiet = false,
   ruleFilter,
   onLive,
   onPause,
@@ -262,6 +266,8 @@ export function PitchStudio({
   language?: PitchLanguage;
   /** nahraté video namiesto kamery */
   file?: File | null;
+  /** len analýza videa: bez zvuku, rád a titulkov, iba priebeh */
+  quiet?: boolean;
   ruleFilter: (id: string) => boolean;
   /** začiatok nahrávania; pri nahratom videe dostane zvuk videa */
   onLive?: (sourceAudio: MediaStream | null) => void;
@@ -274,13 +280,12 @@ export function PitchStudio({
   /** zahodí nahrávku a začne odznova */
   onRestart: () => void;
 }) {
-  const { prompter, onPrompter, prompterText, micMode, micHand, quality } = prefs;
+  const { micMode, micHand, quality } = prefs;
   const locale = useLocale();
   const tx = STUDIO[locale];
   const defaultPoints = locale === "en" ? DEFAULT_POINTS_EN : DEFAULT_POINTS;
   const stageRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const prompterRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const sourceAudio = useRef<MediaStream | null>(null);
   const [starting, setStarting] = useState(false);
@@ -296,8 +301,7 @@ export function PitchStudio({
     // veľká rada nad hlavou, pod stavovými štítkami a telepromptrom
     onUi: (m) => {
       const head = m ? (session.stageApi.current?.headAnchor(m) ?? null) : null;
-      const p = prompterRef.current;
-      setAnchor(bubbleAnchor(head, stageRef.current, bubbleRef.current, p ? p.offsetTop + p.offsetHeight : 48));
+      setAnchor(bubbleAnchor(head, stageRef.current, bubbleRef.current, 48));
     },
   });
   const { phase, fb, metrics, count, waitingForPerson, elapsedMs, durationMs, stageApi } = session;
@@ -309,7 +313,7 @@ export function PitchStudio({
   const startVideo = async () => {
     if (starting) return;
     setStarting(true);
-    const audio = (await stageApi.current?.playSource()) ?? null;
+    const audio = (await stageApi.current?.playSource(quiet)) ?? null;
     if (!audio) {
       setStarting(false);
       onError(tx.videoPlayFailed);
@@ -588,13 +592,21 @@ export function PitchStudio({
                 )}
               </div>
 
-              {prompterText ? (
-                <div ref={prompterRef} className="absolute left-1/2 top-12 z-20 h-[34%] w-[min(92%,900px)] -translate-x-1/2">
-                  <Teleprompter text={prompterText} wpm={prompter.wpm} onWpmChange={(wpm) => onPrompter({ ...prompter, wpm })} running={recording} />
+
+              {quiet && (phase === "live" || phase === "paused") ? (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-5 bg-[#17142e]/95 px-6 text-center text-white">
+                  <p className="h text-2xl">{tx.quietTitle}</p>
+                  <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-white/15">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-violet to-signal transition-[width] duration-500"
+                      style={{ width: `${durationMs ? Math.min(100, (elapsedMs / durationMs) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-white/70">{tx.quietNote}</p>
                 </div>
               ) : null}
 
-              {phase === "live" || phase === "paused" ? (
+              {!quiet && (phase === "live" || phase === "paused") ? (
                 <div
                   ref={bubbleRef}
                   className="absolute z-20 w-[92%] max-w-[900px] -translate-x-1/2 -translate-y-full transition-[left,top] duration-100 ease-out"
@@ -643,7 +655,7 @@ export function PitchStudio({
                 </div>
               ) : null}
 
-              {phase === "live" || phase === "paused" ? (
+              {!quiet && (phase === "live" || phase === "paused") ? (
                 <div
                   className={`absolute inset-x-3 z-20 rounded-xl bg-black/75 px-4 py-3 text-sm text-white backdrop-blur ${full ? "bottom-24 mx-auto max-w-3xl" : "bottom-3"}`}
                   aria-live="off"

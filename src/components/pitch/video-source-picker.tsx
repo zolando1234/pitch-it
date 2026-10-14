@@ -4,9 +4,12 @@ import { useEffect, useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 
 /*
-  Zdroj pitchu: živá kamera alebo nahraté video zo súboru. Video sa nikam neposiela:
-  analyzuje sa v prehliadači počas prehrávania, na server ide len zvuk a súhrn reči tela.
+  Zdroj prejavu: živá kamera alebo nahraté video zo súboru. Video sa nikam neposiela:
+  reč tela sa analyzuje v prehliadači počas prehrávania, na server ide len zvuk a súhrn.
+  Pri videu sa dá vybrať, či ho chce človek sledovať so živými radami, alebo len výsledok.
 */
+
+export type VideoAnalysis = "quick" | "live";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
@@ -32,6 +35,8 @@ export function VideoSourcePicker({
   useVideo,
   onUseVideo,
   maxSeconds,
+  analysis,
+  onAnalysis,
 }: {
   file: File | null;
   onFile: (file: File | null) => void;
@@ -40,6 +45,8 @@ export function VideoSourcePicker({
   onUseVideo: (on: boolean) => void;
   /** najdlhšie analyzované video (podľa plánu) */
   maxSeconds: number;
+  analysis: VideoAnalysis;
+  onAnalysis: (value: VideoAnalysis) => void;
 }) {
   const en = useLocale() === "en";
   const [duration, setDuration] = useState<number | null>(null);
@@ -73,7 +80,7 @@ export function VideoSourcePicker({
   return (
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="zdroj-nadpis">
       <h2 id="zdroj-nadpis" className="text-sm font-bold uppercase tracking-widest text-mute">
-        {en ? "Where is the pitch from" : "Odkiaľ je pitch"}
+        {en ? "Recording" : "Nahrávka"}
       </h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {option(!useVideo, en ? "Record with camera now" : "Nahrať kamerou teraz", en ? "The coach gives you live tips while you pitch." : "Tréner ti radí naživo počas pitchu.", () => {
@@ -83,13 +90,27 @@ export function VideoSourcePicker({
         {option(
           useVideo,
           en ? "Upload a finished video" : "Nahrať hotové video",
-          en ? "MP4, MOV or WebM from a phone or camera. Analyzed just like a live pitch." : "MP4, MOV alebo WebM z mobilu či kamery. Analyzuje sa rovnako ako živý pitch.",
+          en ? "MP4, MOV or WebM from a phone or camera." : "MP4, MOV alebo WebM z mobilu či kamery.",
           () => onUseVideo(true),
         )}
       </div>
 
       {useVideo ? (
         <div className="mt-5">
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
+            {option(
+              analysis === "quick",
+              en ? "Just analyze" : "Len analyzovať",
+              en ? "No need to watch. The video runs in the background and the report opens when it's done." : "Nemusíš pozerať. Video beží na pozadí a report sa otvorí, keď bude hotový.",
+              () => onAnalysis("quick"),
+            )}
+            {option(
+              analysis === "live",
+              en ? "Live analysis" : "Živá analýza",
+              en ? "Watch the video with the coach's tips and body tracking in real time." : "Pozeráš video so živými radami trénera a sledovaním tela.",
+              () => onAnalysis("live"),
+            )}
+          </div>
           <label htmlFor="pitch-video" className="text-sm font-bold">
             {en ? "Choose a video" : "Vyber video"}
           </label>
@@ -124,8 +145,8 @@ export function VideoSourcePicker({
           ) : duration !== null && duration > maxSeconds ? (
             <p className="mt-2 text-sm text-marker" role="status">
               {en
-                ? `The video is ${fmt(duration)} long. We analyze the first ${fmt(maxSeconds)}${maxSeconds < 240 ? ", longer videos up to 4 minutes are in the paid version" : ""}.`
-                : `Video má ${fmt(duration)}. Analyzujeme prvé ${fmt(maxSeconds)}${maxSeconds < 240 ? ", dlhšie videá do 4 minút sú v platenej verzii" : ""}.`}
+                ? `The video is ${fmt(duration)} long. We analyze the first ${fmt(maxSeconds)}${maxSeconds <= 180 ? ", longer videos are in the paid version" : ""}.`
+                : `Video má ${fmt(duration)}. Analyzujeme prvé ${fmt(maxSeconds)}${maxSeconds <= 180 ? ", dlhšie videá sú v platenej verzii" : ""}.`}
             </p>
           ) : null}
         </div>

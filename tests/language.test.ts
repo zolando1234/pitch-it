@@ -12,8 +12,25 @@ describe("jazyk pitchu", () => {
     assert.equal(sttOrder("cs", all)[0], "elevenlabs");
   });
 
-  test("angličtina ide najprv cez Voxtral, záloha je Scribe", () => {
-    assert.deepEqual(sttOrder("en", all).slice(0, 2), ["mistral", "elevenlabs"]);
+  test("všetky jazyky idú najprv cez ElevenLabs Scribe, záloha Voxtral", () => {
+    assert.deepEqual(sttOrder("en", all).slice(0, 2), ["elevenlabs", "mistral"]);
+    assert.equal(sttOrder("ja", all)[0], "elevenlabs");
+  });
+
+  test("36 jazykov s kódom pre Scribe a jazykom prehliadača", () => {
+    assert.equal(Object.keys(LANGUAGE_INFO).length, 36);
+    assert.equal(LANGUAGE_INFO.sk.scribe, "slk");
+    assert.equal(LANGUAGE_INFO.no.bcp47, "nb-NO");
+    assert.equal(parseLanguage("fr"), "fr");
+  });
+
+  test("ostatné jazyky: všeobecné slabiky a zaváhania, japončina bez tempa", () => {
+    assert.equal(countSyllables("presentation", "fr"), 4);
+    assert.equal(countSyllables("привет", "ru"), 2);
+    assert.equal(countFillers("euh donc en fait voilà", "fr").total, 3);
+    assert.equal(countFillers("eh hmm", "sv").total, 2);
+    const words = Array.from({ length: 20 }, (_, i) => ({ word: "です", start: i * 0.4, end: i * 0.4 + 0.3 }));
+    assert.equal(buildMetrics({ text: words.map((w) => w.word).join(" "), words, durationMs: 9000, language: "ja" }).tempo, null);
   });
 
   test("použijú sa len nakonfigurované modely", () => {

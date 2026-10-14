@@ -129,7 +129,7 @@ export const focusGoal = (focus: FirstFocus, locale: Locale) => (locale === "en"
 export const audienceLabel = (audience: Audience, locale: Locale) => (locale === "en" ? AUDIENCE_LABELS_EN : AUDIENCE_LABELS)[audience];
 
 /** Predvolené nastavenie pre používateľa bez odpovedí (preskočil kvíz). */
-export const DEFAULT_ANSWERS: OnboardingAnswers = { audience: "investor", lengthSeconds: 60, focus: "tempo" };
+export const DEFAULT_ANSWERS: OnboardingAnswers = { audience: "jury", lengthSeconds: 60, focus: "tempo" };
 
 /** Načíta odpovede z profilu; staršie alebo neplatné verzie nahradí predvolenými. */
 export function readAnswers(raw: unknown): OnboardingAnswers {

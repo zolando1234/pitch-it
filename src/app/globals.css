@@ -306,7 +306,7 @@
   }
 }
 
-/* Obraz z kamery je vždy tmavý: texty nad ním (rada, teleprompter, titulky) majú tmavú paletu v oboch témach. */
+/* Obraz z kamery je vždy tmavý: texty nad ním (rada, titulky) majú tmavú paletu v oboch témach. */
 .stage-dark {
   --color-ink: #141414;
   --color-panel: #1e1e22;

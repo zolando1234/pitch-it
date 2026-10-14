@@ -64,7 +64,7 @@ export const TABLES: Record<string, TableSpec> = {
   /** O čom používateľ hovorí: text o firme či prezentácii a text z nahraných dokumentov (podklady pre hodnotenie a Q&A). */
   pitch_contexts: {
     pk: ["user_id"],
-    defaults: () => ({ about: "", documents: [] }),
+    defaults: () => ({ about: "", documents: [], summary: "", summary_of: [] }),
     updatedAt: true,
     refs: [user()],
     read: own("user_id"),
@@ -285,6 +285,8 @@ export const TABLES: Record<string, TableSpec> = {
     defaults: () => ({
       ...uuid(),
       focus: "tempo",
+      mode: "public",
+      qa: null,
       with_camera: false,
       status: "analyzing",
       duration_ms: null,
