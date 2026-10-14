@@ -67,8 +67,13 @@ describe("report prejavu", () => {
     assert.equal(data.speech?.waste[0].label, "Zbytočné");
     assert.deepEqual(data.transcript.map((s) => s.severity), ["ok", "major", "ok"]);
     assert.equal(data.transcript[1].marker, 1);
-    assert.equal(data.content?.source, "outline");
+    assert.equal(data.content?.score, 4);
     assert.deepEqual(data.content?.rows.map((r) => r.label), ["Problém", "Pilot"]);
+
+    // bez osnovy: obsahové skóre ani zoznam bodov (body si AI nevymýšľa)
+    const noOutline = buildFeedback({ ...attempt, outline: null } as PitchAttemptRow, { number: 1, retryHref: "/app/nahravka" });
+    assert.equal(noOutline.content, null);
+    assert.deepEqual(noOutline.speech?.points, []);
   });
 });
 

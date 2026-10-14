@@ -1,6 +1,5 @@
 import { parseStoredCoach, type StoredCoach } from "@/lib/coach/stored";
 import { BODY_EVENT_LABELS, BODY_EVENT_LABELS_EN, bodyNarrative, clock, type BodySummary } from "@/lib/pitch/body";
-import { CATEGORY_LABELS, orderedCategories, type ContentScore } from "@/lib/pitch/content";
 import { decimal, pausesLabel, TEMPO_ADVICE, TEMPO_ADVICE_EN, tempoPosition, tempoVerdict, type PitchMetrics, type TranscriptToken } from "@/lib/pitch/metrics";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
@@ -50,8 +49,6 @@ export type FeedbackData = {
     overall: { score: number; tone: ScoreTone; summary: string } | null;
     takeaway: string | null;
     points: Array<{ text: string; status: PointStatus; note: string | null }>;
-    /** body nie sú z osnovy, ale odvodené z témy */
-    derivedPoints: boolean;
     waste: Array<{ quote: string; label: string; note: string }>;
     advice: string | null;
     /** porovnanie len podľa kľúčových slov (bez AI) */
@@ -63,7 +60,8 @@ export type FeedbackData = {
   transcript: TranscriptSentence[];
   /** v prepise sú označené vety (inak sa zobrazí len vyznačenie výplní a zakoktaní) */
   transcriptReviewed: boolean;
-  content: { score: number | null; tone: ScoreTone; source: "outline" | "derived" | "rubric"; rows: Array<{ label: string; score: number; tone: ScoreTone; note: string }> } | null;
+  /** obsahové skóre podľa bodov osnovy, ktoré si človek zadal; null = osnova nebola zadaná */
+  content: { score: number; tone: ScoreTone; rows: Array<{ label: string; score: number; tone: ScoreTone; note: string }> } | null;
   body: {
     eyeContactPct: number;
     narrative: string;
@@ -110,13 +108,6 @@ const WASTE_LABELS: Record<"sk" | "en", Record<WasteKind, string>> = {
   en: { offtopic: "Off topic", unnecessary: "Unnecessary", overexplain: "Over-explaining" },
 };
 
-const CATEGORY_LABELS_EN: Record<keyof typeof CATEGORY_LABELS, string> = {
-  problem: "Problem",
-  solution: "Solution",
-  market: "Market",
-  traction: "Traction",
-  ask: "Ask",
-};
 
 const normalizeWord = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
@@ -221,7 +212,6 @@ export function buildFeedback(
   const events = body ? notableEvents(body) : [];
   const stored = parseSpeechAnalysis(attempt.content);
   const analysis = stored ? cleanAnalysis(stored.analysis) : null;
-  const rubric = !stored && attempt.content ? (attempt.content as ContentScore) : null;
   const outlineResult = parseOutlineResult(attempt.outline);
   const check = outlineResult?.check ?? null;
   const pct = outlineResult ? matchPct(outlineResult) : null;
@@ -245,7 +235,9 @@ export function buildFeedback(
 
   // 4: reč
   const points = analysis
-    ? analysis.points.map((p) => ({ text: hasPoints ? (outlineResult!.points[p.index] ?? p.title) : p.title, status: p.status, note: p.note || null }))
+    ? hasPoints && !stored?.derivedPoints
+      ? analysis.points.filter((p) => p.index < outlineResult!.points.length).map((p) => ({ text: outlineResult!.points[p.index], status: p.status, note: p.note || null }))
+      : []
     : (check?.points.map((p) => ({ text: p.text, status: p.status, note: p.note })) ?? []);
   const speech: FeedbackData["speech"] =
     analysis || check
@@ -253,7 +245,6 @@ export function buildFeedback(
           overall: analysis ? { score: analysis.overall.score, tone: scoreTone(analysis.overall.score), summary: analysis.overall.summary } : null,
           takeaway: analysis?.takeaway ?? check?.takeaway ?? null,
           points,
-          derivedPoints: stored?.derivedPoints ?? false,
           waste: analysis
             ? analysis.waste.map((w) => ({ quote: w.quote, label: WASTE_LABELS[locale][w.kind], note: w.note }))
             : (check?.digressions ?? []).map((d) => ({ quote: "", label: WASTE_LABELS[locale].offtopic, note: d })),
@@ -279,25 +270,15 @@ export function buildFeedback(
     };
   });
 
-  // 7: obsahové skóre podľa osnovy (staršie pokusy: rubrika)
-  const content: FeedbackData["content"] = analysis
-    ? {
-        score: attempt.content_score,
-        tone: scoreTone(attempt.content_score ?? 0),
-        source: stored?.derivedPoints ? "derived" : "outline",
-        rows: analysis.points.map((p) => ({
-          label: hasPoints ? (outlineResult!.points[p.index] ?? p.title) : p.title,
-          score: p.score,
-          tone: scoreTone(p.score),
-          note: p.note,
-        })),
-      }
-    : rubric
+  // 7: obsahové skóre iba z bodov osnovy, ktoré si človek zadal
+  const userPoints = analysis && hasPoints && !stored?.derivedPoints ? analysis.points.filter((p) => p.index < outlineResult!.points.length) : [];
+  const contentScore = userPoints.length ? Math.round((userPoints.reduce((sum, p) => sum + p.score, 0) / userPoints.length) * 10) / 10 : null;
+  const content: FeedbackData["content"] =
+    contentScore !== null
       ? {
-          score: attempt.content_score,
-          tone: scoreTone(attempt.content_score ?? 0),
-          source: "rubric",
-          rows: orderedCategories(rubric).map((c) => ({ label: (en ? CATEGORY_LABELS_EN : CATEGORY_LABELS)[c.key], score: c.score, tone: scoreTone(c.score), note: c.advice })),
+          score: contentScore,
+          tone: scoreTone(contentScore),
+          rows: userPoints.map((p) => ({ label: outlineResult!.points[p.index], score: p.score, tone: scoreTone(p.score), note: p.note })),
         }
       : null;
 

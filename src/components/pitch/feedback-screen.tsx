@@ -52,8 +52,7 @@ const FB = {
     word: "slovo",
     fillerWord: "vypĺňacie slovo",
     content: "Obsahové skóre",
-    rubric: (forInvestor: boolean) => `Hodnotenie podľa pitch rubriky pre ${forInvestor ? "investora" : "tím"}`,
-    contentFailed: "Obsahové skóre sa tentoraz nepodarilo vyhodnotiť. Tempo a vypĺňacie slová platia, obsah skús pri ďalšom pokuse.",
+    contentFailed: "Obsahové skóre sa tentoraz nepodarilo vyhodnotiť. Ostatné časti reportu platia, obsah skús pri ďalšom pokuse.",
     speechFailed: "Reč sa tentoraz nepodarilo vyhodnotiť, preto hodnotíme len reč tela. Pri ďalšom pokuse hovor nahlas a bližšie k mikrofónu.",
     body: "Reč tela",
     fromVideo: "Z videa pitchu",
@@ -82,7 +81,6 @@ const FB = {
     s4: "4 · Reč",
     overall: "celkové skóre reči",
     pointsTitle: "Čo z osnovy zaznelo",
-    derivedTitle: "Hlavné body, ktoré téma vyžaduje",
     waste: "Zbytočné slová a veci mimo tému",
     noWaste: "Žiadne zbytočné odbočky ani prílišné vysvetľovanie. Výborne.",
     s5: "5 · Tempo a pauzy",
@@ -95,9 +93,8 @@ const FB = {
     issuesTitle: "Na čo si dať pozor",
     unreviewed: "Vety sa tentoraz nepodarilo rozobrať, označené sú len vypĺňacie slová, zakoktania a pauzy.",
     s7: "7 · Obsahové skóre",
-    s7outline: "Podľa tvojej osnovy",
-    s7derived: "Podľa hlavných bodov témy (pridaj vlastnú osnovu pre presnejšie hodnotenie)",
-    s7rubric: "Podľa pitch rubriky (starší pokus)",
+    s7outline: "Podľa bodov tvojej osnovy",
+    s7none: "Obsahové skóre sa počíta z bodov osnovy, ktorú si zadáš pred nahrávaním. Tentoraz osnova nebola, pridaj ju pri ďalšom pokuse.",
     average: "priemer bodov",
     s8: "8 · Reč tela",
   },
@@ -143,7 +140,6 @@ const FB = {
     word: "word",
     fillerWord: "filler word",
     content: "Content score",
-    rubric: (forInvestor: boolean) => `Scored with the pitch rubric for ${forInvestor ? "an investor" : "the audience"}`,
     contentFailed: "The content score couldn't be evaluated this time. Pace and filler words still apply, try content again next time.",
     speechFailed: "We couldn't evaluate the speech this time, so we only score body language. Next time speak up and get closer to the microphone.",
     body: "Body language",
@@ -173,7 +169,6 @@ const FB = {
     s4: "4 · Speech",
     overall: "overall speech score",
     pointsTitle: "What you covered from the outline",
-    derivedTitle: "Main points the topic needs",
     waste: "Unnecessary words and off-topic parts",
     noWaste: "No unnecessary detours or over-explaining. Well done.",
     s5: "5 · Pace and pauses",
@@ -186,9 +181,8 @@ const FB = {
     issuesTitle: "What to watch out for",
     unreviewed: "The sentences couldn't be reviewed this time; only filler words, stutters and pauses are marked.",
     s7: "7 · Content score",
-    s7outline: "Based on your outline",
-    s7derived: "Based on the main points of the topic (add your own outline for a more accurate score)",
-    s7rubric: "Based on the pitch rubric (older attempt)",
+    s7outline: "Based on the points of your outline",
+    s7none: "The content score is calculated from the outline points you set before recording. There was no outline this time, add one next time.",
     average: "average of the points",
     s8: "8 · Body language",
   },
@@ -562,7 +556,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
                 ) : null}
                 {speech?.points.length ? (
                   <div style={{ marginTop: "20px" }}>
-                    <div style={{ fontWeight: 700, marginBottom: "4px" }}>{speech.derivedPoints ? tx.derivedTitle : tx.pointsTitle}</div>
+                    <div style={{ fontWeight: 700, marginBottom: "4px" }}>{tx.pointsTitle}</div>
                     {speech.points.map((point, i) => (
                       <div key={i} style={{ display: "flex", gap: "14px", padding: "14px 0", borderTop: "1px solid var(--color-line)" }}>
                         <StatusIcon status={point.status} />
@@ -738,18 +732,16 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
                   <h2 className="h" style={{ fontSize: "26px" }}>
                     {tx.s7}
                   </h2>
-                  {data.content ? <span className="muted">{data.content.source === "outline" ? tx.s7outline : data.content.source === "derived" ? tx.s7derived : tx.s7rubric}</span> : null}
+                  <span className="muted">{tx.s7outline}</span>
                 </div>
                 {data.content ? (
                   <>
-                    {data.content.score !== null ? (
-                      <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "16px" }}>
-                        <span className="big" style={{ color: SCORE_COLOR[data.content.tone].text }}>
-                          {num(data.content.score)}
-                        </span>
-                        <span className="muted">/ 10 · {tx.average}</span>
-                      </div>
-                    ) : null}
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "16px" }}>
+                      <span className="big" style={{ color: SCORE_COLOR[data.content.tone].text }}>
+                        {num(data.content.score)}
+                      </span>
+                      <span className="muted">/ 10 · {tx.average}</span>
+                    </div>
                     <div style={{ marginTop: "12px" }}>
                       {data.content.rows.map((row, i) => {
                         const q = p(900 + i * 180, 1100);
@@ -779,7 +771,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
                   </>
                 ) : (
                   <p className="muted" style={{ margin: "16px 0 0", fontSize: "14px", lineHeight: "1.55" }}>
-                    {tx.contentFailed}
+                    {data.plan?.points.length ? tx.contentFailed : tx.s7none}
                   </p>
                 )}
               </section>

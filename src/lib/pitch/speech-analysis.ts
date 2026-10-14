@@ -57,7 +57,7 @@ export type SpeechAnalysis = z.infer<typeof speechAnalysisSchema>;
 export type StoredSpeechAnalysis = {
   version: 2;
   analysis: SpeechAnalysis;
-  /** body osnovy odvodené z témy (keď si človek osnovu nezadal) */
+  /** staršie rozbory: body odvodené z témy (dnes sa hodnotia len body zadané v osnove) */
   derivedPoints: boolean;
 };
 
@@ -122,7 +122,7 @@ Vráť:
 - onTopicPct: podiel prejavu, ktorý sa držal témy (0–100).
 - points: pre každý bod osnovy (podľa indexu; title = text bodu) status (covered = vysvetlené tak, že to poslucháč pochopí; partial = len spomenuté;
   missing = nezaznelo), score 0–10 = ako dobre a presvedčivo bol bod obsahovo podaný (0, ak chýba) a note = čo zaznelo alebo čo chýbalo.
-  Ak osnova nie je zadaná, sám urči 3 až 5 hlavných bodov, ktoré téma vyžaduje (title = krátky názov bodu), a ohodnoť ich rovnako.
+  Hodnoť iba body osnovy, ktoré zadal rečník; ak osnova nie je zadaná, vráť prázdne pole points a žiadne body si nevymýšľaj.
 - waste: najviac 6 miest, kde rečník plytval časom: offtopic = mimo témy, unnecessary = zbytočné slová či opakovanie bez prínosu,
   overexplain = vysvetľoval príliš dlho alebo zbytočne podrobne. quote = krátky citát z prepisu, note = čo s tým urobiť.
 - sentences: vety z očíslovaného prepisu, ktoré majú problém (najviac ${MAX_FLAGGED_SENTENCES}; vety bez problému nevracaj):
@@ -161,7 +161,7 @@ export function buildSpeechPrompt(input: {
       : "Všetky texty píš po slovensky.",
     `Jazyk prejavu: ${input.language}. Publikum: ${input.audience}. Cieľová dĺžka ${input.targetSeconds} s, skutočná ${Math.round(input.durationMs / 1000)} s.`,
     input.outline?.topic ? `Téma (záväzné zadanie):\n"""${input.outline.topic}"""` : "Téma nie je zadaná, odvoď ju z prejavu a podkladov.",
-    points.length ? `Osnova (index: bod):\n${points.map((p, i) => `${i}: ${p}`).join("\n")}` : "Osnova nie je zadaná: urči 3 až 5 hlavných bodov sám.",
+    points.length ? `Osnova (index: bod):\n${points.map((p, i) => `${i}: ${p}`).join("\n")}` : "Osnova nie je zadaná: points vráť prázdne.",
     input.context ? `Podklady o firme a prezentácii (fakty, na porovnanie):\n"""${input.context}"""` : null,
     `Prepis po vetách ([index] veta):\n${input.sentences.map((s, i) => `[${i}] ${s}`).join("\n")}`,
   ]

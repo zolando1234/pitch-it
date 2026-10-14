@@ -203,11 +203,14 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
           maxTokens: 5_000,
           speed: "interactive",
         });
-        const stored: StoredSpeechAnalysis = { version: 2, analysis: result.data, derivedPoints: !outline?.points.length };
+        // obsahové skóre len z bodov osnovy, ktorú si rečník zadal
+        const points = outline?.points.length ? result.data.points.filter((p) => p.index < outline.points.length) : [];
+        const analysis = { ...result.data, points };
+        const stored: StoredSpeechAnalysis = { version: 2, analysis, derivedPoints: false };
         content = stored;
-        score = contentScoreOf(result.data);
+        score = contentScoreOf(analysis);
         model = result.model;
-        if (outline) outlineResult = outlineFromAnalysis(outline, result.data);
+        if (outline) outlineResult = outlineFromAnalysis(outline, analysis);
         await recordUsage(userId, "exercise_evaluation", 1, null);
       } catch (error) {
         console.error("[pitch] rozbor prejavu zlyhal:", error instanceof LlmError ? error.code : error);
