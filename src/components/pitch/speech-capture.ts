@@ -28,28 +28,67 @@ registerProcessor("pitch-capture", PitchCapture);
 export type SpeechCapture = {
   pause(): void;
   resume(): void;
+  /** Beží zvukový kanál? (bez kliknutia ho prehliadač môže nechať uspaný) */
+  running(): boolean;
+  /** Prebudí zvukový kanál; volať priamo z kliknutia. */
+  wake(): Promise<void>;
   /** Ukončí zachytávanie; vráti dĺžku zvuku (ms) a vydá posledný úsek. */
   stop(): Promise<number>;
 };
 
-/** Zachytáva zvuk zo streamu a každý hotový úsek pošle do `onSegment`. */
-export async function startCapture(stream: MediaStream, onSegment: (segment: AudioSegment) => void): Promise<SpeechCapture> {
-  const ctx = new AudioContext();
+/*
+  Jeden zvukový kanál (AudioContext) pre celú reláciu. Prehliadač (hlavne Safari) ho povolí
+  spustiť len z kliknutia: `primeAudio()` sa volá pri kliknutí na štart a nahrávanie prejavu
+  aj odpovedí v Q&A potom používa ten istý, už bežiaci kanál.
+*/
+let shared: AudioContext | null = null;
+const withWorklet = new WeakSet<AudioContext>();
+
+export function sharedContext(): AudioContext {
+  if (!shared || shared.state === "closed") shared = new AudioContext();
+  return shared;
+}
+
+/** Odomkne zvuk; volať priamo v obsluhe kliknutia. */
+export function primeAudio(): void {
+  try {
+    void sharedContext().resume().catch(() => {});
+  } catch {
+    // bez Web Audio sa nahrávanie aj tak nespustí, rozhodne o tom startCapture
+  }
+}
+
+/** Zachytáva zvuk zo streamu a každý hotový úsek pošle do `onSegment`; `onLevel` dostáva hlasitosť 0–1. */
+export async function startCapture(
+  stream: MediaStream,
+  onSegment: (segment: AudioSegment) => void,
+  onLevel?: (level: number) => void,
+): Promise<SpeechCapture> {
+  const ctx = sharedContext();
   const source = ctx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
   const resampler = new Resampler(ctx.sampleRate);
   const segmenter = new Segmenter();
   let paused = false;
   let stopped = false;
   const feed = (block: Float32Array) => {
-    if (paused || stopped) return;
+    if (stopped) return;
+    if (onLevel) {
+      let sum = 0;
+      for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
+      onLevel(Math.min(1, Math.sqrt(sum / Math.max(1, block.length)) * 4));
+    }
+    if (paused) return;
     for (const segment of segmenter.push(resampler.push(block))) onSegment(segment);
   };
 
   let node: AudioNode;
   try {
-    const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
-    await ctx.audioWorklet.addModule(url);
-    URL.revokeObjectURL(url);
+    if (!withWorklet.has(ctx)) {
+      const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+      await ctx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      withWorklet.add(ctx);
+    }
     const worklet = new AudioWorkletNode(ctx, "pitch-capture");
     worklet.port.onmessage = (event: MessageEvent<Float32Array>) => feed(event.data);
     node = worklet;
@@ -65,7 +104,8 @@ export async function startCapture(stream: MediaStream, onSegment: (segment: Aud
   source.connect(node);
   node.connect(mute);
   mute.connect(ctx.destination);
-  await ctx.resume().catch(() => {});
+  // bez kliknutia môže resume() visieť donekonečna: nečakáme naň dlhšie ako chvíľu
+  await Promise.race([ctx.resume().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 500))]);
 
   return {
     pause: () => {
@@ -74,6 +114,8 @@ export async function startCapture(stream: MediaStream, onSegment: (segment: Aud
     resume: () => {
       paused = false;
     },
+    running: () => ctx.state === "running",
+    wake: () => ctx.resume().catch(() => {}),
     stop: async () => {
       if (stopped) return segmenter.totalMs;
       // posledný blok z workletu ešte môže prísť
@@ -81,7 +123,7 @@ export async function startCapture(stream: MediaStream, onSegment: (segment: Aud
       stopped = true;
       source.disconnect();
       node.disconnect();
-      void ctx.close().catch(() => {});
+      mute.disconnect();
       const last = segmenter.finish();
       if (last) onSegment(last);
       return Math.round(segmenter.totalMs);

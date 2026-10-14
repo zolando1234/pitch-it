@@ -16,7 +16,7 @@ import { balanceLabel, PitchPaywall, usePitchBalance } from "@/components/pitch/
 import { PitchStudio } from "@/components/pitch/pitch-studio";
 import { QaSession, type QaAnswerRecording } from "@/components/pitch/qa-session";
 import { QaSettings, useQaPrefs } from "@/components/pitch/qa-settings";
-import { SegmentUploader, segmentsFromFile } from "@/components/pitch/speech-capture";
+import { primeAudio, SegmentUploader, segmentsFromFile } from "@/components/pitch/speech-capture";
 import { usePhoneMic } from "@/components/pitch/use-phone-mic";
 import { hasLiveAudio, uploadPitchWithRetry, usePitchRecorder, type Recording, type RecorderSetup } from "@/components/pitch/use-recorder";
 import { VideoSourcePicker, type VideoAnalysis } from "@/components/pitch/video-source-picker";
@@ -355,6 +355,8 @@ export function CameraRecordScreen({
     // celú obrazovku smie prehliadač zapnúť len priamo po kliknutí (pri „Len analyzovať“ netreba)
     const quiet = videoMode && analysis === "quick";
     if (fullscreen && !quiet && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
+    // zvuk sa odomkne priamo kliknutím (Safari inak nahrávanie aj odpovede v Q&A nespustí)
+    primeAudio();
     setError(null);
     setNotice(null);
     audioStarted.current = null;
@@ -572,7 +574,7 @@ export function CameraRecordScreen({
   }
 
   if (phase === "qa") {
-    return <QaSession questions={questions} failed={questionsFailed} language={language} stream={recorder.stream} level={recorder.level} homeHref={homeHref} onDone={(a) => void onQaDone(a)} />;
+    return <QaSession questions={questions} failed={questionsFailed} language={language} stream={recorder.stream} homeHref={homeHref} onDone={(a) => void onQaDone(a)} />;
   }
 
   const done = k >= 5 && !!attemptId;

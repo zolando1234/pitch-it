@@ -6,7 +6,7 @@ import type { PitchAttemptRow } from "@/lib/db/types";
 import { keepLocalAttempt } from "@/lib/pitch/local-attempt";
 import type { PitchLanguage } from "@/lib/pitch/language";
 import type { PitchOutline } from "@/lib/pitch/outline";
-import { SegmentUploader, startCapture, type SpeechCapture } from "@/components/pitch/speech-capture";
+import { SegmentUploader, sharedContext, startCapture, type SpeechCapture } from "@/components/pitch/speech-capture";
 
 /*
   Nahrávanie prejavu v prehliadači: mikrofón (alebo zvuk z mobilu či videa), úroveň hlasu
@@ -42,7 +42,7 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   const uploaderRef = useRef<SegmentUploader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const meterRef = useRef<AudioNode | null>(null);
   /** zvuk z mobilu: jeho stopy nezastavujeme, spojenie riadi usePhoneMic */
   const externalRef = useRef(false);
 
@@ -58,12 +58,14 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   /** Úroveň hlasu pre vlnu z daného zvuku. */
   const watch = useCallback((next: MediaStream) => {
     cancelAnimationFrame(rafRef.current);
-    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") void audioCtxRef.current.close().catch(() => {});
-    const ctx = new AudioContext();
-    audioCtxRef.current = ctx;
+    meterRef.current?.disconnect();
+    // spoločný zvukový kanál, ktorý odomkne kliknutie (vlastný by Safari nechal uspaný)
+    const ctx = sharedContext();
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
-    ctx.createMediaStreamSource(next).connect(analyser);
+    const source = ctx.createMediaStreamSource(next);
+    source.connect(analyser);
+    meterRef.current = source;
     const data = new Uint8Array(analyser.fftSize);
     let last = 0;
     const tick = (now: number) => {
@@ -138,7 +140,7 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
     return () => {
       cancelAnimationFrame(rafRef.current);
       if (!externalRef.current) streamRef.current?.getTracks().forEach((track) => track.stop());
-      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") void audioCtxRef.current.close().catch(() => {});
+      meterRef.current?.disconnect();
     };
   }, []);
 

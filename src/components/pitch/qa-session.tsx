@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
-import { startCapture, type SpeechCapture } from "@/components/pitch/speech-capture";
+import { primeAudio, startCapture, type SpeechCapture } from "@/components/pitch/speech-capture";
 import { LANGUAGE_INFO, type PitchLanguage } from "@/lib/pitch/language";
 import { QA_ANSWER_MAX_MS } from "@/lib/pitch/qa";
 import type { AudioSegment } from "@/lib/pitch/segmenter";
@@ -29,6 +29,7 @@ const TX = {
     finish: "Hotovo, dokončiť",
     replay: "Prehrať otázku znova",
     noMic: "Mikrofón nie je dostupný, odpoveď sa nenahrá.",
+    unblock: "Odpoveď sa nenahráva. Klikni sem a odpovedaj",
     hint: "Odpovedz stručne, ideálne do jednej minúty. Prejav sa medzitým vyhodnocuje.",
   },
   en: {
@@ -43,6 +44,7 @@ const TX = {
     finish: "Done, finish",
     replay: "Play the question again",
     noMic: "The microphone isn't available, the answer won't be recorded.",
+    unblock: "Your answer isn't being recorded. Click here and answer",
     hint: "Keep it short, ideally under a minute. Your talk is being analyzed in the meantime.",
   },
 };
@@ -85,7 +87,6 @@ export function QaSession({
   failed,
   language,
   stream,
-  level = 0,
   homeHref,
   onDone,
 }: {
@@ -94,8 +95,6 @@ export function QaSession({
   failed: boolean;
   language: PitchLanguage;
   stream: MediaStream | null;
-  /** hlasitosť mikrofónu 0–1 (aby bolo vidno, že odpoveď sa nahráva) */
-  level?: number;
   homeHref: string;
   onDone: (answers: QaAnswerRecording[]) => void;
 }) {
@@ -103,6 +102,11 @@ export function QaSession({
   const [index, setIndex] = useState(0);
   const [stage, setStage] = useState<"asking" | "answering">("asking");
   const [elapsed, setElapsed] = useState(0);
+  /** hlasitosť nahrávanej odpovede (priamo z nahrávania, nie zo všeobecného mikrofónu) */
+  const [level, setLevel] = useState(0);
+  /** nahrávanie sa nerozbehlo (prehliadač uspal zvuk): treba kliknúť */
+  const [stalled, setStalled] = useState(false);
+  const lastBlockAt = useRef(0);
   const answers = useRef<QaAnswerRecording[]>([]);
   const capture = useRef<SpeechCapture | null>(null);
   const segments = useRef<AudioSegment[]>([]);
@@ -120,16 +124,39 @@ export function QaSession({
       setElapsed(0);
       startedAt.current = performance.now();
       setStage("answering");
-      if (stream) {
-        try {
-          capture.current = await startCapture(stream, (segment) => segments.current.push(segment));
-        } catch {
-          capture.current = null;
-        }
-      }
+      lastBlockAt.current = performance.now();
+      setStalled(false);
+      await startAnswerCapture();
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startAnswerCapture závisí len od streamu
     [language, stream],
   );
+
+  /** Nahrávanie odpovede; hlasitosť ukazuje, že zvuk naozaj prichádza. */
+  async function startAnswerCapture() {
+    if (!stream || capture.current) return;
+    try {
+      capture.current = await startCapture(
+        stream,
+        (segment) => segments.current.push(segment),
+        (value) => {
+          lastBlockAt.current = performance.now();
+          setLevel(value);
+        },
+      );
+    } catch {
+      capture.current = null;
+    }
+  }
+
+  /** Kliknutie prebudí zvuk (Safari bez kliknutia nahrávanie nespustí). */
+  const unblock = async () => {
+    primeAudio();
+    if (capture.current) await capture.current.wake();
+    else await startAnswerCapture();
+    lastBlockAt.current = performance.now();
+    setStalled(false);
+  };
 
   // každá otázka sa prečíta, keď na ňu príde rad
   useEffect(() => {
@@ -168,14 +195,17 @@ export function QaSession({
     const id = setInterval(() => {
       const ms = performance.now() - startedAt.current;
       setElapsed(ms);
+      // žiadny zvuk z nahrávania viac ako 2 s: prehliadač ho uspal alebo chýba mikrofón
+      if (stream) setStalled(!capture.current?.running() || performance.now() - lastBlockAt.current > 2000);
       if (ms >= QA_ANSWER_MAX_MS) void nextRef.current();
     }, 250);
     return () => clearInterval(id);
-  }, [stage, index]);
+  }, [stage, index, stream]);
 
   /** Otázku znova: odpoveď sa medzitým nenahráva, aby v nej nebol hlas otázky. */
   const replay = async () => {
     if (!question) return;
+    primeAudio();
     capture.current?.pause();
     await speak(question, language, cache.current);
     capture.current?.resume();
@@ -210,14 +240,26 @@ export function QaSession({
                   <span className="h-3 w-3 animate-pulse rounded-full bg-danger" aria-hidden="true" />
                   {tx.answer} · <span className="font-mono">{fmt(elapsed)}</span>
                 </p>
-                {stream ? (
+                {stream && stalled ? (
+                  <button type="button" className="btn btn-p" onClick={() => void unblock()} style={{ minHeight: "52px", padding: "10px 28px" }}>
+                    {tx.unblock}
+                  </button>
+                ) : stream ? (
                   <div className="h-2.5 w-64 overflow-hidden rounded-full bg-line" aria-hidden="true">
                     <div className="h-full rounded-full bg-signal transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
                   </div>
                 ) : (
                   <p className="text-sm text-marker">{tx.noMic}</p>
                 )}
-                <button type="button" className="btn btn-p" onClick={() => void next()} style={{ minHeight: "56px", padding: "12px 32px", fontSize: "17px" }}>
+                <button
+                  type="button"
+                  className="btn btn-p"
+                  onClick={() => {
+                    primeAudio();
+                    void next();
+                  }}
+                  style={{ minHeight: "56px", padding: "12px 32px", fontSize: "17px" }}
+                >
                   {last ? tx.finish : tx.next} →
                 </button>
                 <button type="button" className="text-sm font-semibold text-accent hover:underline" onClick={() => void replay()}>
