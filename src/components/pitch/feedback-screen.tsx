@@ -90,7 +90,7 @@ const FB = {
     legendMinor: "drobnosť",
     legendMajor: "chyba",
     legendStutter: "zakoktanie",
-    issuesTitle: "Na čo si dať pozor",
+    flagged: (n: number, all: number) => (n ? `${n} z ${all} viet na opravu` : "všetky vety v poriadku"),
     unreviewed: "Vety sa tentoraz nepodarilo rozobrať, označené sú len vypĺňacie slová, zakoktania a pauzy.",
     s7: "7 · Obsahové skóre",
     s7outline: "Podľa bodov tvojej osnovy",
@@ -178,7 +178,7 @@ const FB = {
     legendMinor: "small issue",
     legendMajor: "mistake",
     legendStutter: "stutter",
-    issuesTitle: "What to watch out for",
+    flagged: (n: number, all: number) => (n ? `${n} of ${all} sentences to fix` : "all sentences fine"),
     unreviewed: "The sentences couldn't be reviewed this time; only filler words, stutters and pauses are marked.",
     s7: "7 · Content score",
     s7outline: "Based on the points of your outline",
@@ -398,23 +398,32 @@ function ScoreTile({ title, row, extra, empty, delay }: { title: string; row: Sc
 
 function SentenceText({ sentence }: { sentence: TranscriptSentence }) {
   const tx = FB[useLocale()];
+  if (!sentence.tokens.length) return null;
   const cls = sentence.severity ? `sn-${sentence.severity}` : undefined;
   return (
-    <span className={cls} title={sentence.note ? `${sentence.issue}: ${sentence.note}` : undefined}>
-      {sentence.tokens.map((token, i) => {
-        if (token.type === "pause") {
-          const s = comma(token.ms / 1000);
-          return (
-            <span key={i} className={token.kind === "emphasis" ? "pz pz-e" : "pz pz-w"}>
-              {s} s {token.kind === "emphasis" ? tx.emphasis : tx.hesitation}
-            </span>
-          );
-        }
-        const text = token.filler ? <span className="fill">{token.text}</span> : token.stutter ? <span className="stt">{token.text}</span> : token.text;
-        return <Fragment key={i}>{text} </Fragment>;
-      })}
-      {sentence.marker !== null ? <span className={`mk mk-${sentence.severity}`}>{sentence.marker}</span> : null}{" "}
-    </span>
+    <>
+      <span className={cls}>
+        {sentence.tokens.map((token, i) => {
+          if (token.type === "pause") {
+            const s = comma(token.ms / 1000);
+            return (
+              <span key={i} className={token.kind === "emphasis" ? "pz pz-e" : "pz pz-w"}>
+                {s} s {token.kind === "emphasis" ? tx.emphasis : tx.hesitation}
+              </span>
+            );
+          }
+          const text = token.filler ? <span className="fill">{token.text}</span> : token.stutter ? <span className="stt">{token.text}</span> : token.text;
+          return <Fragment key={i}>{text} </Fragment>;
+        })}
+      </span>
+      {sentence.issue ? (
+        // vysvetlenie hneď pod vetou: čo je na nej zlé a ako ju povedať lepšie
+        <span className={`sn-why sn-why-${sentence.severity}`}>
+          <b>{sentence.issue}</b>
+          {sentence.note ? <> · {sentence.note}</> : null}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -441,7 +450,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
   };
 
   const hasSpeech = data.transcript.length > 0;
-  const issues = data.transcript.filter((s) => s.marker !== null);
+  const issueCount = data.transcript.filter((s) => s.issue).length;
   const speech = data.speech;
 
   return (
@@ -682,7 +691,11 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
                   <h2 className="h" style={{ fontSize: "26px" }}>
                     {tx.s6}
                   </h2>
-                  {data.transcriptReviewed ? <span className="muted">{tx.s6sub}</span> : null}
+                  {data.transcriptReviewed ? (
+                    <span className="muted">
+                      {tx.s6sub} · {tx.flagged(issueCount, data.transcript.filter((t) => t.tokens.length).length)}
+                    </span>
+                  ) : null}
                 </div>
                 <p style={{ margin: "16px 0 0", fontSize: "17px", lineHeight: "2.1" }}>
                   {data.transcript.map((sentence, i) => (
@@ -708,21 +721,6 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
                   <p className="muted" style={{ margin: "14px 0 0", fontSize: "13px" }}>
                     {tx.unreviewed}
                   </p>
-                ) : issues.length ? (
-                  <div style={{ marginTop: "20px" }}>
-                    <div style={{ fontWeight: 700, marginBottom: "6px" }}>{tx.issuesTitle}</div>
-                    {issues.map((s) => (
-                      <div key={s.marker} style={{ display: "flex", gap: "12px", padding: "10px 0", borderTop: "1px solid var(--color-line)", fontSize: "14px", lineHeight: "1.55" }}>
-                        <span className={`mk mk-${s.severity}`} style={{ flex: "0 0 auto" }}>
-                          {s.marker}
-                        </span>
-                        <span>
-                          <b>{s.issue}</b>
-                          {s.note ? <span className="muted"> · {s.note}</span> : null}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 ) : null}
               </section>
 

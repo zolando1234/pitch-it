@@ -206,7 +206,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
         // obsahové skóre len z bodov osnovy, ktorú si rečník zadal
         const points = outline?.points.length ? result.data.points.filter((p) => p.index < outline.points.length) : [];
         const analysis = { ...result.data, points };
-        const stored: StoredSpeechAnalysis = { version: 2, analysis, derivedPoints: false };
+        const stored: StoredSpeechAnalysis = { version: 2, analysis, derivedPoints: false, sentences };
         content = stored;
         score = contentScoreOf(analysis);
         model = result.model;

@@ -48,3 +48,8 @@
 :root[data-theme="light"] .pi-fb .sn-major{color:#C0392B}
 :root[data-theme="light"] .pi-fb .mk-minor{color:#9A6400}
 :root[data-theme="light"] .pi-fb .mk-major{color:#C0392B}
+/* vysvetlenie pod označenou vetou */
+.pi-fb .sn-why{display:block;margin:2px 0 10px;padding:6px 12px;border-left:3px solid;border-radius:0 10px 10px 0;font-size:14px;line-height:1.5;font-style:normal;text-decoration:none;color:var(--color-paper);background:var(--color-panel)}
+.pi-fb .sn-why-minor{border-color:#FFC94D}
+.pi-fb .sn-why-major{border-color:#FF6B5B}
+.pi-fb .sn-why b{font-weight:700}

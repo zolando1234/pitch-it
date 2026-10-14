@@ -59,6 +59,8 @@ export type StoredSpeechAnalysis = {
   analysis: SpeechAnalysis;
   /** staršie rozbory: body odvodené z témy (dnes sa hodnotia len body zadané v osnove) */
   derivedPoints: boolean;
+  /** vety prepisu presne tak, ako ich dostala AI (indexy v `analysis.sentences` sa vzťahujú na ne) */
+  sentences?: string[];
 };
 
 export function parseSpeechAnalysis(value: unknown): StoredSpeechAnalysis | null {
@@ -125,10 +127,11 @@ Vráť:
   Hodnoť iba body osnovy, ktoré zadal rečník; ak osnova nie je zadaná, vráť prázdne pole points a žiadne body si nevymýšľaj.
 - waste: najviac 6 miest, kde rečník plytval časom: offtopic = mimo témy, unnecessary = zbytočné slová či opakovanie bez prínosu,
   overexplain = vysvetľoval príliš dlho alebo zbytočne podrobne. quote = krátky citát z prepisu, note = čo s tým urobiť.
-- sentences: vety z očíslovaného prepisu, ktoré majú problém (najviac ${MAX_FLAGGED_SENTENCES}; vety bez problému nevracaj):
+- sentences: iba vety z očíslovaného prepisu, ktoré majú skutočný problém (najviac ${MAX_FLAGGED_SENTENCES}). Väčšina viet v bežnom prejave
+  je v poriadku: vety bez problému nevracaj a neoznačuj vetu len preto, že je jednoduchá alebo hovorová. Jednu vetu vráť najviac raz:
   issue = unclear (nezrozumiteľná), convoluted (zamotaná, ťažko pochopiteľná, rečník sa v nej zamotal), stutter (zakoktanie, začatá a nedokončená veta,
   opakovanie slov), grammar (gramaticky zle), offtopic (mimo témy), vague (všeobecná bez obsahu); severity minor = drobnosť, major = vážne
-  zhoršuje pochopenie; note = krátka rada, ako vetu povedať lepšie.
+  zhoršuje pochopenie; note = jedna veta, čo konkrétne je na nej zlé a ako ju povedať lepšie (ideálne s návrhom lepšej formulácie).
 - advice: jedna najdôležitejšia vec na ďalší pokus.
 V textoch nikdy neodkazuj na čísla viet (žiadne „veta [3]“), radšej krátko cituj slová z prepisu.
 Tón vľúdny, koučovací, v tykaní, nikdy karhajúci.`;

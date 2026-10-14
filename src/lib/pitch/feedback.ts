@@ -149,6 +149,32 @@ export function groupSentences(tokens: MarkedToken[]): MarkedToken[][] {
   return out;
 }
 
+/**
+ * Rozdelí slová prepisu na vety podľa viet, ktoré dostala AI (počty slov). Keď sa počet slov
+ * líši (prepis z úsekov, iné delenie slov), hranice sa rozložia pomerne, aby sedeli aspoň približne.
+ */
+export function alignSentences(tokens: MarkedToken[], sentences: string[]): MarkedToken[][] {
+  const counts = sentences.map((s) => (s.match(/\S+/g) ?? []).length);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const words = tokens.filter((t) => t.type === "word").length;
+  if (!total || !words) return groupSentences(tokens);
+  let cum = 0;
+  const bounds = counts.map((c) => {
+    cum += c;
+    return Math.round((cum * words) / total);
+  });
+  const out: MarkedToken[][] = sentences.map(() => []);
+  let seen = 0;
+  let current = 0;
+  for (const token of tokens) {
+    while (current < bounds.length - 1 && seen >= bounds[current]) current++;
+    out[current].push(token);
+    if (token.type === "word") seen++;
+  }
+  // prázdne skupiny ostávajú, aby index vety sedel s rozborom AI
+  return out;
+}
+
 const BODY_TONES: Record<keyof typeof BODY_EVENT_LABELS, BodyTone> = {
   restless_hands: "warn",
   looking_away: "alert",
@@ -254,7 +280,8 @@ export function buildFeedback(
       : null;
 
   // 6: prepis po vetách s označením
-  const sentences = groupSentences(markStutters(metrics?.tokens ?? []));
+  const marked = markStutters(metrics?.tokens ?? []);
+  const sentences = stored?.sentences?.length ? alignSentences(marked, stored.sentences) : groupSentences(marked);
   let marker = 0;
   const transcript: TranscriptSentence[] = sentences.map((tokens, index) => {
     // jedna veta môže mať viac problémov: spoja sa, platí horšia závažnosť

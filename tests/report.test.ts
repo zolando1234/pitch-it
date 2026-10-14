@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { PitchAttemptRow } from "../src/lib/db/types.ts";
-import { buildFeedback, groupSentences, markStutters } from "../src/lib/pitch/feedback.ts";
+import { alignSentences, buildFeedback, groupSentences, markStutters } from "../src/lib/pitch/feedback.ts";
 import { buildMetrics } from "../src/lib/pitch/metrics.ts";
 import { contentScoreOf, outlineFromAnalysis, splitSentences, speechAnalysisSchema, type SpeechAnalysis } from "../src/lib/pitch/speech-analysis.ts";
 
@@ -82,4 +82,17 @@ test("odkazy na čísla viet sa z textov odstránia", async () => {
   assert.equal(stripSentenceRefs("Veta [1] jasne spomína problém."), "Jasne spomína problém.");
   assert.equal(stripSentenceRefs("Len spomenuté 120 používateľov (veta [5]), chýbali piloty."), "Len spomenuté 120 používateľov, chýbali piloty.");
   assert.equal(stripSentenceRefs("Veta [3] je zamotaná; veta [4] je mimo."), "Je zamotaná; je mimo.");
+});
+
+test("prepis bez interpunkcie sa rozdelí na vety podľa rozboru, nie ako jedna veta", () => {
+  const words = "máme problém ktorý je zamotaný hotovo".split(" ").map((text) => ({ type: "word" as const, text, filler: false }));
+  // bez bodiek by to bola jedna veta
+  assert.equal(groupSentences(words).length, 1);
+  const aligned = alignSentences(words, ["Máme problém.", "Ktorý je zamotaný.", "Hotovo."]);
+  assert.deepEqual(aligned.map((g) => g.map((t) => (t.type === "word" ? t.text : "")).join(" ")), ["máme problém", "ktorý je zamotaný", "hotovo"]);
+  // iný počet slov: hranice sa rozložia pomerne
+  const extra = [...words, { type: "word" as const, text: "ďakujem", filler: false }];
+  const proportional = alignSentences(extra, ["Máme problém.", "Ktorý je zamotaný.", "Hotovo."]);
+  assert.equal(proportional.length, 3);
+  assert.equal(proportional.reduce((n, g) => n + g.length, 0), 7);
 });
