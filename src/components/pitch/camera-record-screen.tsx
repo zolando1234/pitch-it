@@ -57,9 +57,13 @@ const TX = {
     clientBefore: ["Stačí mikrofón, kamera sa pri stretnutí nepoužíva.", "Hovor tak, ako keby oproti sedel klient.", "Keď sa klient spýta, odpovedz a pokračuj vo výklade."],
     clientTitle: "Stretnutie s klientom",
     kindAi: ["Tréning s AI klientom", "Len hlas. AI klient ťa počas výkladu preruší otázkami."],
-    kindReal: ["Skutočné stretnutie", "Nahráš reálny rozhovor s klientom. Oddelíme tvoju reč od klienta a vyhodnotíme stretnutie aj tvoje reakcie."],
-    realLead: "Nahraj skutočné stretnutie (kamerou teraz alebo hotové video). Rozpoznáme, kedy hovoríš ty a kedy klient, a vyhodnotíme tvoju reč, gestá, držanie sa témy aj to, ako si reagoval na klienta.",
-    realBefore: ["Kamera nech vidí teba od pása hore, klient môže byť mimo záberu.", "Mikrofón daj medzi seba a klienta, aby bolo počuť oboch.", "Pred nahrávaním sa klienta spýtaj, či súhlasí."],
+    kindReal: ["Skutočné stretnutie", "Len hlas. Nahráš reálny rozhovor s klientom, oddelíme tvoju reč od klienta a vyhodnotíme stretnutie aj tvoje reakcie."],
+    realLead: "Nahraj skutočné stretnutie, len hlas. Rozpoznáme, kedy hovoríš ty a kedy klient, a vyhodnotíme tvoju reč, držanie sa témy aj to, ako si reagoval na klienta.",
+    realBefore: ["Mikrofón (alebo mobil) daj medzi seba a klienta, aby bolo počuť oboch.", "Pred nahrávaním sa klienta spýtaj, či súhlasí.", "Stretnutie môžeš nahrať aj diktafónom v mobile a nahrávku pridať neskôr."],
+    realSource: "Nahrávka stretnutia",
+    realLive: ["Nahrávať teraz", "Spustíš nahrávanie a položíš počítač alebo mobil na stôl."],
+    realFile: ["Nahrať hotovú nahrávku", "Zvuk alebo video z mobilu či diktafónu. Netreba ho prehrávať, vyhodnotí sa hneď."],
+    realFileNote: (min: number) => `MP3, M4A, WAV alebo video. Vyhodnotíme prvých ${min} min, z videa len zvuk.`,
     changeMode: "Iný typ tréningu",
     back: "Prehľad",
     howSpeak: "Mikrofón",
@@ -84,6 +88,7 @@ const TX = {
     pickVideo: "Vyber video.",
     startRecording: "Spustiť nahrávanie",
     analyzeVideo: "Analyzovať video",
+    analyzeRecording: "Vyhodnotiť nahrávku",
     consent: "Spustením súhlasíš, že prejav vyhodnotí AI. Video zostáva v tvojom prehliadači, na server ide len zvuk na prepis.",
     videoTitle: "Analýza videa",
     liveTitle: "Verejné vystúpenie",
@@ -122,9 +127,13 @@ const TX = {
     clientBefore: ["A microphone is all you need, the camera isn't used in a meeting.", "Talk as if the client sat opposite you.", "When the client asks, answer and carry on with your explanation."],
     clientTitle: "Client meeting",
     kindAi: ["Practice with an AI client", "Voice only. The AI client interrupts you with questions while you talk."],
-    kindReal: ["Real meeting", "Record a real conversation with a client. We separate your speech from the client's and evaluate the meeting and your reactions."],
-    realLead: "Record a real meeting (camera now or a finished video). We detect when you speak and when the client does, and evaluate your speech, gestures, staying on topic and how you reacted to the client.",
-    realBefore: ["The camera should see you from the waist up; the client can be out of frame.", "Put the microphone between you and the client so both can be heard.", "Ask the client for consent before recording."],
+    kindReal: ["Real meeting", "Voice only. Record a real conversation with a client; we separate your speech from the client's and evaluate the meeting and your reactions."],
+    realLead: "Record a real meeting, voice only. We detect when you speak and when the client does, and evaluate your speech, staying on topic and how you reacted to the client.",
+    realBefore: ["Put the microphone (or phone) between you and the client so both can be heard.", "Ask the client for consent before recording.", "You can also record the meeting with your phone's voice recorder and upload it later."],
+    realSource: "Meeting recording",
+    realLive: ["Record now", "Start recording and put the computer or phone on the table."],
+    realFile: ["Upload a recording", "Audio or video from a phone or recorder. No need to play it, it's evaluated right away."],
+    realFileNote: (min: number) => `MP3, M4A, WAV or video. We evaluate the first ${min} min; from a video only the sound.`,
     changeMode: "Another training type",
     back: "Overview",
     howSpeak: "Microphone",
@@ -149,6 +158,7 @@ const TX = {
     pickVideo: "Choose a video.",
     startRecording: "Start recording",
     analyzeVideo: "Analyze video",
+    analyzeRecording: "Evaluate the recording",
     consent: "By starting you agree that your talk is evaluated by AI. The video stays in your browser, only the sound goes to the server for transcription.",
     videoTitle: "Video analysis",
     liveTitle: "Public speaking",
@@ -335,7 +345,7 @@ export function CameraRecordScreen({
     [targetSeconds, videoFile, maxVideoSeconds, tx.liveTitle],
   );
   // skutočné stretnutie za stolom: bez pravidiel pódia a nôh
-  const ruleFilter = useMemo(() => ruleFilterFor(mode, false, realMeeting), [mode, realMeeting]);
+  const ruleFilter = useMemo(() => ruleFilterFor(mode, false), [mode]);
   const maxClientQuestions = maxQuestionsFor(targetSeconds * 1000);
 
   // mikrofón: na nahrávanie aj na odpovede v Q&A (aj pri nahratom videe)
@@ -386,9 +396,11 @@ export function CameraRecordScreen({
   const phoneSelected = phone.state !== "idle";
   // mikrofón musí byť pripojený: pri nahrávaní vždy, pri nahratom videe len kvôli odpovediam v Q&A
   const micConnected = phoneSelected ? phone.state === "connected" && hasLiveAudio(recorder.stream) : recorder.media === "ready";
-  const micNeeded = !videoMode || qa.enabled;
+  // nahratý súbor: pri tréningu s AI klientom sa nepoužíva (len živý hlas)
+  const fileMode = videoMode && !aiMeeting;
+  const micNeeded = !fileMode || (qa.enabled && !client);
   const micReady = !micNeeded || micConnected;
-  const sourceReady = !videoMode || !!videoFile;
+  const sourceReady = !fileMode || !!videoFile;
   const hint = !sourceReady
     ? tx.pickVideo
     : micReady
@@ -400,7 +412,7 @@ export function CameraRecordScreen({
           : recorder.media === "unsupported"
             ? tx.noRecorder
             : recorder.media === "missing" || recorder.media === "lost"
-              ? videoMode
+              ? fileMode
                 ? tx.noMicQa
                 : tx.micMissing
               : tx.micStarting;
@@ -409,7 +421,7 @@ export function CameraRecordScreen({
     if (!sourceReady) return;
     // posledná kontrola tesne pred štartom: mikrofón mohol medzitým vypadnúť
     if (micNeeded && !recorder.micLive()) {
-      setError(videoMode ? tx.noMicQa : tx.micMissing);
+      setError(fileMode ? tx.noMicQa : tx.micMissing);
       return;
     }
     // celú obrazovku smie prehliadač zapnúť len priamo po kliknutí (pri „Len analyzovať“ netreba)
@@ -423,8 +435,14 @@ export function CameraRecordScreen({
     audioStarted.current = null;
     videoAudio.current = null;
     // stretnutie s klientom je len hlasové: nahrávanie začne hneď (z kliknutia), kamera sa nezapína
-    if (aiMeeting) {
-      audioStarted.current = recorder.start(language).then((ok) => {
+    if (client) {
+      // hotová nahrávka skutočného stretnutia: rovno prepis a vyhodnotenie, netreba ju prehrávať
+      if (realMeeting && fileMode && videoFile) {
+        void analyzeMeetingFile(videoFile);
+        return;
+      }
+      // skutočné stretnutie: rozlíšiť rečníkov (ty a klient)
+      audioStarted.current = recorder.start(language, { diarize: realMeeting }).then((ok) => {
         if (!ok) abortForMic();
         return ok;
       });
@@ -437,7 +455,7 @@ export function CameraRecordScreen({
       // zvuk videa sa dekóduje zo súboru a ide na prepis hneď, kým beží analýza reči tela
       videoAudio.current = segmentsFromFile(videoFile, maxVideoSeconds)
         .then(async ({ segments, durationMs }) => {
-          const uploader = new SegmentUploader(crypto.randomUUID(), language, null, realMeeting);
+          const uploader = new SegmentUploader(crypto.randomUUID(), language);
           segments.forEach((segment) => uploader.add(segment));
           await uploader.finish();
           return { draftId: uploader.draftId, segments: uploader.count, durationMs };
@@ -445,7 +463,7 @@ export function CameraRecordScreen({
         .catch(() => null);
       return;
     }
-    audioStarted.current = recorder.start(language, { diarize: realMeeting }).then((ok) => {
+    audioStarted.current = recorder.start(language).then((ok) => {
       // bez zvuku nemá nahrávanie zmysel: zastavíme ho a vrátime sa na nastavenie
       if (!ok) abortForMic();
       return ok;
@@ -527,7 +545,7 @@ export function CameraRecordScreen({
   };
 
   const onFinish = async (result: CoachResult) => {
-    const coach = toStoredCoach(result.summary, { teleprompter: false, micMode: realMeeting ? false : prefs.micMode, seated: realMeeting });
+    const coach = toStoredCoach(result.summary, { teleprompter: false, micMode: prefs.micMode });
     const withQa = !client && qa.enabled && (recorder.media === "ready" || !!phoneStream);
     setPhase(withQa ? "qa" : "analyze");
     setK(1);
@@ -549,6 +567,30 @@ export function CameraRecordScreen({
       release();
       await showResult();
     }
+  };
+
+  /** Hotová nahrávka skutočného stretnutia: zvuk sa dekóduje, prepíše s rečníkmi a vyhodnotí. */
+  const analyzeMeetingFile = async (file: File) => {
+    setPhase("analyze");
+    setK(1);
+    let recording: Recording | null = null;
+    try {
+      const { segments, durationMs } = await segmentsFromFile(file, maxVideoSeconds);
+      const uploader = new SegmentUploader(crypto.randomUUID(), language, null, true);
+      segments.forEach((segment) => uploader.add(segment));
+      await uploader.finish();
+      recording = { draftId: uploader.draftId, segments: uploader.count, durationMs };
+    } catch {
+      recording = null;
+    }
+    if (!recording || !recording.segments) {
+      setError(tx.noVideoAudio);
+      setPhase("setup");
+      return;
+    }
+    pending.current = { recording, coach: null, summary: null, videoUrl: null };
+    runAnalysis();
+    await showResult();
   };
 
   /** Koniec hlasového stretnutia s klientom: bez reči tela, odpovede klientovi idú ako Q&A. */
@@ -625,7 +667,7 @@ export function CameraRecordScreen({
     void showResult();
   };
 
-  if (phase === "live" && aiMeeting) {
+  if (phase === "live" && client) {
     return (
       <VoiceStudio
         key={take}
@@ -634,7 +676,10 @@ export function CameraRecordScreen({
         language={language}
         level={recorder.level}
         outline={outline}
-        meeting={{
+        meeting={
+          realMeeting
+            ? null
+            : {
           questions: clientCount,
           language,
           stream: recorder.stream,
@@ -645,7 +690,8 @@ export function CameraRecordScreen({
           onAnswers: (answers) => {
             meetingAnswers.current = answers;
           },
-        }}
+        }
+        }
         onPause={recorder.pause}
         onResume={recorder.resume}
         onFinish={(ms) => void onVoiceFinish(ms)}
@@ -664,7 +710,7 @@ export function CameraRecordScreen({
         mode={mode}
         title={videoFile ? tx.videoTitle : tx.liveTitle}
         subtitle={tx.subtitle(fmtTarget(targetSeconds))}
-        prefs={realMeeting ? { ...prefs, micMode: false } : prefs}
+        prefs={prefs}
         outline={outline}
 
         startFull={fullscreen && !(videoFile && analysis === "quick")}
@@ -759,7 +805,27 @@ export function CameraRecordScreen({
             </div>
           ) : null}
 
-          {!aiMeeting ? (
+          {realMeeting ? (
+            <Section title={tx.realSource}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Choice active={!videoMode} onClick={() => { setVideoMode(false); setVideoFile(null); }} title={tx.realLive[0]} text={tx.realLive[1]} />
+                <Choice active={videoMode} onClick={() => setVideoMode(true)} title={tx.realFile[0]} text={tx.realFile[1]} />
+              </div>
+              {videoMode ? (
+                <div className="mt-4">
+                  <input
+                    type="file"
+                    accept="audio/*,video/*,.m4a,.mp3,.wav,.mp4,.mov,.webm"
+                    onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-mute file:mr-4 file:rounded-full file:border-0 file:bg-signal file:px-5 file:py-2.5 file:font-bold file:text-on-signal hover:file:bg-signal-hover"
+                  />
+                  <p className="mt-2 text-xs text-faint">{tx.realFileNote(Math.round(maxVideoSeconds / 60))}</p>
+                </div>
+              ) : null}
+            </Section>
+          ) : null}
+
+          {!client ? (
           <VideoSourcePicker
             file={videoFile}
             onFile={setVideoFile}
@@ -778,14 +844,14 @@ export function CameraRecordScreen({
                 <Choice active={prefs.micMode} onClick={() => prefs.onMic(true)} title={tx.withMic[0]} text={tx.withMic[1]} />
               </div>
             ) : null}
-            {!videoMode ? (
+            {!fileMode ? (
               <div className={client ? "" : "mt-6"}>
                 <PhoneMicPanel phone={phone} level={recorder.level} mic={recorder.media === "ready" ? "ready" : recorder.media === "missing" || recorder.media === "lost" ? "missing" : "other"} />
               </div>
             ) : null}
           </Section>
 
-          {!aiMeeting ? (
+          {!client ? (
           <Section title={tx.quality}>
             <div className="grid gap-3 sm:grid-cols-3">
               {(["fast", "balanced", "precise"] as TrackingQuality[]).map((q) => (
@@ -795,7 +861,7 @@ export function CameraRecordScreen({
           </Section>
           ) : null}
 
-          {!videoMode ? <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref="/app/nastavenia#plan" /> : null}
+          {!fileMode ? <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref="/app/nastavenia#plan" /> : null}
           <LanguagePicker {...languageState} />
           <OutlineEditor {...outlineState} />
           {aiMeeting ? (
@@ -826,7 +892,7 @@ export function CameraRecordScreen({
             <QaSettings {...qa} />
           ) : null}
 
-          {!videoMode ? (
+          {!fileMode ? (
             <>
               <section className="rounded-3xl border border-line p-5 md:p-6">
                 <ul className="grid gap-2 text-mute sm:grid-cols-3">
@@ -835,7 +901,7 @@ export function CameraRecordScreen({
                   ))}
                 </ul>
               </section>
-              {!aiMeeting ? (
+              {!client ? (
               <button
                 type="button"
                 role="switch"
@@ -868,7 +934,7 @@ export function CameraRecordScreen({
               disabled={!micReady || !sourceReady}
               className="rounded-full bg-signal px-10 py-5 text-xl font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40"
             >
-              {videoMode ? tx.analyzeVideo : tx.startRecording} →
+              {fileMode ? (realMeeting ? tx.analyzeRecording : tx.analyzeVideo) : tx.startRecording} →
             </button>
             <p className="text-sm text-faint">{tx.consent}</p>
           </div>

@@ -12,7 +12,8 @@ import type { PitchOutline } from "@/lib/pitch/outline";
 
 /*
   Hlasové štúdio (stretnutie s klientom): bez kamery a sledovania tela. Časomiera, ukazovateľ
-  hlasu, živé titulky a body osnovy; klient prerušuje otázkami (useClientQuestions).
+  hlasu, živé titulky a body osnovy; pri tréningu AI klient prerušuje otázkami (useClientQuestions),
+  pri skutočnom stretnutí sa len nahráva rozhovor.
   Pauza stopne aj časomieru, na konci cieľovej dĺžky sa stretnutie ukončí samo.
 */
 
@@ -68,7 +69,8 @@ export function VoiceStudio({
   /** hlasitosť mikrofónu 0–1 */
   level: number;
   outline: PitchOutline | null;
-  meeting: MeetingSetup;
+  /** otázky AI klienta; null = skutočné stretnutie (bez otázok) */
+  meeting: MeetingSetup | null;
   onPause: () => void;
   onResume: () => void;
   /** koniec stretnutia; dĺžka výkladu bez páuz */
