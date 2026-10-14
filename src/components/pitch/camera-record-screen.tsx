@@ -14,6 +14,7 @@ import { PhoneMicPanel } from "@/components/pitch/phone-mic-panel";
 import { PI_BACKGROUND, PiTopbar } from "@/components/pitch/pi-topbar";
 import { balanceLabel, PitchPaywall, usePitchBalance } from "@/components/pitch/pitch-paywall";
 import { PitchStudio } from "@/components/pitch/pitch-studio";
+import { VoiceStudio } from "@/components/pitch/voice-studio";
 import { QaSession, type QaAnswerRecording } from "@/components/pitch/qa-session";
 import { QaSettings, useQaPrefs } from "@/components/pitch/qa-settings";
 import { primeAudio, SegmentUploader, segmentsFromFile } from "@/components/pitch/speech-capture";
@@ -49,12 +50,16 @@ const TX = {
     heading: "Verejné vystúpenie",
     lead: "Nastav si tréning. Všetko sa pamätá, nabudúce môžeš rovno začať.",
     clientHeading: "Stretnutie s klientom",
-    clientLead: "Vysvetľuješ klientovi svoju ponuku. Klient ťa v náhodných chvíľach preruší otázkou k tomu, čo si práve povedal. Odpovieš a pokračuješ ďalej.",
+    clientLead: "Vysvetľuješ klientovi svoju ponuku, len hlasom, bez kamery. Klient ťa v náhodných chvíľach preruší otázkou k tomu, čo si práve povedal. Odpovieš a pokračuješ ďalej.",
     clientQuestions: "Otázky klienta počas výkladu",
     clientQuestionsNote: (max: number) =>
       max ? `Klient sa ozve v prirodzenej pauze, najskôr po chvíli výkladu. Na túto dĺžku stretnutia najviac ${max}, na viac otázok zvoľ dlhšie stretnutie.` : "Stretnutie je na otázky príliš krátke. Zvoľ aspoň 1 minútu.",
-    clientBefore: ["Sadni si za stôl tak, aby ťa kamera videla od pása hore.", "Ruky maj na stole alebo nad ním, nie pod ním.", "Hovor ku kamere, ako keby oproti sedel klient."],
+    clientBefore: ["Stačí mikrofón, kamera sa pri stretnutí nepoužíva.", "Hovor tak, ako keby oproti sedel klient.", "Keď sa klient spýta, odpovedz a pokračuj vo výklade."],
     clientTitle: "Stretnutie s klientom",
+    kindAi: ["Tréning s AI klientom", "Len hlas. AI klient ťa počas výkladu preruší otázkami."],
+    kindReal: ["Skutočné stretnutie", "Nahráš reálny rozhovor s klientom. Oddelíme tvoju reč od klienta a vyhodnotíme stretnutie aj tvoje reakcie."],
+    realLead: "Nahraj skutočné stretnutie (kamerou teraz alebo hotové video). Rozpoznáme, kedy hovoríš ty a kedy klient, a vyhodnotíme tvoju reč, gestá, držanie sa témy aj to, ako si reagoval na klienta.",
+    realBefore: ["Kamera nech vidí teba od pása hore, klient môže byť mimo záberu.", "Mikrofón daj medzi seba a klienta, aby bolo počuť oboch.", "Pred nahrávaním sa klienta spýtaj, či súhlasí."],
     changeMode: "Iný typ tréningu",
     back: "Prehľad",
     howSpeak: "Mikrofón",
@@ -110,12 +115,16 @@ const TX = {
     heading: "Public speaking",
     lead: "Set up your training. Everything is remembered, next time you can start right away.",
     clientHeading: "Client meeting",
-    clientLead: "You explain your offer to a client. At random moments the client interrupts with a question about what you just said. You answer and carry on.",
+    clientLead: "You explain your offer to a client, voice only, no camera. At random moments the client interrupts with a question about what you just said. You answer and carry on.",
     clientQuestions: "Client questions during the talk",
     clientQuestionsNote: (max: number) =>
       max ? `The client speaks up in a natural pause, after a while of talking. For this meeting length at most ${max}; for more questions pick a longer meeting.` : "The meeting is too short for questions. Pick at least 1 minute.",
-    clientBefore: ["Sit at a table so the camera sees you from the waist up.", "Keep your hands on or above the table, not under it.", "Talk to the camera as if the client sat opposite you."],
+    clientBefore: ["A microphone is all you need, the camera isn't used in a meeting.", "Talk as if the client sat opposite you.", "When the client asks, answer and carry on with your explanation."],
     clientTitle: "Client meeting",
+    kindAi: ["Practice with an AI client", "Voice only. The AI client interrupts you with questions while you talk."],
+    kindReal: ["Real meeting", "Record a real conversation with a client. We separate your speech from the client's and evaluate the meeting and your reactions."],
+    realLead: "Record a real meeting (camera now or a finished video). We detect when you speak and when the client does, and evaluate your speech, gestures, staying on topic and how you reacted to the client.",
+    realBefore: ["The camera should see you from the waist up; the client can be out of frame.", "Put the microphone between you and the client so both can be heard.", "Ask the client for consent before recording."],
     changeMode: "Another training type",
     back: "Overview",
     howSpeak: "Microphone",
@@ -164,6 +173,7 @@ const TX = {
 const FULLSCREEN_KEY = "pitchit-pitch-fullscreen";
 const ANALYSIS_KEY = "pitchit-video-analysis";
 const CLIENT_COUNT_KEY = "pitchit-client-questions";
+const CLIENT_KIND_KEY = "pitchit-client-kind";
 
 const fmtTarget = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -242,13 +252,24 @@ export function CameraRecordScreen({
   // dlhšie ako 3 minúty len s kúpenými pitchami; inak najdlhšia bezplatná dĺžka
   const targetSeconds = canUseLength(lengthState.length, wallet.balance) ? lengthState.length : FREE_MAX_SECONDS;
   const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
+  const [clientKind, setClientKind] = useState<"ai" | "real">("ai");
+  useEffect(() => {
+    if (readPref(CLIENT_KIND_KEY) === "real") setClientKind("real"); // eslint-disable-line react-hooks/set-state-in-effect -- localStorage je len na klientovi
+  }, []);
+  const chooseClientKind = (kind: "ai" | "real") => {
+    writePref(CLIENT_KIND_KEY, kind);
+    setClientKind(kind);
+  };
   const pitchSetup = useMemo(
-    () => ({ ...setup, targetSeconds, language, uiLocale: locale, mode: trainingMode === "client" ? ("client" as const) : ("public" as const) }),
-    [setup, targetSeconds, language, locale, trainingMode],
+    () => ({ ...setup, targetSeconds, language, uiLocale: locale, mode: trainingMode === "client" ? (clientKind === "real" ? ("meeting" as const) : ("client" as const)) : ("public" as const) }),
+    [setup, targetSeconds, language, locale, trainingMode, clientKind],
   );
   const { outline } = outlineState;
 
   const client = trainingMode === "client";
+  /** stretnutie s AI klientom (len hlas, otázky) alebo nahrávka skutočného stretnutia */
+  const aiMeeting = client && clientKind === "ai";
+  const realMeeting = client && clientKind === "real";
   const [clientCount, setClientCount] = useState(3);
   useEffect(() => {
     const saved = Number(readPref(CLIENT_COUNT_KEY));
@@ -284,7 +305,7 @@ export function CameraRecordScreen({
   /** zvuk nahratého videa: dekóduje a odošle sa hneď po štarte */
   const videoAudio = useRef<Promise<Recording | null> | null>(null);
   const [canResend, setCanResend] = useState(false);
-  const pending = useRef<{ recording: Recording; coach: ReturnType<typeof toStoredCoach>; summary: CoachResult["summary"]; videoUrl: string | null } | null>(null);
+  const pending = useRef<{ recording: Recording; coach: ReturnType<typeof toStoredCoach> | null; summary: CoachResult["summary"] | null; videoUrl: string | null } | null>(null);
   const analysisRun = useRef<Promise<{ ok: true; attemptId: string } | { ok: false; message: string; retryable: boolean }> | null>(null);
 
   useEffect(() => {
@@ -313,8 +334,8 @@ export function CameraRecordScreen({
     }),
     [targetSeconds, videoFile, maxVideoSeconds, tx.liveTitle],
   );
-  // pri stole sa sedí: bez pravidiel pódia a nôh
-  const ruleFilter = useMemo(() => ruleFilterFor(mode, false, client), [mode, client]);
+  // skutočné stretnutie za stolom: bez pravidiel pódia a nôh
+  const ruleFilter = useMemo(() => ruleFilterFor(mode, false, realMeeting), [mode, realMeeting]);
   const maxClientQuestions = maxQuestionsFor(targetSeconds * 1000);
 
   // mikrofón: na nahrávanie aj na odpovede v Q&A (aj pri nahratom videe)
@@ -401,6 +422,13 @@ export function CameraRecordScreen({
     setNotice(null);
     audioStarted.current = null;
     videoAudio.current = null;
+    // stretnutie s klientom je len hlasové: nahrávanie začne hneď (z kliknutia), kamera sa nezapína
+    if (aiMeeting) {
+      audioStarted.current = recorder.start(language).then((ok) => {
+        if (!ok) abortForMic();
+        return ok;
+      });
+    }
     setPhase("live");
   };
 
@@ -409,7 +437,7 @@ export function CameraRecordScreen({
       // zvuk videa sa dekóduje zo súboru a ide na prepis hneď, kým beží analýza reči tela
       videoAudio.current = segmentsFromFile(videoFile, maxVideoSeconds)
         .then(async ({ segments, durationMs }) => {
-          const uploader = new SegmentUploader(crypto.randomUUID(), language);
+          const uploader = new SegmentUploader(crypto.randomUUID(), language, null, realMeeting);
           segments.forEach((segment) => uploader.add(segment));
           await uploader.finish();
           return { draftId: uploader.draftId, segments: uploader.count, durationMs };
@@ -417,7 +445,7 @@ export function CameraRecordScreen({
         .catch(() => null);
       return;
     }
-    audioStarted.current = recorder.start(language).then((ok) => {
+    audioStarted.current = recorder.start(language, { diarize: realMeeting }).then((ok) => {
       // bez zvuku nemá nahrávanie zmysel: zastavíme ho a vrátime sa na nastavenie
       if (!ok) abortForMic();
       return ok;
@@ -476,7 +504,7 @@ export function CameraRecordScreen({
     if (!p) return null;
     const run = uploadPitchWithRetry(p.recording, pitchSetup, p.coach, outline).then((result) => {
       if (result.ok) {
-        keepLocalSession(result.attemptId, { summary: p.summary, videoUrl: p.videoUrl });
+        if (p.summary) keepLocalSession(result.attemptId, { summary: p.summary, videoUrl: p.videoUrl });
         void wallet.reload();
       }
       return result;
@@ -499,7 +527,7 @@ export function CameraRecordScreen({
   };
 
   const onFinish = async (result: CoachResult) => {
-    const coach = toStoredCoach(result.summary, { teleprompter: false, micMode: client ? false : prefs.micMode, seated: client });
+    const coach = toStoredCoach(result.summary, { teleprompter: false, micMode: realMeeting ? false : prefs.micMode, seated: realMeeting });
     const withQa = !client && qa.enabled && (recorder.media === "ready" || !!phoneStream);
     setPhase(withQa ? "qa" : "analyze");
     setK(1);
@@ -517,8 +545,21 @@ export function CameraRecordScreen({
     pending.current = { recording: final, coach, summary: result.summary, videoUrl: result.recording?.url ?? null };
     runAnalysis();
     if (withQa) void loadQuestions(recording);
-    // stretnutie s klientom: odpovede počas výkladu sa vyhodnotia ako Q&A
-    else if (client && meetingAnswers.current.length) void onQaDone(meetingAnswers.current);
+    else {
+      release();
+      await showResult();
+    }
+  };
+
+  /** Koniec hlasového stretnutia s klientom: bez reči tela, odpovede klientovi idú ako Q&A. */
+  const onVoiceFinish = async (elapsedMs: number) => {
+    setPhase("analyze");
+    setK(1);
+    const recording = audioStarted.current && (await audioStarted.current) ? await recorder.stop() : null;
+    const final: Recording = recording ?? { draftId: crypto.randomUUID(), segments: 0, durationMs: elapsedMs };
+    pending.current = { recording: final, coach: null, summary: null, videoUrl: null };
+    runAnalysis();
+    if (meetingAnswers.current.length) void onQaDone(meetingAnswers.current);
     else {
       release();
       await showResult();
@@ -584,31 +625,48 @@ export function CameraRecordScreen({
     void showResult();
   };
 
+  if (phase === "live" && aiMeeting) {
+    return (
+      <VoiceStudio
+        key={take}
+        title={tx.clientTitle}
+        durationMs={targetSeconds * 1000}
+        language={language}
+        level={recorder.level}
+        outline={outline}
+        meeting={{
+          questions: clientCount,
+          language,
+          stream: recorder.stream,
+          level: recorder.level,
+          topic: outline?.topic || null,
+          outline: outline?.points ?? null,
+          transcript: recorder.draft,
+          onAnswers: (answers) => {
+            meetingAnswers.current = answers;
+          },
+        }}
+        onPause={recorder.pause}
+        onResume={recorder.resume}
+        onFinish={(ms) => void onVoiceFinish(ms)}
+        onBack={() => {
+          recorder.discard();
+          setPhase("setup");
+        }}
+      />
+    );
+  }
+
   if (phase === "live") {
     return (
       <PitchStudio
         key={take}
         mode={mode}
-        title={client ? tx.clientTitle : videoFile ? tx.videoTitle : tx.liveTitle}
+        title={videoFile ? tx.videoTitle : tx.liveTitle}
         subtitle={tx.subtitle(fmtTarget(targetSeconds))}
-        prefs={client ? { ...prefs, micMode: false } : prefs}
+        prefs={realMeeting ? { ...prefs, micMode: false } : prefs}
         outline={outline}
-        meeting={
-          client
-            ? {
-                questions: clientCount,
-                language,
-                stream: recorder.stream,
-                level: recorder.level,
-                topic: outline?.topic || null,
-                outline: outline?.points ?? null,
-                transcript: recorder.draft,
-                onAnswers: (answers) => {
-                  meetingAnswers.current = answers;
-                },
-              }
-            : null
-        }
+
         startFull={fullscreen && !(videoFile && analysis === "quick")}
         file={videoFile}
         quiet={!!videoFile && analysis === "quick"}
@@ -690,11 +748,18 @@ export function CameraRecordScreen({
               ← {tx.changeMode}
             </button>
             <h1 className="h text-4xl leading-tight md:text-6xl">{client ? tx.clientHeading : tx.heading}</h1>
-            <p className="max-w-2xl text-lg text-mute">{client ? tx.clientLead : tx.lead}</p>
+            <p className="max-w-2xl text-lg text-mute">{aiMeeting ? tx.clientLead : realMeeting ? tx.realLead : tx.lead}</p>
             {wallet.balance ? <p className="text-sm font-bold text-accent">{balanceLabel(wallet.balance, locale)}</p> : null}
           </div>
 
-          {!client ? (
+          {client ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Choice active={aiMeeting} onClick={() => chooseClientKind("ai")} title={tx.kindAi[0]} text={tx.kindAi[1]} />
+              <Choice active={realMeeting} onClick={() => chooseClientKind("real")} title={tx.kindReal[0]} text={tx.kindReal[1]} />
+            </div>
+          ) : null}
+
+          {!aiMeeting ? (
           <VideoSourcePicker
             file={videoFile}
             onFile={setVideoFile}
@@ -720,6 +785,7 @@ export function CameraRecordScreen({
             ) : null}
           </Section>
 
+          {!aiMeeting ? (
           <Section title={tx.quality}>
             <div className="grid gap-3 sm:grid-cols-3">
               {(["fast", "balanced", "precise"] as TrackingQuality[]).map((q) => (
@@ -727,11 +793,12 @@ export function CameraRecordScreen({
               ))}
             </div>
           </Section>
+          ) : null}
 
           {!videoMode ? <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref="/app/nastavenia#plan" /> : null}
           <LanguagePicker {...languageState} />
           <OutlineEditor {...outlineState} />
-          {client ? (
+          {aiMeeting ? (
             <Section title={tx.clientQuestions}>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={tx.clientQuestions}>
                 {Array.from({ length: CLIENT_MAX_QUESTIONS }, (_, i) => i + 1).map((n) => {
@@ -755,19 +822,20 @@ export function CameraRecordScreen({
               </div>
               <p className="mt-3 text-sm text-mute">{tx.clientQuestionsNote(maxClientQuestions)}</p>
             </Section>
-          ) : (
+          ) : !client ? (
             <QaSettings {...qa} />
-          )}
+          ) : null}
 
           {!videoMode ? (
             <>
               <section className="rounded-3xl border border-line p-5 md:p-6">
                 <ul className="grid gap-2 text-mute sm:grid-cols-3">
-                  {(client ? tx.clientBefore : tx.before).map((tip) => (
+                  {(aiMeeting ? tx.clientBefore : realMeeting ? tx.realBefore : tx.before).map((tip) => (
                     <li key={tip}>• {tip}</li>
                   ))}
                 </ul>
               </section>
+              {!aiMeeting ? (
               <button
                 type="button"
                 role="switch"
@@ -783,6 +851,7 @@ export function CameraRecordScreen({
                   <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${fullscreen ? "left-6" : "left-1"}`} />
                 </span>
               </button>
+              ) : null}
             </>
           ) : null}
 

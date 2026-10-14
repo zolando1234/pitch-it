@@ -47,7 +47,8 @@ export async function transcribeAudio(audio: Blob, fileName: string, language: "
   return typeof data.text === "string" ? data.text.trim() : "";
 }
 
-export type TimedTranscript = { text: string; words: Array<{ word: string; start: number; end: number }> };
+/** speaker: rečník slova (len pri rozpoznávaní rečníkov, napr. „speaker_0“) */
+export type TimedTranscript = { text: string; words: Array<{ word: string; start: number; end: number; speaker?: string }> };
 
 /** Nápoveda pre Whisper, aby zachoval zaváhania (inak ich vynecháva). */
 const HESITATION_HINT: Partial<Record<PitchLanguage, string>> = {
@@ -67,6 +68,8 @@ export async function transcribeWithWords(
   audio: Blob,
   fileName: string,
   language: PitchLanguage,
+  /** skutočné stretnutie: rozlíšiť rečníkov (vie len ElevenLabs Scribe) */
+  options: { diarize?: boolean } = {},
 ): Promise<TimedTranscript & { provider: SttProvider }> {
   const order = sttOrder(language, {
     elevenlabs: getElevenLabsSttConfig() !== null,
@@ -79,7 +82,7 @@ export async function transcribeWithWords(
     try {
       const result =
         provider === "elevenlabs"
-          ? await transcribeWithElevenLabs(audio, fileName, language)
+          ? await transcribeWithElevenLabs(audio, fileName, language, options.diarize ?? false)
           : provider === "openai"
             ? await transcribeWithWhisper(audio, fileName, language)
             : await transcribeWithMistral(audio, fileName);
@@ -93,7 +96,7 @@ export async function transcribeWithWords(
 }
 
 /** ElevenLabs Scribe: zadaný jazyk aj časy slov v jednej požiadavke. */
-async function transcribeWithElevenLabs(audio: Blob, fileName: string, language: PitchLanguage): Promise<TimedTranscript> {
+async function transcribeWithElevenLabs(audio: Blob, fileName: string, language: PitchLanguage, diarize = false): Promise<TimedTranscript> {
   const config = getElevenLabsSttConfig();
   if (!config) throw new TranscriptionError("not_configured", "Prepis reči nie je nakonfigurovaný.");
   const form = new FormData();
@@ -102,6 +105,7 @@ async function transcribeWithElevenLabs(audio: Blob, fileName: string, language:
   form.set("language_code", LANGUAGE_INFO[language].scribe);
   form.set("timestamps_granularity", "word");
   form.set("tag_audio_events", "false");
+  if (diarize) form.set("diarize", "true");
 
   let response: Response;
   try {
@@ -121,7 +125,7 @@ async function transcribeWithElevenLabs(audio: Blob, fileName: string, language:
   const words = Array.isArray(data.words)
     ? data.words
         .filter(
-          (w): w is { text: string; start: number; end: number; type?: string } =>
+          (w): w is { text: string; start: number; end: number; type?: string; speaker_id?: string | null } =>
             typeof w === "object" &&
             w !== null &&
             typeof (w as { text?: unknown }).text === "string" &&
@@ -129,7 +133,7 @@ async function transcribeWithElevenLabs(audio: Blob, fileName: string, language:
             typeof (w as { end?: unknown }).end === "number",
         )
         .filter((w) => (w.type ?? "word") === "word")
-        .map((w) => ({ word: w.text.trim(), start: w.start, end: w.end }))
+        .map((w) => ({ word: w.text.trim(), start: w.start, end: w.end, ...(diarize && w.speaker_id ? { speaker: w.speaker_id } : {}) }))
         .filter((w) => w.word)
     : [];
   return { text: typeof data.text === "string" ? data.text.trim() : "", words };

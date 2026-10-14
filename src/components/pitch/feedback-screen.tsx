@@ -69,6 +69,7 @@ const FB = {
     mentorSees: "Mentor teraz vidí tvoj pokus a ďalšie, ktoré spravíš.",
     plan: "Osnova prezentácie",
     clientChip: "Stretnutie s klientom",
+    meetingChip: "Skutočné stretnutie",
     planHint: "Téma a body, podľa ktorých sme prejav hodnotili. Rozklikni.",
     planTopic: "Téma",
     planPoints: "Osnova",
@@ -158,6 +159,7 @@ const FB = {
     mentorSees: "Your mentor can now see this attempt and the ones you make next.",
     plan: "Presentation outline",
     clientChip: "Client meeting",
+    meetingChip: "Real meeting",
     planHint: "The topic and points we scored your talk against. Click to open.",
     planTopic: "Topic",
     planPoints: "Outline",
@@ -289,6 +291,9 @@ const QA_TX = {
     sub: "Odpovede na otázky po prejave",
     clientTitle: "Otázky klienta",
     clientSub: "Odpovede na otázky počas stretnutia",
+    meetingTitle: "Reakcie na klienta",
+    meetingSub: "Ako stretnutie prebehlo a ako si reagoval na otázky a námietky",
+    clientSaid: "Klient",
     avg: "priemer odpovedí",
     answer: "Tvoja odpoveď",
     none: "Bez odpovede.",
@@ -301,6 +306,9 @@ const QA_TX = {
     sub: "Your answers to the questions after the talk",
     clientTitle: "Client questions",
     clientSub: "Your answers to the questions during the meeting",
+    meetingTitle: "Reactions to the client",
+    meetingSub: "How the meeting went and how you reacted to questions and objections",
+    clientSaid: "Client",
     avg: "average of answers",
     answer: "Your answer",
     none: "No answer.",
@@ -310,16 +318,18 @@ const QA_TX = {
   },
 };
 
-function QaCard({ qa, client = false }: { qa: QaResult; client?: boolean }) {
+function QaCard({ qa, mode = "public" }: { qa: QaResult; mode?: FeedbackData["mode"] }) {
+  const client = mode === "client";
+  const meeting = mode === "meeting";
   const locale = useLocale();
   const tx = QA_TX[locale];
   return (
     <section className="card rv" style={{ animationDelay: "450ms" }} aria-labelledby="qa-nadpis">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px" }}>
         <h2 id="qa-nadpis" className="h" style={{ fontSize: "26px" }}>
-          9 · {client ? tx.clientTitle : tx.title}
+          9 · {meeting ? tx.meetingTitle : client ? tx.clientTitle : tx.title}
         </h2>
-        <span className="muted">{client ? tx.clientSub : tx.sub}</span>
+        <span className="muted">{meeting ? tx.meetingSub : client ? tx.clientSub : tx.sub}</span>
       </div>
       {qa.score !== null ? (
         <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "16px" }}>
@@ -335,7 +345,7 @@ function QaCard({ qa, client = false }: { qa: QaResult; client?: boolean }) {
           return (
             <div key={i} style={{ padding: "18px 0", borderTop: "1px solid var(--color-line)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
-                <b style={{ fontSize: "16px", lineHeight: "1.4" }}>{a.question}</b>
+                <b style={{ fontSize: "16px", lineHeight: "1.4" }}>{meeting ? `${tx.clientSaid}: „${a.question}“` : a.question}</b>
                 {a.score !== null && color ? (
                   <span className="h" style={{ fontSize: "24px", color: color.text, whiteSpace: "nowrap" }}>
                     {a.score}
@@ -347,7 +357,8 @@ function QaCard({ qa, client = false }: { qa: QaResult; client?: boolean }) {
                 ) : null}
               </div>
               <p className="muted" style={{ margin: "8px 0 0", fontSize: "13px" }}>
-                {tx.answer} · {tx.seconds(Math.round(a.durationMs / 1000))}
+                {tx.answer}
+                {a.durationMs ? ` · ${tx.seconds(Math.round(a.durationMs / 1000))}` : ""}
                 {a.fillers ? ` · ${tx.fillers(a.fillers)}` : ""}
               </p>
               <p style={{ margin: "6px 0 0", fontSize: "14px", lineHeight: "1.55", fontStyle: "italic" }}>{a.transcript.trim() ? `„${a.transcript.trim()}“` : tx.none}</p>
@@ -472,7 +483,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span className="chip">{data.targetSeconds >= 60 ? `${Math.round((data.targetSeconds / 60) * 10) / 10} min` : `${data.targetSeconds} s`}</span>
               <span className="chip">{data.languageLabel}</span>
-              {data.mode === "client" ? <span className="chip">{tx.clientChip}</span> : null}
+              {data.mode === "client" ? <span className="chip">{tx.clientChip}</span> : data.mode === "meeting" ? <span className="chip">{tx.meetingChip}</span> : null}
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -829,7 +840,7 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
           ) : null}
 
           {/* 9 · Q&A */}
-          {data.qa ? <QaCard qa={data.qa} client={data.mode === "client"} /> : null}
+          {data.qa ? <QaCard qa={data.qa} mode={data.mode} /> : null}
         </div>
 
         <div className="card" id="zdielat" style={{ marginTop: "20px", padding: "28px" }}>

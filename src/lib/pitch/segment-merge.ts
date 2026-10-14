@@ -4,7 +4,8 @@
   časmi od začiatku nahrávky. Čisté funkcie, testované.
 */
 
-export type SegmentWord = { word: string; start: number; end: number };
+/** speaker: rečník (pri skutočnom stretnutí), platí len v rámci jedného úseku */
+export type SegmentWord = { word: string; start: number; end: number; speaker?: string };
 
 export type TranscribedSegment = {
   index: number;
@@ -25,7 +26,8 @@ export function mergeSegments(segments: TranscribedSegment[]): { text: string; w
   const texts: string[] = [];
   for (const segment of ordered) {
     const offset = segment.offsetMs / 1000;
-    for (const w of segment.words) words.push({ word: w.word, start: w.start + offset, end: w.end + offset });
+    // označenie rečníka platí len v rámci úseku: s3:speaker_0 ≠ s4:speaker_0
+    for (const w of segment.words) words.push({ word: w.word, start: w.start + offset, end: w.end + offset, ...(w.speaker ? { speaker: `s${segment.index}:${w.speaker}` } : {}) });
     if (segment.text.trim()) texts.push(segment.text.trim());
   }
   return { text: texts.join(" "), words, provider: ordered.find((s) => s.provider)?.provider ?? null };
@@ -35,4 +37,16 @@ export function mergeSegments(segments: TranscribedSegment[]): { text: string; w
 export function missingSegments(present: number[], count: number): number[] {
   const have = new Set(present);
   return Array.from({ length: count }, (_, i) => i).filter((i) => !have.has(i));
+}
+
+/** Repliky rozhovoru: súvislé slová jedného rečníka (podľa označenia z úseku). */
+export function speakerTurns(words: SegmentWord[]): Array<{ label: string; text: string; start: number }> {
+  const turns: Array<{ label: string; text: string; start: number }> = [];
+  for (const w of words) {
+    const label = w.speaker ?? "?";
+    const last = turns[turns.length - 1];
+    if (last && last.label === label) last.text += ` ${w.word}`;
+    else turns.push({ label, text: w.word, start: w.start });
+  }
+  return turns;
 }

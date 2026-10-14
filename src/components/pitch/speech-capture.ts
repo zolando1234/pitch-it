@@ -165,6 +165,8 @@ export class SegmentUploader {
     readonly draftId: string,
     private readonly language: string,
     private readonly attemptId: string | null = null,
+    /** skutočné stretnutie: rozlíšiť rečníkov */
+    private readonly diarize = false,
   ) {}
 
   add(segment: AudioSegment) {
@@ -194,6 +196,7 @@ export class SegmentUploader {
       form.set("offsetMs", String(segment.offsetMs));
       form.set("language", this.language);
       if (this.attemptId) form.set("attemptId", this.attemptId);
+      if (this.diarize) form.set("diarize", "1");
       try {
         const response = await fetch("/api/pitch/segment", { method: "POST", body: form });
         if (response.ok) {

@@ -286,7 +286,7 @@ export type PitchAttemptRow = {
   target_seconds: number;
   focus: "tempo" | "fillery" | "obsah";
   /** typ tréningu (zatiaľ len verejné vystúpenie) */
-  mode: "public" | "client" | "online";
+  mode: "public" | "client" | "meeting" | "online";
   with_camera: boolean;
   duration_ms: number | null;
   status: "analyzing" | "ready" | "failed";

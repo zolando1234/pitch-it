@@ -24,7 +24,7 @@ export type RecorderSetup = {
   /** jazyk rozhrania (hlášky a spätná väzba od AI) */
   uiLocale?: "sk" | "en";
   /** typ tréningu */
-  mode?: "public" | "client";
+  mode?: "public" | "client" | "meeting";
 };
 
 /** Hotová nahrávka: úseky sú už odoslané pod `draftId`. */
@@ -147,10 +147,10 @@ export function usePitchRecorder({ video = false }: { video?: boolean } = {}) {
   }, []);
 
   /** Začne nahrávať; úseky idú hneď na prepis. Vráti false, ak zvuk nie je k dispozícii. */
-  const start = useCallback(async (language: PitchLanguage) => {
+  const start = useCallback(async (language: PitchLanguage, options: { diarize?: boolean } = {}) => {
     const current = streamRef.current;
     if (!current || !hasLiveAudio(current)) return false;
-    const uploader = new SegmentUploader(crypto.randomUUID(), language);
+    const uploader = new SegmentUploader(crypto.randomUUID(), language, null, options.diarize ?? false);
     try {
       captureRef.current = await startCapture(current, (segment) => uploader.add(segment));
     } catch {

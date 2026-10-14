@@ -15,7 +15,9 @@ import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
 import { contextForPrompt } from "@/lib/pitch/context";
 import { LANGUAGE_INFO, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
-import { mergeSegments, missingSegments } from "@/lib/pitch/segment-merge";
+import { mergeSegments, missingSegments, speakerTurns } from "@/lib/pitch/segment-merge";
+import { applyRoles, buildMeetingPrompt, buildRolesPrompt, dialogForPrompt, rolesFromCodes, speakerCodes, MEETING_SYSTEM, meetingSchema, meetingToQa, ROLES_SYSTEM, rolesSchema, type DialogLine } from "@/lib/pitch/meeting-dialog";
+import type { QaResult } from "@/lib/pitch/qa";
 import { dropSegments, loadSegments } from "@/lib/pitch/segments";
 import { buildMetrics } from "@/lib/pitch/metrics";
 import { outlineByKeywords, TRANSCRIPT_PROMPT_MAX, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
@@ -72,8 +74,8 @@ export type PitchInput = {
   language?: PitchLanguage;
   /** jazyk rozhrania: v ňom sú chybové hlášky aj spätná väzba od AI */
   uiLocale?: "sk" | "en";
-  /** typ tréningu: verejné vystúpenie alebo stretnutie s klientom */
-  mode?: "public" | "client";
+  /** typ tréningu: verejné vystúpenie, stretnutie s AI klientom alebo skutočné stretnutie */
+  mode?: "public" | "client" | "meeting";
 };
 
 /**
@@ -163,12 +165,36 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     }
     if (transcript) await recordUsage(userId, "transcription_seconds", Math.ceil(input.durationMs / 1000), null);
 
+    const llm = getLlmProvider();
+    // skutočné stretnutie: oddeliť reč rečníka od klienta; hodnotí sa len rečník
+    let dialog: DialogLine[] | null = null;
+    if (input.mode === "meeting" && transcript && llm && transcript.words.some((w) => w.speaker)) {
+      try {
+        const turns = speakerTurns(transcript.words);
+        const roles = await llm.generateStructured({
+          purpose: "pitch_content",
+          system: ROLES_SYSTEM,
+          messages: [{ role: "user", content: buildRolesPrompt(turns, input.outline?.topic || null) }],
+          schema: rolesSchema,
+          effort: "low",
+          maxTokens: 2_000,
+          speed: "interactive",
+        });
+        const split = applyRoles(transcript.words, rolesFromCodes(speakerCodes(turns), roles.data.roles));
+        dialog = split.dialog;
+        if (split.mine.length) transcript = { ...transcript, text: split.mine.map((w) => w.word).join(" "), words: split.mine };
+      } catch (error) {
+        console.error("[pitch] rozlíšenie rečníkov zlyhalo:", error instanceof LlmError ? error.code : error);
+      }
+    }
+    const dialogText = dialog ? dialogForPrompt(dialog) : null;
+
     const metrics = transcript ? buildMetrics({ text: transcript.text, words: transcript.words, durationMs: input.durationMs, language }) : null;
 
     let content: StoredSpeechAnalysis | null = null;
     let score: number | null = null;
     let model: string | null = null;
-    const llm = getLlmProvider();
+    let qa: QaResult | null = null;
     const outline = input.outline ?? null;
     // bez prepisu sa osnova porovnať nedá, uložíme ju aspoň na zobrazenie
     let outlineResult: OutlineResult | null = outline ? { version: 1, ...outline, check: null } : null;
@@ -197,6 +223,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
                 feedbackLocale: ui,
                 outline,
                 context: contextForPrompt(context),
+                dialog: dialogText,
               }),
             },
           ],
@@ -219,7 +246,32 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       }
     };
 
-    await analysisTask();
+    // skutočné stretnutie: ako stretnutie prebehlo a ako si reagoval na klienta
+    const meetingTask = async () => {
+      if (!llm || !dialogText || !dialog?.some((d) => d.role === "client")) return;
+      try {
+        const context = await getPitchContext(userId);
+        const review = await llm.generateStructured({
+          purpose: "qa_evaluation",
+          system: MEETING_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: buildMeetingPrompt({ dialog: dialogText, topic: input.outline?.topic || null, feedbackLocale: ui, context: contextForPrompt(context), language: LANGUAGE_INFO[language].english }),
+            },
+          ],
+          schema: meetingSchema,
+          effort: "low",
+          maxTokens: 3_500,
+          speed: "interactive",
+        });
+        qa = meetingToQa(review.data, language);
+      } catch (error) {
+        console.error("[pitch] vyhodnotenie stretnutia zlyhalo:", error instanceof LlmError ? error.code : error);
+      }
+    };
+
+    await Promise.all([analysisTask(), meetingTask()]);
 
     const patch = {
       status: "ready" as const,
@@ -229,6 +281,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       content_score: score,
       body,
       outline: outlineResult as Record<string, unknown> | null,
+      ...(qa ? { qa: qa as unknown as Record<string, unknown> } : {}),
       language,
       stt_model: transcript?.provider ?? null,
       model,

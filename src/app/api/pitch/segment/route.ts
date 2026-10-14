@@ -48,7 +48,8 @@ export async function POST(request: Request) {
     const language = parseLanguage(form.get("language"));
     let transcript: Awaited<ReturnType<typeof transcribeWithWords>>;
     try {
-      transcript = await transcribeWithWords(audio, `segment-${index}.wav`, language);
+      // skutočné stretnutie: rozlíšiť rečníkov (ty a klient)
+      transcript = await transcribeWithWords(audio, `segment-${index}.wav`, language, { diarize: form.get("diarize") === "1" });
     } catch (error) {
       console.warn("[pitch] prepis úseku zlyhal:", error instanceof TranscriptionError ? error.code : error);
       return apiError(503, "transcription_failed", "Úsek sa nepodarilo prepísať.");

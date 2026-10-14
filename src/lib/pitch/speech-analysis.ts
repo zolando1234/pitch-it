@@ -156,6 +156,8 @@ export function buildSpeechPrompt(input: {
   feedbackLocale: "sk" | "en";
   outline: PitchOutline | null;
   context: string | null;
+  /** skutočné stretnutie: celý rozhovor s klientom ako kontext (hodnotia sa len vety rečníka) */
+  dialog?: string | null;
 }): string {
   const points = input.outline?.points ?? [];
   return [
@@ -166,6 +168,9 @@ export function buildSpeechPrompt(input: {
     input.outline?.topic ? `Téma (záväzné zadanie):\n"""${input.outline.topic}"""` : "Téma nie je zadaná, odvoď ju z prejavu a podkladov.",
     points.length ? `Osnova (index: bod):\n${points.map((p, i) => `${i}: ${p}`).join("\n")}` : "Osnova nie je zadaná: points vráť prázdne.",
     input.context ? `Podklady o firme a prezentácii (fakty, na porovnanie):\n"""${input.context}"""` : null,
+    input.dialog
+      ? `Toto je skutočné stretnutie s klientom. Celý rozhovor (kontext; TY = rečník, KLIENT = klient). Hodnotíš len rečníka, očíslované vety nižšie sú len jeho:\n"""${input.dialog.slice(0, 15_000)}"""`
+      : null,
     `Prepis po vetách ([index] veta):\n${input.sentences.map((s, i) => `[${i}] ${s}`).join("\n")}`,
   ]
     .filter(Boolean)
