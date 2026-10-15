@@ -229,7 +229,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
           ],
           schema: speechAnalysisSchema,
           effort: "low",
-          maxTokens: 5_000,
+          maxTokens: 8_000,
           speed: "interactive",
         });
         // obsahové skóre len z bodov osnovy, ktorú si rečník zadal
@@ -242,7 +242,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
         if (outline) outlineResult = outlineFromAnalysis(outline, analysis);
         await recordUsage(userId, "exercise_evaluation", 1, null);
       } catch (error) {
-        console.error("[pitch] rozbor prejavu zlyhal:", error instanceof LlmError ? error.code : error);
+        console.error("[pitch] rozbor prejavu zlyhal:", error instanceof LlmError ? `${error.code}: ${error.message}` : error);
       }
     };
 

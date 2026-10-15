@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { fitToSchema } from "@/lib/ai/llm/fit-schema";
 import { getMistralLlmConfig } from "@/config/server-env";
 import { LlmError, type LlmProvider, type StructuredRequest, type StructuredResult } from "@/lib/ai/llm/types";
 
@@ -71,7 +72,8 @@ export class MistralLlmProvider implements LlmProvider {
         lastError = "neplatný JSON";
         continue;
       }
-      const parsed = request.schema.safeParse(json);
+      // drobné prekročenia limitov (dlhší text, viac položiek) sa opravia, nezahodí sa celý výstup
+      const parsed = request.schema.safeParse(fitToSchema(json, jsonSchema));
       if (!parsed.success) {
         lastError = parsed.error.issues
           .slice(0, 3)
