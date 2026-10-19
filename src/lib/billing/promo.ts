@@ -7,6 +7,7 @@ import type { BillingInterval } from "@/lib/billing/pricing";
   aby sa kódy nedostali do JavaScriptu v prehliadači. Kód sa vypína prepnutím `active` na false.
   Zľava platí na jednu platbu (Stripe kupón s duration=once); predĺžiť ju jednotlivcovi
   sa dá ručne v Stripe (kupón na predplatné). Kód platí len pre prvé predplatné používateľa.
+  Platí aj pre tímový plán: prvá platba má obe zľavy, potom ostáva tímová.
   Čisté funkcie, testované.
 */
 
@@ -44,6 +45,15 @@ export function resolvePromo(
   if (promo.interval !== interval) return { ok: false, reason: "wrong_interval" };
   if (hadSubscription) return { ok: false, reason: "already_subscribed" };
   return { ok: true, promo };
+}
+
+/**
+ * Zľava prvej platby pri kóde a tímovej zľave naraz: najprv tímová, potom kód
+ * (napr. tím −10 % a TESTER −60 % = −64 %). Stripe Checkout dovolí len jeden kupón,
+ * tímová zľava sa preto po prvej platbe vráti na predplatné (webhook).
+ */
+export function stackedPercent(promoPercent: number, teamPercent: number): number {
+  return Math.round((100 - ((100 - teamPercent) * (100 - promoPercent)) / 100) * 100) / 100;
 }
 
 /** Text chyby pre používateľa. */

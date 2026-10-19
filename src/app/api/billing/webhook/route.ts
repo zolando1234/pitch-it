@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStripeConfig } from "@/config/server-env";
-import { mapSubscriptionStatus, verifyWebhookSignature, type StripeSubscription } from "@/lib/billing/stripe";
+import { mapSubscriptionStatus, setSubscriptionCoupon, verifyWebhookSignature, type StripeSubscription } from "@/lib/billing/stripe";
 import { isInterval, isPaidPlan, topupMinutesFor } from "@/lib/billing/pricing";
 import { addPitchCredits, addTopupMinutes } from "@/lib/db/pitch-wallet";
 import { trackEvent } from "@/lib/events/track";
@@ -133,6 +133,11 @@ export async function POST(request: Request) {
           .update({ provider: "stripe", provider_customer_id: session.customer, provider_subscription_id: session.subscription ?? null })
           .eq("user_id", session.client_reference_id);
         await trackEvent(session.client_reference_id, "purchase_completed", { plan: session.metadata?.plan ?? "pro", amount: session.amount_total ?? null });
+      }
+      // tím so zľavovým kódom: prvá platba mala kupón kódu, odteraz platí tímová zľava
+      const teamCoupon = session.metadata?.team_coupon;
+      if (typeof session.subscription === "string" && teamCoupon && /^pitchit_team_\d+$/.test(teamCoupon)) {
+        await setSubscriptionCoupon(session.subscription, teamCoupon);
       }
     } else if (event.type.startsWith("customer.subscription.")) {
       await upsertFromSubscription(event.data.object as unknown as StripeSubscription, null);

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getStripeConfig } from "@/config/server-env";
-import type { PromoCode } from "@/lib/billing/promo";
+import { stackedPercent, type PromoCode } from "@/lib/billing/promo";
 import {
   chargeCents,
   discountPercentFor,
@@ -121,14 +121,29 @@ async function ensureCoupon(id: string, params: Record<string, string>): Promise
   return id;
 }
 
-/** Kupón zľavového kódu v Stripe (jedna platba). */
-export function ensurePromoCoupon(promo: PromoCode): Promise<string> {
-  return ensureCoupon(promo.couponId, {
-    percent_off: String(promo.percentOff),
+/** Kupón zľavového kódu v Stripe (jedna platba); pri tímovom pláne spolu s tímovou zľavou. */
+export function ensurePromoCoupon(promo: PromoCode, teamPercent = 0): Promise<string> {
+  if (teamPercent <= 0) {
+    return ensureCoupon(promo.couponId, {
+      percent_off: String(promo.percentOff),
+      duration: "once",
+      name: `${promo.code} −${promo.percentOff} %`,
+      "metadata[promo_code]": promo.code,
+    });
+  }
+  const percent = stackedPercent(promo.percentOff, teamPercent);
+  return ensureCoupon(`${promo.couponId}_team_${teamPercent}`, {
+    percent_off: String(percent),
     duration: "once",
-    name: `${promo.code} −${promo.percentOff} %`,
+    name: `${promo.code} + tím −${percent} %`,
     "metadata[promo_code]": promo.code,
+    "metadata[team_percent]": String(teamPercent),
   });
+}
+
+/** Kupón na predplatné (napr. tímová zľava po prvej platbe so zľavovým kódom); nahradí predošlé zľavy. */
+export async function setSubscriptionCoupon(subscriptionId: string, couponId: string): Promise<void> {
+  await stripePost(`/subscriptions/${encodeURIComponent(subscriptionId)}`, { "discounts[0][coupon]": couponId });
 }
 
 /** Kupón množstevnej zľavy tímu (platí, kým trvá predplatné); null = 1 účet, bez zľavy. */
@@ -178,15 +193,17 @@ export async function createSubscriptionCheckout(input: {
     locale: input.locale === "en" ? "en" : "sk",
   };
   const teamCoupon = await ensureTeamCoupon(seats);
-  if (teamCoupon) {
-    // Stripe nedovolí kupón spolu s poľom na promo kódy v Checkoute
+  if (input.promo) {
+    // Stripe nedovolí kupón spolu s poľom na promo kódy a Checkout berie len jeden kupón:
+    // prvá platba má kód aj tímovú zľavu, tímový kupón vráti na predplatné webhook
     delete params.allow_promotion_codes;
-    params["discounts[0][coupon]"] = teamCoupon;
-  } else if (input.promo) {
-    delete params.allow_promotion_codes;
-    params["discounts[0][coupon]"] = await ensurePromoCoupon(input.promo);
+    params["discounts[0][coupon]"] = await ensurePromoCoupon(input.promo, teamDiscountPercent(seats));
     params["metadata[promo_code]"] = input.promo.code;
     params["subscription_data[metadata][promo_code]"] = input.promo.code;
+    if (teamCoupon) params["metadata[team_coupon]"] = teamCoupon;
+  } else if (teamCoupon) {
+    delete params.allow_promotion_codes;
+    params["discounts[0][coupon]"] = teamCoupon;
   }
   if (input.customerId) params.customer = input.customerId;
   else if (input.email) params.customer_email = input.email;

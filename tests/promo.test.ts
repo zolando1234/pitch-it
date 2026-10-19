@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { PROMO_CODES, promoErrorMessage, resolvePromo, type PromoCode } from "../src/lib/billing/promo.ts";
+import { PROMO_CODES, promoErrorMessage, resolvePromo, stackedPercent, type PromoCode } from "../src/lib/billing/promo.ts";
 
 describe("zľavové kódy", () => {
   test("TESTER: −60 % na jednu mesačnú platbu", () => {
@@ -27,5 +27,14 @@ describe("zľavové kódy", () => {
     assert.deepEqual(resolvePromo("TESTER", "month", true), { ok: false, reason: "already_subscribed" });
     assert.equal(promoErrorMessage("wrong_interval"), "Tento kód platí len na mesačné predplatné.");
     assert.equal(promoErrorMessage("unknown", "en"), "This discount code is not valid.");
+  });
+
+  test("TESTER pre tím: prvá platba má tímovú zľavu aj kód", () => {
+    assert.equal(stackedPercent(60, 0), 60);
+    assert.equal(stackedPercent(60, 10), 64);
+    assert.equal(stackedPercent(60, 13), 65.2);
+    assert.equal(stackedPercent(60, 15), 66);
+    // 5 účtov Pro mesačne: 50 € − 10 % = 45 €, s kódom 18 €
+    assert.equal(Math.round(5000 * (1 - stackedPercent(60, 10) / 100)), 1800);
   });
 });

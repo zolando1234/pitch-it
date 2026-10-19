@@ -266,8 +266,8 @@ export function PlanPicker({
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [code, setCode] = useState("");
   // kód sa zadáva len pri novom predplatnom (zmena plánu ide bez Checkoutu)
-  // kód sa nedá spojiť s tímovou zľavou
-  const canUseCode = mode === "app" && current === "free" && paymentsEnabled && (seats ?? 1) <= 1;
+  // kód platí aj pre tím (prvá platba má obe zľavy)
+  const canUseCode = mode === "app" && current === "free" && paymentsEnabled;
 
   const choose = async (plan: PaidPlan) => {
     setPending(plan);

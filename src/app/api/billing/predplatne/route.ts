@@ -1,5 +1,5 @@
 import { siteConfig } from "@/config/site";
-import { activePlan, isInterval, isPaidPlan, parseSeats, TEAM_MAX_SEATS, teamDiscountPercent } from "@/lib/billing/pricing";
+import { activePlan, isInterval, isPaidPlan, parseSeats, TEAM_MAX_SEATS } from "@/lib/billing/pricing";
 import { promoErrorMessage, resolvePromo } from "@/lib/billing/promo";
 import { changeSubscriptionPlan, createPortalSession, createSubscriptionCheckout, isStripeConfigured, StripeError } from "@/lib/billing/stripe";
 import { getMembership, getOwnedTeam, teamHeadcount } from "@/lib/db/teams";
@@ -68,13 +68,6 @@ export async function POST(request: Request) {
     // zľavový kód len pri novom predplatnom; platí iba pre prvé predplatné používateľa
     const promo = resolvePromo(body.code, interval, Boolean(subscription?.provider_subscription_id));
     if (promo && !promo.ok) return apiError(400, "invalid_promo", promoErrorMessage(promo.reason, locale));
-    if (promo && teamDiscountPercent(seats) > 0) {
-      return apiError(
-        400,
-        "invalid_promo",
-        locale === "en" ? "A discount code can't be combined with the team discount." : "Zľavový kód sa nedá spojiť s tímovou zľavou.",
-      );
-    }
 
     const url = await createSubscriptionCheckout({
       userId: user.id,
