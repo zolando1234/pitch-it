@@ -4,7 +4,7 @@ import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "reac
 import { useLocale } from "@/components/i18n/locale-provider";
 import type { HandLandmarker, NormalizedLandmark, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { FeedbackEngine, type FeedbackState } from "@/lib/coach/pose/feedback";
-import { analyzeHands, type Hands } from "@/lib/coach/pose/hands";
+import { analyzeHands, type Hands, type World3 } from "@/lib/coach/pose/hands";
 import { LM, MetricsTracker, type Metrics, type MicHand } from "@/lib/coach/pose/metrics";
 import { StageRenderer } from "@/lib/coach/pose/renderer";
 import { LandmarkSmoother, RoiTracker } from "@/lib/coach/pose/roi";
@@ -415,6 +415,8 @@ export default function CameraStage({
     const t = () => TEXT[localeRef.current];
     engineRef.current = engine;
     const renderer = new StageRenderer();
+    renderer.mirrored = !source;
+    renderer.lang = localeRef.current === "en" ? "en" : "sk";
     const detectCanvas = document.createElement("canvas");
     const detectCtx = detectCanvas.getContext("2d")!;
 
@@ -636,7 +638,12 @@ export default function CameraStage({
         detectCtx.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, detectCanvas.width, detectCanvas.height);
 
         let handLms: NormalizedLandmark[][] | null = null;
-        if (hands && frame % handsEvery === 0) handLms = hands.detectForVideo(video, ts).landmarks;
+        let handWorld: World3[][] | null = null;
+        if (hands && frame % handsEvery === 0) {
+          const handResult = hands.detectForVideo(video, ts);
+          handLms = handResult.landmarks;
+          handWorld = handResult.worldLandmarks;
+        }
 
         pose.detectForVideo(detectCanvas, ts, (result) => {
           lastResultAt = performance.now();
@@ -667,6 +674,7 @@ export default function CameraStage({
                 { x: lm[LM.leftWrist].x * W, y: lm[LM.leftWrist].y * H },
                 { x: lm[LM.rightWrist].x * W, y: lm[LM.rightWrist].y * H },
                 sw,
+                handWorld,
               );
             }
             metrics = tracker.update(lm, result.worldLandmarks[0], handInfo, ts, W, H);

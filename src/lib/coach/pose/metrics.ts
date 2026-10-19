@@ -4,6 +4,8 @@ import type { HandInfo, Hands } from "./hands";
 
 export const LM = {
   nose: 0,
+  leftEye: 2,
+  rightEye: 5,
   leftEar: 7,
   rightEar: 8,
   leftShoulder: 11,
@@ -12,6 +14,13 @@ export const LM = {
   rightElbow: 14,
   leftWrist: 15,
   rightWrist: 16,
+  // body ruky z modelu pózy (hrubé, ale vieme z nich, či je ruka zakrytá)
+  leftPinky: 17,
+  rightPinky: 18,
+  leftIndex: 19,
+  rightIndex: 20,
+  leftThumb: 21,
+  rightThumb: 22,
   leftHip: 23,
   rightHip: 24,
   leftKnee: 25,
@@ -46,6 +55,8 @@ export type Zone = { top: number; bottom: number; left: number; right: number };
 export type Side = "left" | "center" | "right";
 /** v ktorej ruke rečník drží mikrofón (z jeho pohľadu); auto = rozpoznať podľa ruky pri ústach */
 export type MicHand = "auto" | "left" | "right";
+export type HiddenKind = "pocket" | "behind" | "unseen" | null;
+export type Facing = "front" | "side" | "back";
 export type Highlight = "wide" | "hold" | "planted" | "sweep" | "palms" | "count";
 
 export type Metrics = {
@@ -59,6 +70,8 @@ export type Metrics = {
   /** zápästia, ktoré vidno a nie sú vo vrecku / za chrbtom */
   visibleWrists: number;
   hidden: { left: boolean; right: boolean };
+  /** kde je skrytá ruka: vo vrecku, za chrbtom, alebo ju kamera nevidí (mimo záberu, zakrytá) */
+  hiddenKind: Record<"left" | "right", HiddenKind>;
   /** v režime s mikrofónom: ruka, ktorá drží mikrofón (vyradená z hodnotenia gest) */
   micSide: "left" | "right" | null;
   /** mikrofón je príliš ďaleko od úst */
@@ -70,7 +83,15 @@ export type Metrics = {
   fists: boolean;
   pointing: boolean;
   palmsAway: boolean;
+  /** otvorená ruka dlaňou dole (tlmenie, príkaz) */
+  palmsDown: boolean;
   wringing: boolean;
+  /** vulgárne gesto (vztýčený prostredník) */
+  vulgar: boolean;
+  /** V chrbtom ruky k publiku (v UK, Írsku, Austrálii urážka) */
+  vBackhand: boolean;
+  thumbDown: boolean;
+  fingerGun: boolean;
   /** počet gest za minútu (null, kým nemáme dosť dát) */
   gesturesPerMin: number | null;
   zone: Zone;
@@ -102,12 +123,16 @@ export type Metrics = {
   headPitch: number;
   calibrated: boolean;
   headDown: boolean;
-  chinUp: boolean;
   nodding: boolean;
 
   // postoj
   shoulderTilt: number;
+  /** stojí bokom (nie chrbtom) */
   turned: boolean;
+  /** čelom / bokom / chrbtom ku kamere */
+  facing: Facing;
+  /** natočenie ramien od kamery v stupňoch (0 = čelom, 90 = bokom); null bez 3D bodov */
+  turnDeg: number | null;
   /** kamera vidí kolená (nohy sa dajú hodnotiť) */
   legsVisible: boolean;
   /** prekrížené nohy (členky alebo kolená) */
@@ -303,7 +328,17 @@ export class MetricsTracker {
         !!hip &&
         (dist(w, h) / sw < CONFIG.pocketHipDistance ||
           (Math.abs(w.x - hip.x) / sw < 0.5 && Math.abs(w.y - hip.y) / sw < 0.35));
-      return { nearHip, bent: angleAt(sh, e, w) < CONFIG.pocketElbowAngle };
+      // body prstov z modelu pózy sú pri ruke vo vrecku zakryté (nízka viditeľnosť)
+      const fingerVis = Math.max(
+        ...(L ? [LM.leftPinky, LM.leftIndex, LM.leftThumb] : [LM.rightPinky, LM.rightIndex, LM.rightThumb]).map(
+          (i) => lm[i]?.visibility ?? 1,
+        ),
+      );
+      return {
+        nearHip,
+        bent: angleAt(sh, e, w) < CONFIG.pocketElbowAngle,
+        fingersHidden: fingerVis < CONFIG.pocketFingerVisibility,
+      };
     };
     const armL = armAt("left");
     const armR = armAt("right");
@@ -321,7 +356,7 @@ export class MetricsTracker {
       if (side === micSide) return false;
       if (!vis(L ? LM.leftWrist : LM.rightWrist)) return true;
       const a = L ? armL : armR;
-      const pocketLike = a.nearHip && a.bent && !hd[side] && !handsOnHips && !claspedInFront;
+      const pocketLike = a.nearHip && (a.bent || a.fingersHidden) && !hd[side] && !handsOnHips && !claspedInFront;
       // ruka musí pri bedre zostať chvíľu, inak je to len gesto, ktoré tadiaľ prešlo
       const frames = pocketLike ? (L ? ++this.pocketFramesL : ++this.pocketFramesR) : 0;
       if (!pocketLike) {
@@ -331,6 +366,18 @@ export class MetricsTracker {
       return frames >= CONFIG.pocketMinFrames;
     };
     const hidden = { left: isHidden("left"), right: isHidden("right") };
+    // za chrbtom: zápästie je vo svetových súradniciach za rovinou bokov (z rastie od kamery)
+    const kindOf = (side: "left" | "right"): HiddenKind => {
+      if (!hidden[side]) return null;
+      const wi = side === "left" ? LM.leftWrist : LM.rightWrist;
+      const wv = lm[wi].visibility ?? 1;
+      if (world && wv >= 0.2) {
+        const hipZ = (world[LM.leftHip].z + world[LM.rightHip].z) / 2;
+        if (world[wi].z - hipZ > CONFIG.behindBackDepth) return "behind";
+      }
+      return vis(wi) || wv >= 0.2 ? "pocket" : "unseen";
+    };
+    const hiddenKind = { left: kindOf("left"), right: kindOf("right") };
 
     // ruka s mikrofónom sa do gest nepočíta
     // body už prichádzajú vyhladené (One Euro filter v LandmarkSmoother)
@@ -435,8 +482,19 @@ export class MetricsTracker {
       this.palmSamples.filter((x) => x.facing).length / this.palmSamples.length < CONFIG.palmsAwayShare &&
       activity3s > 0.3;
 
-    if (handsInZone.some((h) => h.shape === "open" && h.palmFacing) && activity3s > 0.3) highlights.push("palms");
-    if (handsInZone.some((h) => h.shape === "count")) {
+    const palmsDown = handsInZone.some((h) => h.shape === "open" && h.palm === "down");
+
+    // vulgárne a negatívne gestá: kdekoľvek v zábere, nielen v power zóne
+    const anyHand = [hd.left, hd.right].filter((h): h is HandInfo => !!h);
+    const vulgar = anyHand.some((h) => h.gesture === "middle_finger");
+    const vBackhand = anyHand.some((h) => h.gesture === "victory" && h.palm === "back");
+    const thumbDown = anyHand.some((h) => h.gesture === "thumb_down");
+    const fingerGun = anyHand.some((h) => h.gesture === "finger_gun");
+
+    if (handsInZone.some((h) => h.shape === "open" && (h.palmFacing || h.palm === "up")) && activity3s > 0.3) {
+      highlights.push("palms");
+    }
+    if (handsInZone.some((h) => h.count !== null && h.count < 5)) {
       this.countSince ??= t;
       if (t - this.countSince > CONFIG.countHoldMs) highlights.push("count");
     } else {
@@ -488,16 +546,26 @@ export class MetricsTracker {
     const headPitch = pitchRaw - (this.pitchBaseline ?? CONFIG.defaultPitch);
     const headDown =
       headPitch > CONFIG.headDownDelta || (shoulderMid.y - nose.y) / sw < CONFIG.headDownRatio;
-    const chinUp = headPitch < -CONFIG.chinUpDelta;
 
     // ── Postoj ─────────────────────────────────────────────
     const shoulderTilt = (Math.atan2(Math.abs(ls.y - rs.y), Math.abs(ls.x - rs.x)) * 180) / Math.PI;
     let turned = false;
+    let turnDeg: number | null = null;
+    let noseBehind = false;
     if (world) {
       const wl = world[LM.leftShoulder];
       const wr = world[LM.rightShoulder];
       turned = Math.abs(wl.z - wr.z) / Math.max(Math.abs(wl.x - wr.x), 0.01) > CONFIG.turnedRatio;
+      turnDeg = Math.round((Math.atan2(Math.abs(wl.z - wr.z), Math.abs(wl.x - wr.x)) * 180) / Math.PI);
+      // nos za rovinou ramien = hlava je otočená od kamery
+      noseBehind = world[LM.nose].z - (wl.z + wr.z) / 2 > CONFIG.backNoseDepth;
     }
+    // chrbtom: model nevidí tvár (nos, oči), hoci ramená vidí
+    const faceVis = Math.max(...[LM.nose, LM.leftEye, LM.rightEye].map((i) => lm[i].visibility ?? 1));
+    const shouldersSeen = vis(LM.leftShoulder) && vis(LM.rightShoulder);
+    const back = shouldersSeen && (faceVis < CONFIG.backFaceVisibility || noseBehind);
+    const facing: Facing = back ? "back" : turned ? "side" : "front";
+    if (back) turned = false;
     // nohy: pri natočení bokom sa strany nôh prekrývajú, vtedy ich nehodnotíme
     const legPoint = (i: number) => (vis(i) ? px(i) : null);
     const legs = legsPose(
@@ -508,7 +576,7 @@ export class MetricsTracker {
         rightAnkle: legPoint(LM.rightAnkle),
       },
       sw,
-      turned ? 0 : ls.x - rs.x,
+      turned || back ? 0 : ls.x - rs.x,
     );
 
     // ── Pódium ─────────────────────────────────────────────
@@ -556,6 +624,7 @@ export class MetricsTracker {
       rightWrist: rw,
       visibleWrists: wrists.length,
       hidden,
+      hiddenKind,
       micSide,
       micAway,
       leftHand: hd.left,
@@ -565,7 +634,12 @@ export class MetricsTracker {
       fists,
       pointing,
       palmsAway,
+      palmsDown,
       wringing,
+      vulgar,
+      vBackhand,
+      thumbDown,
+      fingerGun,
       gesturesPerMin,
       zone,
       wristsInZone,
@@ -597,10 +671,11 @@ export class MetricsTracker {
       headPitch,
       calibrated: this.pitchBaseline !== null,
       headDown,
-      chinUp,
       nodding: this.nodding(t),
       shoulderTilt,
       turned,
+      facing,
+      turnDeg,
       ...legs,
       hipsVisible,
       stageX,

@@ -23,8 +23,8 @@ export function getAnthropicConfig(): AnthropicConfig | null {
   if (!enabled) return null;
   return {
     apiKey,
-    model: read("ANTHROPIC_MODEL") ?? "claude-opus-5-5",
-    fastModel: read("ANTHROPIC_FAST_MODEL") ?? read("ANTHROPIC_MODEL") ?? "claude-opus-5-5",
+    model: read("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5",
+    fastModel: read("ANTHROPIC_FAST_MODEL") ?? read("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5",
   };
 }
 
@@ -59,20 +59,6 @@ export function getElevenLabsTtsConfig(): { apiKey: string; model: string; voice
   return apiKey
     ? { apiKey, model: read("ELEVENLABS_TTS_MODEL") ?? "eleven_flash_v2_5", voiceId: read("ELEVENLABS_VOICE_ID") ?? "JBFqnCBsd6RMkjVDRZzb" }
     : null;
-}
-
-/** Mistral (Voxtral): náhradný prepis, keď chýba OPENAI_API_KEY. */
-export function getMistralTranscriptionConfig(): { apiKey: string; model: string } | null {
-  const apiKey = read("MISTRAL_API_KEY");
-  return apiKey ? { apiKey, model: read("MISTRAL_TRANSCRIPTION_MODEL") ?? "voxtral-mini-latest" } : null;
-}
-
-/** Mistral ako jazykový model, keď chýba ANTHROPIC_API_KEY. */
-export function getMistralLlmConfig(): { apiKey: string; model: string; fastModel: string } | null {
-  const apiKey = read("MISTRAL_API_KEY");
-  if (!apiKey) return null;
-  const model = read("MISTRAL_MODEL") ?? "mistral-medium-latest";
-  return { apiKey, model, fastModel: read("MISTRAL_FAST_MODEL") ?? model };
 }
 
 export type StripeConfig = {

@@ -7,6 +7,7 @@ const NAV_EN: Record<string, string> = {
   "Tréning": "Training",
   "Dokumenty": "Documents",
   "Progres": "Progress",
+  "Tím": "Team",
   "Nastavenia": "Settings",
 };
 
@@ -18,5 +19,6 @@ export const APP_NAV: NavItem[] = [
   { href: "/app/nahravka", label: "Tréning", icon: "mic", match: (path) => path.startsWith("/app/nahravka") },
   { href: "/app/dokumenty", label: "Dokumenty", icon: "presentation", match: (path) => path.startsWith("/app/dokumenty") },
   { href: "/app/progres", label: "Progres", icon: "trendUp", match: (path) => path.startsWith("/app/progres") },
+  { href: "/app/tim", label: "Tím", icon: "users", match: (path) => path.startsWith("/app/tim") },
   { href: "/app/nastavenia", label: "Nastavenia", icon: "settings", match: (path) => path.startsWith("/app/nastavenia") },
 ];

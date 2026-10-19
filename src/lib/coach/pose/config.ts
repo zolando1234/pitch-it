@@ -51,6 +51,8 @@ export const CONFIG = {
   pocketElbowAngle: 155, // lakeť ohnutý viac ako toto = ruka nie je voľne spustená
   handsOnHipsElbowSpread: 1.6,
   pocketMinFrames: 15, // ~0.5 s pri 30 fps
+  pocketFingerVisibility: 0.5, // prsty z modelu pózy menej viditeľné = ruka je zakrytá (vrecko)
+  behindBackDepth: 0.1, // zápästie o 10 cm za bokmi = za chrbtom
   frontVisibility: 0.75,
 
   // Mikrofón v ruke
@@ -81,7 +83,6 @@ export const CONFIG = {
   calibrationMs: 3000, // prvé 3 s si zapamätáme neutrálnu polohu hlavy
   defaultPitch: 0.05,
   headDownDelta: 0.09, // nos o 0.09 sw nižšie oproti kalibrácii = pozeráš dole
-  chinUpDelta: 0.12,
   gazeSideYaw: 0.16, // |yaw| nad týmto = pohľad do strany
   gazeWindowMs: 20000,
   gazeStuckShare: 0.9, // jedna strana viac ako 90 % času = pozeráš stále na to isté miesto
@@ -95,6 +96,8 @@ export const CONFIG = {
   // ── Postoj ───────────────────────────────────────────────
   shoulderTiltDeg: 9,
   turnedRatio: 0.75, // |dz| / |dx| ramien vo svetových súradniciach
+  backFaceVisibility: 0.35, // nos ani oči nevidno, ramená áno = chrbtom ku kamere
+  backNoseDepth: 0.05, // nos 5 cm za rovinou ramien = hlava otočená od kamery
   /** členky (kolená) prekrížené aspoň o toľko šírok ramien = prekrížené nohy */
   legsCrossedMargin: 0.08,
   /** členky bližšie ako toľko šírok ramien = nohy pri sebe (nestabilný postoj) */

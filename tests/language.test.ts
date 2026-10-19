@@ -4,16 +4,16 @@ import { countFillers } from "../src/lib/analytics/speech/text-metrics.ts";
 import { LANGUAGE_INFO, parseLanguage, sttOrder } from "../src/lib/pitch/language.ts";
 import { buildMetrics, countSyllables, isFillerWord } from "../src/lib/pitch/metrics.ts";
 
-const all = { elevenlabs: true, mistral: true, openai: true };
+const all = { elevenlabs: true, openai: true };
 
 describe("jazyk pitchu", () => {
-  test("slovenčina a čeština idú najprv cez ElevenLabs Scribe (Voxtral ich nepodporuje)", () => {
+  test("slovenčina a čeština idú najprv cez ElevenLabs Scribe", () => {
     assert.equal(sttOrder("sk", all)[0], "elevenlabs");
     assert.equal(sttOrder("cs", all)[0], "elevenlabs");
   });
 
-  test("všetky jazyky idú najprv cez ElevenLabs Scribe, záloha Voxtral", () => {
-    assert.deepEqual(sttOrder("en", all).slice(0, 2), ["elevenlabs", "mistral"]);
+  test("všetky jazyky idú najprv cez ElevenLabs Scribe, záloha OpenAI Whisper", () => {
+    assert.deepEqual(sttOrder("en", all), ["elevenlabs", "openai"]);
     assert.equal(sttOrder("ja", all)[0], "elevenlabs");
   });
 
@@ -34,8 +34,8 @@ describe("jazyk pitchu", () => {
   });
 
   test("použijú sa len nakonfigurované modely", () => {
-    assert.deepEqual(sttOrder("sk", { elevenlabs: false, mistral: true, openai: false }), ["mistral"]);
-    assert.deepEqual(sttOrder("en", { elevenlabs: false, mistral: false, openai: false }), []);
+    assert.deepEqual(sttOrder("sk", { elevenlabs: false, openai: true }), ["openai"]);
+    assert.deepEqual(sttOrder("en", { elevenlabs: false, openai: false }), []);
   });
 
   test("neznámy jazyk = slovenčina, titulky majú správny jazyk prehliadača", () => {

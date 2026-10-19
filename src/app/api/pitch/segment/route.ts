@@ -4,6 +4,7 @@ import { getPitchBalance } from "@/lib/db/pitch-wallet";
 import { apiError, apiOk, handleRouteError, isUuid, rateLimited, requireApiUser } from "@/lib/http/route";
 import { parseLanguage } from "@/lib/pitch/language";
 import { MAX_SEGMENTS } from "@/lib/pitch/segment-merge";
+import { implausibleTranscript, wavSeconds } from "@/lib/pitch/transcript-sanity";
 import { saveSegment } from "@/lib/pitch/segments";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
 
@@ -49,7 +50,15 @@ export async function POST(request: Request) {
     let transcript: Awaited<ReturnType<typeof transcribeWithWords>>;
     try {
       // skutočné stretnutie: rozlíšiť rečníkov (ty a klient)
-      transcript = await transcribeWithWords(audio, `segment-${index}.wav`, language, { diarize: form.get("diarize") === "1" });
+      const transcribe = () => transcribeWithWords(audio, `segment-${index}.wav`, language, { diarize: form.get("diarize") === "1" });
+      transcript = await transcribe();
+      // zmes náhodných slov (nemožne veľa slov za sekundu): raz zopakujeme, potom necháme prehliadač skúsiť úsek znova
+      const seconds = wavSeconds(audio.size);
+      if (implausibleTranscript(transcript.words.length, seconds)) {
+        console.warn(`[pitch] podozrivý prepis úseku (${transcript.words.length} slov za ${Math.round(seconds)} s), opakujem`);
+        transcript = await transcribe();
+        if (implausibleTranscript(transcript.words.length, seconds)) return apiError(503, "transcription_failed", "Úsek sa nepodarilo prepísať.");
+      }
     } catch (error) {
       console.warn("[pitch] prepis úseku zlyhal:", error instanceof TranscriptionError ? error.code : error);
       return apiError(503, "transcription_failed", "Úsek sa nepodarilo prepísať.");

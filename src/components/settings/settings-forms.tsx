@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useState, useTransition } from "react";
+import { useActionState, useEffect, useId, useTransition } from "react";
 import { buttonClasses } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
@@ -114,36 +114,6 @@ export function ConsentToggle({ kind, label, description, granted }: { kind: Con
         {pending ? <Spinner /> : null}
         {granted ? (en ? "Withdraw" : "Odvolať") : en ? "Give" : "Udeliť"}
       </button>
-    </div>
-  );
-}
-
-export function UpgradeButton({ label }: { label: string }) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div>
-      <button
-        type="button"
-        disabled={pending}
-        className={buttonClasses()}
-        onClick={async () => {
-          setPending(true);
-          setError(null);
-          const response = await fetch("/api/billing/checkout", { method: "POST" });
-          const body = (await response.json().catch(() => null)) as { url?: string; error?: { message?: string } } | null;
-          if (response.ok && body?.url) {
-            window.location.assign(body.url);
-            return;
-          }
-          setPending(false);
-          setError(body?.error?.message ?? "Platbu sa nepodarilo otvoriť.");
-        }}
-      >
-        {pending ? <Spinner /> : null}
-        {label}
-      </button>
-      {error ? <p className="mt-2 text-[14px] text-coral">{error}</p> : null}
     </div>
   );
 }

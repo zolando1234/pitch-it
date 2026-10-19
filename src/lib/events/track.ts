@@ -23,6 +23,7 @@ export type ProductEventName =
   | "event_created"
   | "checkout_started"
   | "purchase_completed"
+  | "plan_changed"
   | "account_deleted";
 
 type EventProperties = Record<string, string | number | boolean | null>;

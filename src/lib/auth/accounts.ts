@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { siteConfig } from "@/config/site";
 import { hashPassword } from "@/lib/auth/password";
 import { SESSION_COOKIE, SESSION_TTL, signToken } from "@/lib/auth/token";
+import { sendEmail } from "@/lib/email/send";
 import { getAdminDb } from "@/lib/store/client";
 
 /*
@@ -100,22 +101,11 @@ export async function sendPasswordReset(account: AccountRow): Promise<void> {
   const stamp = (account.password_hash ?? "").slice(-12);
   const token = await signToken("reset", { sub: account.id, stamp }, RESET_TTL);
   const link = `${siteConfig.url}/auth/confirm?token=${encodeURIComponent(token)}&next=${encodeURIComponent("/nove-heslo")}`;
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) {
-    console.info(`[auth] odkaz na nové heslo pre ${account.email}: ${link}`);
-    return;
-  }
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: process.env.EMAIL_FROM?.trim() || "PitchIt <onboarding@resend.dev>",
-      to: [account.email],
-      subject: "Nové heslo do PitchIt",
-      text: `Ahoj,\n\nnové heslo si nastavíš tu (odkaz platí hodinu):\n${link}\n\nAk si o zmenu nežiadal(a), správu ignoruj.\n\nPitchIt`,
-    }),
+  await sendEmail({
+    to: account.email,
+    subject: "Nové heslo do PitchIt",
+    text: `Ahoj,\n\nnové heslo si nastavíš tu (odkaz platí hodinu):\n${link}\n\nAk si o zmenu nežiadal(a), správu ignoruj.\n\nPitchIt`,
   });
-  if (!response.ok) console.error("[auth] reset e-mail zlyhal:", response.status);
 }
 
 export function resetStamp(account: AccountRow): string {

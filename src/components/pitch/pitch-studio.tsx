@@ -8,6 +8,7 @@ import FeedbackBubble from "@/components/coach/FeedbackBubble";
 import { fmtClock, INITIAL_FB, useCoachSession, type CoachResult } from "@/components/coach/use-coach-session";
 import { PI_BACKGROUND } from "@/components/pitch/pi-topbar";
 import { useLiveTranscript } from "@/components/pitch/use-live-transcript";
+import { SilencePrompt, useSilenceGuard } from "@/components/pitch/use-silence-guard";
 import { Wordmark } from "@/components/wordmark";
 import type { TalkMode } from "@/lib/coach/modes";
 import { useClientQuestions, type MeetingSetup } from "@/components/pitch/client-questions";
@@ -246,6 +247,7 @@ export function PitchStudio({
   language = "sk",
   file = null,
   quiet = false,
+  level = 0,
   meeting = null,
   ruleFilter,
   onLive,
@@ -270,6 +272,8 @@ export function PitchStudio({
   file?: File | null;
   /** len analýza videa: bez zvuku, rád a titulkov, iba priebeh */
   quiet?: boolean;
+  /** hlasitosť mikrofónu 0–1 (na stráženie ticha) */
+  level?: number;
   /** stretnutie s klientom: otázky počas výkladu */
   meeting?: MeetingSetup | null;
   ruleFilter: (id: string) => boolean;
@@ -316,6 +320,16 @@ export function PitchStudio({
     void session.finish();
   };
   const recording = phase === "live";
+  // dlhé ticho: opýtame sa, či je človek ešte tam; bez odpovede sa nahrávanie ukončí
+  // (pri nahratom videe žiadny mikrofón nehrá, tam sa ticho nehlási)
+  const silence = useSilenceGuard({
+    active: recording && !file && !client.active,
+    level,
+    onTimeout: ({ everSpoke }) => {
+      if (!everSpoke) onBack(); // nikto nehovoril: nahrávku zahodíme
+      else void finishAll();
+    },
+  });
   // živé titulky počúvajú mikrofón v miestnosti, pri nahratom videe by nesedeli
   const transcript = useLiveTranscript(recording && !file, LANGUAGE_INFO[language].bcp47);
 
@@ -548,6 +562,7 @@ export function PitchStudio({
                   : "stage-dark relative aspect-video overflow-hidden rounded-2xl lg:aspect-auto lg:h-[calc(100dvh-210px)] lg:min-h-[440px] bg-[#17142e]"
               }
             >
+              {silence.asking ? <SilencePrompt secondsLeft={silence.secondsLeft} onStay={silence.confirm} onStop={stop} /> : null}
               <div className="absolute inset-0">
                 <CameraStage
                   ref={stageApi}

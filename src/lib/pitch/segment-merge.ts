@@ -17,7 +17,8 @@ export type TranscribedSegment = {
 };
 
 /** Najviac úsekov jedného prejavu (30 min po ~30 s s rezervou). */
-export const MAX_SEGMENTS = 90;
+/** úseky po ~25–38 s: pokryjú aj hodinový prejav */
+export const MAX_SEGMENTS = 160;
 
 /** Spojí úseky v poradí; časy slov posunie o začiatok úseku. */
 export function mergeSegments(segments: TranscribedSegment[]): { text: string; words: SegmentWord[]; provider: string | null } {

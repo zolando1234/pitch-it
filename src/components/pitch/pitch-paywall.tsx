@@ -1,56 +1,55 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FREE_PITCHES, PITCH_PACK, PITCH_PROMO, formatEur, type PitchBalance } from "@/lib/billing/pitch-pack";
+import { PlanPicker, TopupButton } from "@/components/billing/plan-picker";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { PitchBalance } from "@/lib/billing/pitch-pack";
+import { FREE_SECONDS, nextWeekStart } from "@/lib/billing/pricing";
 
 const PAY = {
   sk: {
-    withCode: "s kódom",
-    openFailed: "Platbu sa nepodarilo otvoriť. Skús to znova.",
-    noServer: "Nepodarilo sa spojiť so serverom.",
-    opening: "Otváram platbu…",
-    buy: (n: number) => `Kúpiť ${n} pitchov`,
-    codeHint: (code: string) => `Jednorazovo, bez predplatného. Kód ${code} zadaj pri platbe do poľa „Pridať propagačný kód“.`,
     thanks: "Ďakujeme za platbu.",
-    crediting: "Pripisujeme ti pitche, potrvá to pár sekúnd…",
-    usedUp: "Pitche zadarmo sú minuté",
-    keepGoing: (n: number) => `Trénuj ďalej s balíkom ${n} pitchov.`,
-    explain: (free: number) =>
-      `Využil si ${free} pitche zadarmo. Každý ďalší pitch má rovnakú analýzu: reč tela, tempo, vypĺňacie slová, obsah a zhodu s osnovou.`,
-    oneOff: (n: number) => `jednorazovo za ${n} pitchov, bez predplatného`,
-    codeStep: (code: string) => `Kód ${code} zadaj v ďalšom kroku pri platbe do poľa „Pridať propagačný kód“. Platbu spracúva Stripe.`,
-    disabled: "Platby zatiaľ nie sú zapnuté.",
+    crediting: "Aktivujeme ti plán, potrvá to pár sekúnd…",
+    freeUsedUp: "Minúty zadarmo sú minuté",
+    freeHeading: "Trénuj ďalej s plánom Pro alebo Unlimited.",
+    freeExplain: (m: number) => `Využil si ${m} minút zadarmo. Platený plán ti odomkne pravidelný tréning so všetkými typmi prejavov a celým reportom.`,
+    weekUsedUp: "Týždenné minúty sú minuté",
+    weekHeading: "Dokúp si minúty alebo prejdi na Unlimited.",
+    weekExplain: (reset: string) => `Nové minúty dostaneš ${reset}. Dovtedy si môžeš dokúpiť minúty navyše.`,
+    teamUsedUp: "Tímové minúty sú minuté",
+    teamAsk: (team: string) => `Tréning ti platí tím ${team}.`,
+    teamOwner: (owner: string) => `Požiadaj vlastníka tímu (${owner}), aby rozšíril plán.`,
   },
   en: {
-    withCode: "with code",
-    openFailed: "The payment could not be opened. Try again.",
-    noServer: "Could not connect to the server.",
-    opening: "Opening payment…",
-    buy: (n: number) => `Buy ${n} pitches`,
-    codeHint: (code: string) => `One-off, no subscription. Enter code ${code} at checkout in the “Add promotion code” field.`,
     thanks: "Thank you for your payment.",
-    crediting: "Adding your pitches, this takes a few seconds…",
-    usedUp: "Your free pitches are used up",
-    keepGoing: (n: number) => `Keep training with a pack of ${n} pitches.`,
-    explain: (free: number) =>
-      `You've used your ${free} free pitches. Every further pitch gets the same analysis: body language, pace, filler words, content and outline match.`,
-    oneOff: (n: number) => `one-off for ${n} pitches, no subscription`,
-    codeStep: (code: string) => `Enter code ${code} in the next step at checkout, in the “Add promotion code” field. Payments are handled by Stripe.`,
-    disabled: "Payments are not enabled yet.",
+    crediting: "Activating your plan, this takes a few seconds…",
+    freeUsedUp: "Your free minutes are used up",
+    freeHeading: "Keep training with Pro or Unlimited.",
+    freeExplain: (m: number) => `You've used your ${m} free minutes. A paid plan unlocks regular practice with all training types and the full report.`,
+    weekUsedUp: "This week's minutes are used up",
+    weekHeading: "Buy extra minutes or switch to Unlimited.",
+    weekExplain: (reset: string) => `You get new minutes ${reset}. Until then you can buy extra minutes.`,
+    teamUsedUp: "Your team is out of minutes",
+    teamAsk: (team: string) => `Your training is paid for by the team ${team}.`,
+    teamOwner: (owner: string) => `Ask the team owner (${owner}) to extend the plan.`,
   },
 };
+
+/** Člen firemného tímu: pitche platí vlastník tímu. */
+export type PitchTeam = { name: string; ownerEmail: string | null };
 
 export { balanceLabel } from "@/lib/billing/pitch-pack";
 
 /*
-  Paywall nahrávania: zostatok pitchov a nákup balíka cez Stripe Checkout.
+  Paywall nahrávania: keď minú minúty zadarmo (Free) alebo týždenné minúty (Pro),
+  ponúkne plány, dokúpenie minút; člen tímu dostane kontakt na vlastníka.
 */
 
 /** Zostatok pitchov. Načíta sa znova vždy, keď sa obrazovka ukáže (aj po návrate z reportu alebo z platby). */
 export function usePitchBalance(initial: PitchBalance | null, waitingForPayment: boolean) {
   const [balance, setBalance] = useState(initial);
   const [paymentsEnabled, setPaymentsEnabled] = useState(true);
+  const [team, setTeam] = useState<PitchTeam | null>(null);
   // Hlášku „Pripisujeme…“ ukážeme, len kým nie je z čoho pitchovať. Webhook býva rýchlejší
   // ako návrat zo Stripe, vtedy sú pitche pripísané už pri načítaní a netreba čakať.
   const [confirming, setConfirming] = useState(waitingForPayment && !(initial?.canPitch ?? false));
@@ -61,9 +60,10 @@ export function usePitchBalance(initial: PitchBalance | null, waitingForPayment:
     try {
       const response = await fetch("/api/billing/pitche", { cache: "no-store" });
       if (!response.ok) return null;
-      const data = (await response.json()) as { balance: PitchBalance; paymentsEnabled: boolean };
+      const data = (await response.json()) as { balance: PitchBalance; paymentsEnabled: boolean; team?: PitchTeam | null };
       setBalance(data.balance);
       setPaymentsEnabled(data.paymentsEnabled);
+      setTeam(data.team ?? null);
       return data.balance;
     } catch {
       return null;
@@ -92,79 +92,34 @@ export function usePitchBalance(initial: PitchBalance | null, waitingForPayment:
     return () => clearInterval(id);
   }, [waitingForPayment, initial, reload, blocking]);
 
-  return { balance, paymentsEnabled, confirming, reload };
+  return { balance, paymentsEnabled, team, confirming, reload };
 }
 
-/** Cena v tlačidle: pôvodná prečiarknutá a cena s kódom. */
-function PromoPrice() {
-  const locale = useLocale();
-  return (
-    <span className="whitespace-nowrap">
-      <s className="opacity-60">{formatEur(PITCH_PACK.priceCents, locale)}</s> {formatEur(PITCH_PROMO.priceCents, locale)} {PAY[locale].withCode} {PITCH_PROMO.code}
-    </span>
-  );
-}
-
-/** Otvorí Stripe Checkout pre balík pitchov. */
-export function useBuyPitchPack() {
-  const tx = PAY[useLocale()];
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const buy = async () => {
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/billing/pitche", { method: "POST" });
-      const data = (await response.json().catch(() => null)) as { url?: string; error?: { message?: string } } | null;
-      if (response.ok && data?.url) {
-        window.location.assign(data.url);
-        return;
-      }
-      setError(data?.error?.message ?? tx.openFailed);
-    } catch {
-      setError(tx.noServer);
-    }
-    setPending(false);
-  };
-  return { buy, pending, error };
-}
-
-/** Samostatné tlačidlo nákupu (napr. v Nastaveniach). */
-export function BuyPitchPackButton() {
-  const { buy, pending, error } = useBuyPitchPack();
-  const tx = PAY[useLocale()];
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => void buy()}
-        disabled={pending}
-        className="rounded-full bg-signal px-7 py-3.5 text-base font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-50"
-      >
-        {pending ? (
-          tx.opening
-        ) : (
-          <>
-            {tx.buy(PITCH_PACK.credits)} · <PromoPrice />
-          </>
-        )}
-      </button>
-      <p className="mt-2 text-[13px] text-faint">
-        {tx.codeHint(PITCH_PROMO.code)}
-      </p>
-      {error ? (
-        <p role="alert" className="mt-2 text-[14px] text-coral">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled: boolean; confirming: boolean }) {
-  const { buy, pending, error } = useBuyPitchPack();
+export function PitchPaywall({
+  paymentsEnabled,
+  confirming,
+  team = null,
+  balance = null,
+}: {
+  paymentsEnabled: boolean;
+  confirming: boolean;
+  team?: PitchTeam | null;
+  balance?: PitchBalance | null;
+}) {
   const locale = useLocale();
   const tx = PAY[locale];
+
+  if (team) {
+    return (
+      <section className="rounded-3xl border-2 border-signal p-6 md:p-8" aria-labelledby="paywall-nadpis">
+        <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">{tx.teamUsedUp}</p>
+        <h2 id="paywall-nadpis" className="h mt-3 text-3xl leading-tight md:text-4xl">
+          {tx.teamAsk(team.name)}
+        </h2>
+        {team.ownerEmail ? <p className="mt-3 max-w-2xl text-lg text-mute">{tx.teamOwner(team.ownerEmail)}</p> : null}
+      </section>
+    );
+  }
 
   if (confirming) {
     return (
@@ -175,48 +130,23 @@ export function PitchPaywall({ paymentsEnabled, confirming }: { paymentsEnabled:
     );
   }
 
+  const pro = balance?.plan === "pro";
+  const reset = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "sk-SK", { weekday: "long", day: "numeric", month: "long" }).format(nextWeekStart(new Date()));
   return (
     <section className="rounded-3xl border-2 border-signal p-6 md:p-8" aria-labelledby="paywall-nadpis">
-      <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">{tx.usedUp}</p>
+      <p className="text-sm font-bold uppercase tracking-[0.3em] text-accent">{pro ? tx.weekUsedUp : tx.freeUsedUp}</p>
       <h2 id="paywall-nadpis" className="h mt-3 text-3xl leading-tight md:text-4xl">
-        {tx.keepGoing(PITCH_PACK.credits)}
+        {pro ? tx.weekHeading : tx.freeHeading}
       </h2>
-      <p className="mt-3 max-w-2xl text-lg text-mute">
-        {tx.explain(FREE_PITCHES)}
-      </p>
-      <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-4">
-        <div>
-          <p className="h text-5xl">
-            <s className="text-3xl text-mute">{formatEur(PITCH_PACK.priceCents, locale)}</s> {formatEur(PITCH_PROMO.priceCents, locale)}
-          </p>
-          <p className="mt-1 text-sm text-mute">
-            {tx.withCode} <b className="text-paper">{PITCH_PROMO.code}</b> · {tx.oneOff(PITCH_PACK.credits)}
-          </p>
+      <p className="mt-3 max-w-2xl text-lg text-mute">{pro ? tx.weekExplain(reset) : tx.freeExplain(FREE_SECONDS / 60)}</p>
+      {pro ? (
+        <div className="mt-6">
+          <TopupButton />
         </div>
-        <button
-          type="button"
-          onClick={() => void buy()}
-          disabled={pending || !paymentsEnabled}
-          className="rounded-full bg-signal px-10 py-5 text-xl font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40"
-        >
-          {pending ? (
-            tx.opening
-          ) : (
-            <>
-              {tx.buy(PITCH_PACK.credits)} · <PromoPrice /> →
-            </>
-          )}
-        </button>
-      </div>
-      <p className="mt-4 text-sm text-faint">
-        {tx.codeStep(PITCH_PROMO.code)}
-      </p>
-      {!paymentsEnabled ? <p className="mt-3 text-sm text-marker">{tx.disabled}</p> : null}
-      {error ? (
-        <p role="alert" className="mt-3 text-coral">
-          {error}
-        </p>
       ) : null}
+      <div className="mt-8">
+        <PlanPicker mode="app" current={balance?.plan ?? "free"} paymentsEnabled={paymentsEnabled} showFree={false} />
+      </div>
     </section>
   );
 }

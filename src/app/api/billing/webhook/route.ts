@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getStripeConfig } from "@/config/server-env";
 import { mapSubscriptionStatus, verifyWebhookSignature, type StripeSubscription } from "@/lib/billing/stripe";
-import { addPitchCredits } from "@/lib/db/pitch-wallet";
+import { isInterval, isPaidPlan, topupMinutesFor } from "@/lib/billing/pricing";
+import { addPitchCredits, addTopupMinutes } from "@/lib/db/pitch-wallet";
 import { trackEvent } from "@/lib/events/track";
 import { getAdminDb } from "@/lib/store/client";
 import { isUuid } from "@/lib/validation/ids";
@@ -20,6 +21,7 @@ type CheckoutSession = {
   subscription?: string;
   payment_status?: string;
   amount_total?: number;
+  amount_subtotal?: number;
   metadata?: Record<string, string>;
 };
 
@@ -35,6 +37,30 @@ async function creditPitchPack(session: CheckoutSession) {
   if (await addPitchCredits(userId, credits, session.id)) {
     await trackEvent(userId, "purchase_completed", { kind: "pitch_pack", credits, amount: session.amount_total ?? null });
   }
+}
+
+/** Dokúpené minúty: počet podľa zaplatenej sumy a ceny za minútu z metadát (množstvo si zákazník mení v Checkoute). */
+async function creditMinutes(session: CheckoutSession) {
+  const userId = session.metadata?.user_id ?? session.client_reference_id;
+  const centsPerMinute = session.metadata?.cents_per_minute ? Number(session.metadata.cents_per_minute) : undefined;
+  const minutes = topupMinutesFor(session.amount_subtotal ?? session.amount_total ?? 0, centsPerMinute);
+  if (!isUuid(userId) || minutes <= 0) {
+    console.error("[billing] minúty bez používateľa alebo sumy", session.id);
+    return;
+  }
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") return;
+  if (await addTopupMinutes(userId, minutes, session.id)) {
+    await trackEvent(userId, "purchase_completed", { kind: "minutes", minutes, amount: session.amount_total ?? null });
+  }
+}
+
+/** Plán a obdobie predplatného: z metadát, inak z lookup_key ceny (pitchit_pro_year…). */
+function planOf(subscription: StripeSubscription): { plan: "pro" | "unlimited"; interval: "month" | "year" | null } {
+  const price = subscription.items?.data?.[0]?.price;
+  const [, keyPlan, keyInterval] = (price?.lookup_key ?? "").split("_");
+  const plan = subscription.metadata?.plan ?? keyPlan;
+  const interval = subscription.metadata?.interval ?? keyInterval ?? price?.recurring?.interval;
+  return { plan: isPaidPlan(plan) ? plan : "pro", interval: isInterval(interval) ? interval : null };
 }
 
 async function upsertFromSubscription(subscription: StripeSubscription, fallbackUserId: string | null) {
@@ -53,11 +79,16 @@ async function upsertFromSubscription(subscription: StripeSubscription, fallback
     return;
   }
   const status = mapSubscriptionStatus(subscription.status);
+  const { plan, interval } = planOf(subscription);
   const periodEnd = subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end ?? null;
+  // tímový plán: počet účtov = quantity položky predplatného
+  const seats = Math.max(1, Math.floor(subscription.items?.data?.[0]?.quantity ?? 1));
   const { error } = await admin.from("subscriptions").upsert(
     {
       user_id: userId,
-      plan: status === "canceled" ? "free" : "pro",
+      plan: status === "canceled" ? "free" : plan,
+      interval,
+      seats: status === "canceled" ? 1 : seats,
       status,
       provider: "stripe",
       provider_customer_id: subscription.customer,
@@ -89,16 +120,19 @@ export async function POST(request: Request) {
 
   try {
     const session = event.data.object as unknown as CheckoutSession;
+    const paidEvent = event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded";
     if (event.type.startsWith("checkout.session.") && session.metadata?.kind === "pitch_pack") {
       // completed (karta) alebo async_payment_succeeded (oneskorené platobné metódy)
-      if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") await creditPitchPack(session);
+      if (paidEvent) await creditPitchPack(session);
+    } else if (event.type.startsWith("checkout.session.") && session.metadata?.kind === "minutes") {
+      if (paidEvent) await creditMinutes(session);
     } else if (event.type === "checkout.session.completed") {
       if (isUuid(session.client_reference_id) && typeof session.customer === "string") {
         await getAdminDb()
           .from("subscriptions")
           .update({ provider: "stripe", provider_customer_id: session.customer, provider_subscription_id: session.subscription ?? null })
           .eq("user_id", session.client_reference_id);
-        await trackEvent(session.client_reference_id, "purchase_completed", { plan: "pro" });
+        await trackEvent(session.client_reference_id, "purchase_completed", { plan: session.metadata?.plan ?? "pro", amount: session.amount_total ?? null });
       }
     } else if (event.type.startsWith("customer.subscription.")) {
       await upsertFromSubscription(event.data.object as unknown as StripeSubscription, null);

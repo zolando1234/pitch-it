@@ -200,7 +200,7 @@ const AUDIENCE_BRIEF: Record<Audience, string> = {
 };
 
 /** Prepis do promptu (aj dlhý prejav, ~30 min reči). */
-export const TRANSCRIPT_PROMPT_MAX = 60_000;
+export const TRANSCRIPT_PROMPT_MAX = 100_000;
 
 export function buildOutlinePrompt(input: {
   outline: PitchOutline;

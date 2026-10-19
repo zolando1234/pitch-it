@@ -5,11 +5,12 @@ import { LlmError } from "@/lib/ai/llm/types";
 import { TranscriptionError, transcribeWithWords } from "@/lib/ai/transcription";
 import type { VisionSample } from "@/lib/analytics/vision/types";
 import type { StoredCoach } from "@/lib/coach/stored";
-import { canUseLength, FREE_PITCHES, PITCH_PACK, formatEur } from "@/lib/billing/pitch-pack";
+import { canUseLength } from "@/lib/billing/pitch-pack";
+import { FREE_SECONDS } from "@/lib/billing/pricing";
 import { getPitchContext } from "@/lib/db/pitch-context";
 import { insertPitchAttempt, updatePitchAttempt } from "@/lib/db/pitch";
 import type { PitchAttemptRow } from "@/lib/db/types";
-import { consumePitch, getPitchBalance } from "@/lib/db/pitch-wallet";
+import { consumeSpeech, getPitchBalance } from "@/lib/db/pitch-wallet";
 import { recordUsage } from "@/lib/db/usage";
 import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
@@ -21,7 +22,7 @@ import type { QaResult } from "@/lib/pitch/qa";
 import { dropSegments, loadSegments } from "@/lib/pitch/segments";
 import { buildMetrics } from "@/lib/pitch/metrics";
 import { outlineByKeywords, TRANSCRIPT_PROMPT_MAX, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
-import { buildSpeechPrompt, contentScoreOf, outlineFromAnalysis, SPEECH_SYSTEM, speechAnalysisSchema, splitSentences, type StoredSpeechAnalysis } from "@/lib/pitch/speech-analysis";
+import { buildSpeechPrompt, combineAnalysis, contentScoreOf, maxFlaggedFor, OVERVIEW_SYSTEM, outlineFromAnalysis, SENTENCES_SYSTEM, sentenceFlagsSchema, speechOverviewSchema, splitSentences, type StoredSpeechAnalysis } from "@/lib/pitch/speech-analysis";
 
 const AUDIENCE_BRIEF: Record<PitchAttemptRow["audience"], string> = {
   investor: "investori",
@@ -102,20 +103,24 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
     }
   }
   const balance = await getPitchBalance(userId);
-  if (!canUseLength(input.targetSeconds, balance)) {
-    throw new PitchServiceError(
-      "limit_reached",
-      L("4-minútový pitch je v platenej verzii. Kúp si balík pitchov alebo nahraj kratší pitch.", "A 4-minute pitch is in the paid version. Buy a pitch pack or record a shorter pitch."),
-      402,
-    );
-  }
   if (!balance.canPitch) {
     throw new PitchServiceError(
       "limit_reached",
-      L(
-        `Využil si ${FREE_PITCHES} pitche zadarmo. Kúp si balík ${PITCH_PACK.credits} pitchov za ${formatEur(PITCH_PACK.priceCents)} a trénuj ďalej.`,
-        `You've used your ${FREE_PITCHES} free pitches. Buy a pack of ${PITCH_PACK.credits} pitches for ${formatEur(PITCH_PACK.priceCents, "en")} and keep training.`,
-      ),
+      balance.plan === "pro"
+        ? L("Týždenných 60 minút je vyčerpaných. Dokúp si minúty alebo prejdi na Unlimited.", "Your 60 minutes for this week are used up. Buy extra minutes or switch to Unlimited.")
+        : L(
+            `Využil si ${FREE_SECONDS / 60} minút zadarmo. Pokračuj s plánom Pro alebo Unlimited.`,
+            `You've used your ${FREE_SECONDS / 60} free minutes. Continue with the Pro or Unlimited plan.`,
+          ),
+      402,
+    );
+  }
+  if (!canUseLength(input.targetSeconds, balance)) {
+    throw new PitchServiceError(
+      "limit_reached",
+      balance.plan === "pro"
+        ? L(`Tento týždeň ti zostáva ${Math.floor(balance.maxSeconds / 60)} min. Nahraj kratší prejav alebo si dokúp minúty.`, `You have ${Math.floor(balance.maxSeconds / 60)} min left this week. Record a shorter talk or buy extra minutes.`)
+        : L(`Zostáva ti ${Math.floor(balance.maxSeconds / 60)} min zadarmo. Nahraj kratší prejav alebo prejdi na Pro.`, `You have ${Math.floor(balance.maxSeconds / 60)} free min left. Record a shorter talk or switch to Pro.`),
       402,
     );
   }
@@ -208,30 +213,47 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       try {
         const context = await getPitchContext(userId);
         const sentences = capSentences(splitSentences(transcript.text));
-        const result = await llm.generateStructured({
-          purpose: "pitch_content",
-          system: SPEECH_SYSTEM,
-          messages: [
-            {
-              role: "user",
-              content: buildSpeechPrompt({
-                sentences,
-                audience: input.mode === "client" ? "klient na obchodnom stretnutí za stolom (rečník mu vysvetľuje ponuku; klient ho priebežne prerušuje otázkami)" : AUDIENCE_BRIEF[input.audience],
-                targetSeconds: input.targetSeconds,
-                durationMs: input.durationMs,
-                language: LANGUAGE_INFO[language].english,
-                feedbackLocale: ui,
-                outline,
-                context: contextForPrompt(context),
-                dialog: dialogText,
-              }),
-            },
-          ],
-          schema: speechAnalysisSchema,
-          effort: "low",
-          maxTokens: 8_000,
-          speed: "interactive",
-        });
+        const prompt = (part: "overview" | "sentences") =>
+          buildSpeechPrompt({
+            part,
+            sentences,
+            audience: input.mode === "client" ? "klient na obchodnom stretnutí za stolom (rečník mu vysvetľuje ponuku; klient ho priebežne prerušuje otázkami)" : AUDIENCE_BRIEF[input.audience],
+            targetSeconds: input.targetSeconds,
+            durationMs: input.durationMs,
+            language: LANGUAGE_INFO[language].english,
+            feedbackLocale: ui,
+            outline,
+            context: contextForPrompt(context),
+            dialog: dialogText,
+          });
+        // dve paralelné volania: čas určuje dĺžka výstupu, preto je rozbor rýchlejší a približne rovnako lacný
+        const [overviewCall, flagsCall] = await Promise.allSettled([
+          llm.generateStructured({
+            purpose: "pitch_content",
+            system: OVERVIEW_SYSTEM,
+            messages: [{ role: "user", content: prompt("overview") }],
+            schema: speechOverviewSchema,
+            effort: "low",
+            maxTokens: 3_500,
+            speed: "interactive",
+          }),
+          llm.generateStructured({
+            purpose: "pitch_content",
+            system: SENTENCES_SYSTEM,
+            messages: [{ role: "user", content: prompt("sentences") }],
+            schema: sentenceFlagsSchema,
+            effort: "low",
+            maxTokens: 400 + maxFlaggedFor(input.durationMs) * 110,
+            speed: "interactive",
+          }),
+        ]);
+        // bez prehľadu rozbor nedáva zmysel; bez označených viet sa report zobrazí bez podčiarknutí
+        if (overviewCall.status === "rejected") throw overviewCall.reason;
+        if (flagsCall.status === "rejected") {
+          console.error("[pitch] označenie viet zlyhalo:", flagsCall.reason instanceof LlmError ? `${flagsCall.reason.code}: ${flagsCall.reason.message}` : flagsCall.reason);
+        }
+        const flags = flagsCall.status === "fulfilled" ? flagsCall.value.data : null;
+        const result = { data: combineAnalysis(overviewCall.value.data, flags), model: overviewCall.value.model };
         // obsahové skóre len z bodov osnovy, ktorú si rečník zadal
         const points = outline?.points.length ? result.data.points.filter((p) => p.index < outline.points.length) : [];
         const analysis = { ...result.data, points };
@@ -275,7 +297,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
 
     const patch = {
       status: "ready" as const,
-      transcript: transcript ? transcript.text.slice(0, 20_000) : null,
+      transcript: transcript ? transcript.text.slice(0, 120_000) : null,
       metrics,
       content: content as Record<string, unknown> | null,
       content_score: score,
@@ -287,8 +309,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       model,
     };
     await updatePitchAttempt(attempt.id, patch);
-    // pitch sa započíta až po hotovej analýze
-    await consumePitch(userId);
+    // prejav sa započíta až po hotovej analýze (Free: jeden prejav, Pro: nahraté minúty)
+    await consumeSpeech(userId, input.durationMs / 1000);
     if (input.draft) await dropSegments(userId, input.draft.id, input.draft.segments).catch(() => {});
     await trackEvent(userId, "pitch_analyzed", {
       audience: input.audience,

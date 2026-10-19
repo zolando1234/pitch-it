@@ -71,10 +71,33 @@ export const TABLES: Record<string, TableSpec> = {
   },
   pitch_wallets: {
     pk: ["user_id"],
-    defaults: () => ({ free_used: 0, credits: 0 }),
+    defaults: () => ({ free_used: 0, credits: 0, topup_seconds: 0, free_seconds_used: 0 }),
     updatedAt: true,
     refs: [user()],
     read: own("user_id"),
+  },
+  /** Firemný účet: vlastník platí pitche, členovia ich čerpajú z jeho peňaženky. Jeden tím na vlastníka. */
+  teams: {
+    pk: ["id"],
+    unique: [["owner_id"]],
+    defaults: uuid,
+    updatedAt: true,
+    refs: [user("owner_id")],
+  },
+  /** Člen tímu; používateľ môže byť najviac v jednom tíme. */
+  team_members: {
+    pk: ["team_id", "user_id"],
+    unique: [["user_id"]],
+    index: ["team_id"],
+    refs: [{ column: "team_id", table: "teams", onDelete: "cascade" }, user()],
+  },
+  /** Pozvánka e-mailom; po prijatí sa z nej stane členstvo. */
+  team_invites: {
+    pk: ["id"],
+    unique: [["team_id", "email"]],
+    index: ["team_id", "email"],
+    defaults: () => ({ ...uuid(), sent_at: null }),
+    refs: [{ column: "team_id", table: "teams", onDelete: "cascade" }],
   },
   user_settings: {
     pk: ["user_id"],
@@ -247,6 +270,8 @@ export const TABLES: Record<string, TableSpec> = {
     unique: [["provider_customer_id"], ["provider_subscription_id"]],
     defaults: () => ({
       plan: "free",
+      interval: null,
+      seats: 1,
       status: "active",
       cancel_at_period_end: false,
       provider: null,

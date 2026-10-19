@@ -88,7 +88,7 @@ export const DRILLS: Drill[] = [
       "Otáčaj hlavu, nielen oči. Bradu drž rovno.",
     ],
     durationMs: 1 * MIN,
-    focusRules: ["gaze-stuck", "gaze-darting", "head-down", "chin-up", "nodding", "turned"],
+    focusRules: ["gaze-stuck", "gaze-darting", "head-down", "nodding", "turned"],
     measure: { type: "highlight-count", highlight: "sweep" },
     target: 6,
     unit: "count",

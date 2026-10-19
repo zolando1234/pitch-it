@@ -2,8 +2,9 @@ import Link from "next/link";
 import { cache } from "react";
 import { Icon } from "@/components/app/icons";
 import { getCurrentUser } from "@/lib/auth/session";
-import { pitchSummary, type PlanSummary } from "@/lib/billing/summary";
+import { pitchSummary, teamPitchSummary, type PlanSummary } from "@/lib/billing/summary";
 import { getPitchBalance } from "@/lib/db/pitch-wallet";
+import { getMembership } from "@/lib/db/teams";
 import { getLocale } from "@/lib/i18n/server";
 
 /** Karta plánu v spodnej časti bočného panelu (desktop aj mobilné menu). */
@@ -33,7 +34,8 @@ export function PlanCard({ summary }: { summary: PlanSummary }) {
 const loadSummary = cache(async (): Promise<PlanSummary | null> => {
   const user = await getCurrentUser();
   if (!user) return null;
-  return pitchSummary(await getPitchBalance(user.id), await getLocale());
+  const [balance, membership, locale] = await Promise.all([getPitchBalance(user.id), getMembership(user.id), getLocale()]);
+  return membership ? teamPitchSummary(membership.team.name, balance, locale) : pitchSummary(balance, locale);
 });
 
 /** Číta reláciu, preto je vždy vo vnútri <Suspense>. */

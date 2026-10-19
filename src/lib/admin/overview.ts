@@ -1,4 +1,4 @@
-import { FREE_PITCHES } from "@/lib/billing/pitch-pack";
+import { activePlan, FREE_SECONDS } from "@/lib/billing/pricing";
 
 /*
   Prehľad pre administrátora: používatelia, platiaci, využitie. Čisté funkcie nad surovými
@@ -8,7 +8,9 @@ import { FREE_PITCHES } from "@/lib/billing/pitch-pack";
 export type AdminRaw = {
   users: Array<{ id: string; email: string | null; created_at: string; provider: string | null }>;
   profiles: Array<{ id: string; display_name: string | null }>;
-  wallets: Array<{ user_id: string; free_used: number; credits: number }>;
+  wallets: Array<{ user_id: string; free_used: number; credits: number; free_seconds_used?: number }>;
+  /** predplatné Pro/Unlimited (staršie dáta ho nemajú) */
+  subscriptions?: Array<{ user_id: string; plan: string; status: string }>;
   attempts: Array<{
     user_id: string;
     created_at: string;
@@ -35,9 +37,12 @@ export type AdminUserRow = {
   registeredAt: string;
   lastPitchAt: string | null;
   pitches: number;
+  /** minuté minúty zadarmo */
   freeUsed: number;
   credits: number;
   plan: AdminPlan;
+  /** aktívne predplatné */
+  subscription: "pro" | "unlimited" | null;
   /** zaplatené spolu v centoch */
   paidCents: number;
   documents: number;
@@ -78,13 +83,18 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
   const paidByUser = new Map<string, number>();
   for (const p of raw.purchases) if (p.user_id) paidByUser.set(p.user_id, (paidByUser.get(p.user_id) ?? 0) + (p.amount ?? 0));
 
+  const subscriptions = new Map((raw.subscriptions ?? []).map((x) => [x.user_id, activePlan(x)]));
+
   const rows: AdminUserRow[] = raw.users.map((u) => {
     const attempts = byUser.get(u.id) ?? [];
     const wallet = wallets.get(u.id);
-    const freeUsed = wallet?.free_used ?? 0;
+    const freeSeconds = wallet?.free_seconds_used ?? 0;
     const credits = wallet?.credits ?? 0;
     const bought = paidByUser.has(u.id);
-    const plan: AdminPlan = bought || credits > 0 ? "paid" : freeUsed >= FREE_PITCHES ? "free_used_up" : "free";
+    const sub = subscriptions.get(u.id);
+    const subscription = sub === "pro" || sub === "unlimited" ? sub : null;
+    const plan: AdminPlan = subscription || bought || credits > 0 ? "paid" : freeSeconds >= FREE_SECONDS ? "free_used_up" : "free";
+    const freeUsed = Math.round(freeSeconds / 60);
     const last = attempts.reduce<string | null>((max, a) => (!max || a.created_at > max ? a.created_at : max), null);
     return {
       id: u.id,
@@ -97,6 +107,7 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
       freeUsed,
       credits,
       plan,
+      subscription,
       paidCents: paidByUser.get(u.id) ?? 0,
       documents: contexts.get(u.id)?.documents ?? 0,
     };

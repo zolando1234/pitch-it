@@ -69,8 +69,8 @@ const LINK_ERRORS: Record<"sk" | "en", Record<string, string>> = {
 };
 
 const PROVIDER_LABELS: Record<"sk" | "en", Record<OAuthProvider, string>> = {
-  sk: { google: "Pokračovať cez Google", linkedin_oidc: "Pokračovať cez LinkedIn" },
-  en: { google: "Continue with Google", linkedin_oidc: "Continue with LinkedIn" },
+  sk: { google: "Pokračovať cez Google" },
+  en: { google: "Continue with Google" },
 };
 
 function Separator() {
@@ -150,13 +150,17 @@ export function SignInForm({ available }: { available: boolean }) {
           {en ? "Sign in" : "Prihlásiť sa"}
         </SubmitButton>
       </form>
-      <ProviderButtons providers={["google", "linkedin_oidc"]} next={next} disabled={!available} />
+      <ProviderButtons providers={["google"]} next={next} disabled={!available} />
     </>
   );
 }
 
 export function SignUpForm({ available }: { available: boolean }) {
   const [state, action] = useActionState(signUp, initialAuthState);
+  // z pozvánky do tímu: návrat na pozvánku a predvyplnený pozvaný e-mail
+  const params = useSearchParams();
+  const next = params.get("next") ?? "/app";
+  const invitedEmail = params.get("email") ?? undefined;
   const id = useId();
   const en = useLocale() === "en";
   const err = useFieldErrors(state.fieldErrors);
@@ -174,6 +178,7 @@ export function SignUpForm({ available }: { available: boolean }) {
       <form action={action} className="space-y-4" noValidate>
         <FormMessage status={state.status} message={state.message} />
         <input type="hidden" name="account_type" value="participant" />
+        <input type="hidden" name="next" value={next} />
         <Field id={`${id}-name`} label={en ? "Full name" : "Celé meno"} error={err("display_name")}>
           <Input
             id={`${id}-name`}
@@ -193,7 +198,7 @@ export function SignUpForm({ available }: { available: boolean }) {
             autoComplete="email"
             placeholder={en ? "you@startup.com" : "ty@startup.sk"}
             required
-            defaultValue={state.values?.email}
+            defaultValue={state.values?.email ?? invitedEmail}
             error={err("email")}
           />
         </Field>
@@ -246,7 +251,7 @@ export function SignUpForm({ available }: { available: boolean }) {
           {en ? "Create account" : "Vytvoriť účet"}
         </SubmitButton>
       </form>
-      <ProviderButtons providers={["google"]} next="/app" disabled={!available} />
+      <ProviderButtons providers={["google"]} next={next} disabled={!available} />
     </>
   );
 }

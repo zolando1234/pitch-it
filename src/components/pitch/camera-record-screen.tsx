@@ -21,7 +21,7 @@ import { primeAudio, SegmentUploader, segmentsFromFile } from "@/components/pitc
 import { usePhoneMic } from "@/components/pitch/use-phone-mic";
 import { hasLiveAudio, uploadPitchWithRetry, usePitchRecorder, type Recording, type RecorderSetup } from "@/components/pitch/use-recorder";
 import { VideoSourcePicker, type VideoAnalysis } from "@/components/pitch/video-source-picker";
-import { canUseLength, CUSTOM_MAX_SECONDS, FREE_MAX_SECONDS, type PitchBalance } from "@/lib/billing/pitch-pack";
+import { CUSTOM_MAX_SECONDS, fitLength, type PitchBalance } from "@/lib/billing/pitch-pack";
 import { keepLocalSession } from "@/lib/coach/local-session";
 import { ruleFilterFor, type TalkMode } from "@/lib/coach/modes";
 import { toStoredCoach } from "@/lib/coach/stored";
@@ -260,7 +260,8 @@ export function CameraRecordScreen({
   const qa = useQaPrefs();
   const language = languageState.language;
   // dlhšie ako 3 minúty len s kúpenými pitchami; inak najdlhšia bezplatná dĺžka
-  const targetSeconds = canUseLength(lengthState.length, wallet.balance) ? lengthState.length : FREE_MAX_SECONDS;
+  // dlhší prejav, než dovoľuje zostatok minút, sa skráti na najdlhší možný
+  const targetSeconds = fitLength(lengthState.length, wallet.balance);
   const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
   const [clientKind, setClientKind] = useState<"ai" | "real">("ai");
   useEffect(() => {
@@ -294,7 +295,7 @@ export function CameraRecordScreen({
   const [videoMode, setVideoMode] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<VideoAnalysis>("quick");
-  const maxVideoSeconds = canUseLength(CUSTOM_MAX_SECONDS, wallet.balance) ? CUSTOM_MAX_SECONDS : FREE_MAX_SECONDS;
+  const maxVideoSeconds = wallet.balance ? wallet.balance.maxSeconds : CUSTOM_MAX_SECONDS;
 
   const recorder = usePitchRecorder();
   const { open, attach, release } = recorder;
@@ -717,6 +718,7 @@ export function CameraRecordScreen({
         file={videoFile}
         quiet={!!videoFile && analysis === "quick"}
         language={language}
+        level={recorder.level}
         ruleFilter={ruleFilter}
         onLive={onLive}
         onPause={recorder.pause}
@@ -785,7 +787,7 @@ export function CameraRecordScreen({
       ) : phase === "setup" && (blocked || wallet.confirming) ? (
         <main id="obsah" className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10 md:px-8">
           <h1 className="h text-4xl leading-tight md:text-6xl">{tx.heading}</h1>
-          <PitchPaywall paymentsEnabled={wallet.paymentsEnabled} confirming={wallet.confirming} />
+          <PitchPaywall paymentsEnabled={wallet.paymentsEnabled} confirming={wallet.confirming} team={wallet.team} balance={wallet.balance} />
         </main>
       ) : phase === "setup" && (trainingMode === "public" || trainingMode === "client") ? (
         <main id="obsah" className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10 md:px-8">
@@ -861,7 +863,7 @@ export function CameraRecordScreen({
           </Section>
           ) : null}
 
-          {!fileMode ? <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} buyHref="/app/nastavenia#plan" /> : null}
+          {!fileMode ? <LengthPicker {...lengthState} length={targetSeconds} balance={wallet.balance} plansHref="/app/nastavenia#plan" /> : null}
           <LanguagePicker {...languageState} />
           <OutlineEditor {...outlineState} />
           {aiMeeting ? (

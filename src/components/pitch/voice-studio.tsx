@@ -6,6 +6,7 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { useClientQuestions, type MeetingSetup } from "@/components/pitch/client-questions";
 import { PI_BACKGROUND } from "@/components/pitch/pi-topbar";
 import { useLiveTranscript } from "@/components/pitch/use-live-transcript";
+import { SilencePrompt, useSilenceGuard } from "@/components/pitch/use-silence-guard";
 import { Wordmark } from "@/components/wordmark";
 import { LANGUAGE_INFO, type PitchLanguage } from "@/lib/pitch/language";
 import type { PitchOutline } from "@/lib/pitch/outline";
@@ -104,12 +105,23 @@ export function VoiceStudio({
 
   const client = useClientQuestions({ meeting, live, elapsedMs: elapsed, durationMs, pause, resume });
 
-  const finish = async () => {
+  /** `trimMs`: ticho na konci, ktoré sa do dĺžky výkladu nepočíta (automatické ukončenie) */
+  const finish = async (trimMs = 0) => {
     if (finished.current) return;
     finished.current = true;
     if (client.active) await client.finishAnswer();
-    onFinish(Math.round(live ? performance.now() - startedAt.current : pausedAt.current - startedAt.current));
+    const length = live ? performance.now() - startedAt.current : pausedAt.current - startedAt.current;
+    onFinish(Math.max(0, Math.round(length - trimMs)));
   };
+  // dlhé ticho: opýtame sa, či je človek ešte tam; bez odpovede sa nahrávanie ukončí
+  const silence = useSilenceGuard({
+    active: live && !client.active,
+    level,
+    onTimeout: ({ idleMs, everSpoke }) => {
+      if (!everSpoke) onBack(); // nikto nehovoril: nahrávku zahodíme
+      else void finish(idleMs);
+    },
+  });
   const finishRef = useRef(finish);
   useEffect(() => {
     finishRef.current = finish;
@@ -174,6 +186,7 @@ export function VoiceStudio({
             {live ? tx.pause : tx.resume}
           </button>
           {client.overlay}
+          {silence.asking ? <SilencePrompt secondsLeft={silence.secondsLeft} onStay={silence.confirm} onStop={() => void finish()} /> : null}
         </section>
 
         {outline?.topic || outline?.points.length ? (

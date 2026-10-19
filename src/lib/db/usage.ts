@@ -56,7 +56,7 @@ export async function getBillingContext(userId: string, now = new Date()): Promi
 
 export async function getEntitlement(
   userId: string,
-  kind: Exclude<UsageKind, "transcription_seconds">,
+  kind: Exclude<UsageKind, "transcription_seconds" | "speech_seconds">,
 ): Promise<{ entitlement: Entitlement; context: BillingContext }> {
   const context = await getBillingContext(userId);
   return { entitlement: checkEntitlement(context.plan, context.usage, kind), context };

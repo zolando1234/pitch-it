@@ -5,7 +5,7 @@ import type { OAuthProvider } from "@/lib/auth/schemas";
 import { signToken, verifyToken } from "@/lib/auth/token";
 
 /*
-  Prihlásenie cez Google a LinkedIn (OpenID Connect, authorization code flow).
+  Prihlásenie cez Google (OpenID Connect, authorization code flow).
   Stav (CSRF + cieľová stránka) je podpísaný token v parametri `state`.
 */
 
@@ -18,13 +18,6 @@ const ENDPOINTS: Record<OAuthProvider, { authorize: string; token: string; useri
     userinfo: "https://openidconnect.googleapis.com/v1/userinfo",
     scope: "openid email profile",
     env: "GOOGLE",
-  },
-  linkedin_oidc: {
-    authorize: "https://www.linkedin.com/oauth/v2/authorization",
-    token: "https://www.linkedin.com/oauth/v2/accessToken",
-    userinfo: "https://api.linkedin.com/v2/userinfo",
-    scope: "openid profile email",
-    env: "LINKEDIN",
   },
 };
 

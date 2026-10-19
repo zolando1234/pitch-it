@@ -10,21 +10,25 @@ const LABELS_EN: Record<string, string> = {
   dokumenty: "Documents",
   nastavenia: "Settings",
   progres: "Progress",
+  tim: "Team",
+  clen: "Members",
 };
-const DETAIL_LABELS_EN: Record<string, string> = {};
+const DETAIL_LABELS_EN: Record<string, string> = { clen: "Progress" };
 
 const LABELS: Record<string, string> = {
   admin: "Administrácia",
   dokumenty: "Dokumenty",
   nastavenia: "Nastavenia",
   progres: "Progres",
+  tim: "Tím",
+  clen: "Členovia",
 };
 
 /** Názov detailu podľa rodičovskej sekcie (ID v URL nemá ľudský názov). */
-const DETAIL_LABELS: Record<string, string> = {};
+const DETAIL_LABELS: Record<string, string> = { clen: "Progres" };
 
 /** Sekcie bez vlastnej stránky: odkazujú na najbližšiu existujúcu. */
-const SECTION_HREF: Record<string, string> = {};
+const SECTION_HREF: Record<string, string> = { "/app/tim/clen": "/app/tim" };
 
 export type Crumb = { href: string; label: string };
 

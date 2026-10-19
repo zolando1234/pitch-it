@@ -15,8 +15,8 @@ test("administrácia: platení, minuté zadarmo, aktivácia a tržby", () => {
     ],
     profiles: [{ id: "a", display_name: "Anna" }],
     wallets: [
-      { user_id: "a", free_used: 1, credits: 0 },
-      { user_id: "b", free_used: 3, credits: 0 },
+      { user_id: "a", free_used: 1, credits: 0, free_seconds_used: 120 },
+      { user_id: "b", free_used: 3, credits: 0, free_seconds_used: 600 },
       { user_id: "c", free_used: 3, credits: 7 },
     ],
     attempts: [

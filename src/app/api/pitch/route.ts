@@ -6,17 +6,18 @@ import { parseLocale } from "@/lib/i18n/locale";
 import { getLocale } from "@/lib/i18n/server";
 import { analyzePitch, MAX_PITCH_AUDIO_BYTES, PitchServiceError } from "@/lib/pitch/service";
 import { AUDIENCES } from "@/lib/onboarding/plan";
-import { CUSTOM_MAX_SECONDS, isValidLength } from "@/lib/billing/pitch-pack";
+import { isValidLength, UNLIMITED_MAX_SECONDS } from "@/lib/billing/pitch-pack";
 import { MAX_SEGMENTS } from "@/lib/pitch/segment-merge";
 import { apiError, apiOk, handleRouteError, isUuid, rateLimited, requireApiUser } from "@/lib/http/route";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
 
-export const maxDuration = 120;
+// hodinový prejav: spojenie prepisu a rozbor trvajú dlhšie
+export const maxDuration = 300;
 
 const AUDIO_TYPES = new Set(["audio/wav", "audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-m4a", "video/webm"]);
 
 const metaSchema = z.object({
-  durationMs: z.coerce.number().int().min(1_000).max(CUSTOM_MAX_SECONDS * 1000 + 60_000),
+  durationMs: z.coerce.number().int().min(1_000).max(UNLIMITED_MAX_SECONDS * 1000 + 60_000),
   audience: z.enum(AUDIENCES),
   targetSeconds: z.coerce.number().int().refine(isValidLength),
   focus: z.enum(["tempo", "fillery", "obsah"]),

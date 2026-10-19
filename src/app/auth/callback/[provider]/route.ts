@@ -5,7 +5,7 @@ import { LEGAL_VERSION, OAUTH_PROVIDERS, type OAuthProvider } from "@/lib/auth/s
 import { safeNextPath } from "@/lib/auth/session";
 import { trackEvent } from "@/lib/events/track";
 
-/** Návrat z Google/LinkedIn: nájde alebo vytvorí účet podľa overeného e-mailu a prihlási. */
+/** Návrat z Google: nájde alebo vytvorí účet podľa overeného e-mailu a prihlási. */
 export async function GET(request: NextRequest, { params }: RouteContext<"/auth/callback/[provider]">) {
   const { provider } = await params;
   const code = request.nextUrl.searchParams.get("code");

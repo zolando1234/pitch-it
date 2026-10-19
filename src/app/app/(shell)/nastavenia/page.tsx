@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ConsentToggle, ForgetDevicesButton, SettingsForm } from "@/components/settings/settings-forms";
-import { BuyPitchPackButton } from "@/components/pitch/pitch-paywall";
+import { ManageSubscriptionButton, PlanPicker, TopupButton } from "@/components/billing/plan-picker";
 import { buttonClasses } from "@/components/ui/button";
 import { ConfirmAction } from "@/components/ui/confirm-action";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { isStripeConfigured } from "@/lib/billing/stripe";
-import { balanceLabel, FREE_PITCHES } from "@/lib/billing/pitch-pack";
+import { balanceLabel, teamBalanceLabel } from "@/lib/billing/pitch-pack";
+import { FREE_SECONDS, PRO_WEEKLY_SECONDS } from "@/lib/billing/pricing";
+import { getSubscription } from "@/lib/db/usage";
+import { formatDate } from "@/lib/format";
 import { getCurrentConsents, getProfile, getSettings } from "@/lib/db/profile";
 import { getPitchBalance } from "@/lib/db/pitch-wallet";
+import { getMembership } from "@/lib/db/teams";
 import { getLocale } from "@/lib/i18n/server";
 import { MEDIA_CONSENT_VERSION } from "@/lib/privacy/consent-texts";
 import { deleteAccountAction, deleteAllSessionsAction } from "@/lib/privacy/settings-actions";
@@ -38,13 +43,17 @@ function Section({ id, title, children, description }: { id: string; title: stri
 export default async function SettingsPage({ searchParams }: PageProps<"/app/nastavenia">) {
   const user = await requireUser("/app/nastavenia");
   const params = await searchParams;
-  const [profile, settings, consents, balance] = await Promise.all([
+  const [profile, settings, consents, balance, membership, subscription] = await Promise.all([
     getProfile(user.id),
     getSettings(user.id),
     getCurrentConsents(user.id),
     getPitchBalance(user.id),
+    getMembership(user.id),
+    getSubscription(user.id),
   ]);
   const stripe = isStripeConfigured();
+  const paidSeats = balance.plan === "free" ? 1 : Math.max(1, subscription?.seats ?? 1);
+  const teamSeats = paidSeats > 1 ? paidSeats : undefined;
   const locale = await getLocale();
   const en = locale === "en";
   const L = (sk: string, enText: string) => (en ? enText : sk);
@@ -56,7 +65,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/app/nas
       <PageHeader title={L("Nastavenia", "Settings")} description={user.email ?? undefined} />
       {params.platba === "ok" ? (
         <Notice tone="success" className="mb-6">
-          {L("Platba prebehla. Pitche sa pripíšu do minúty, hneď ako ju potvrdí platobná brána.", "Payment complete. Your pitches are added within a minute, as soon as the payment provider confirms it.")}
+          {L("Platba prebehla. Plán sa aktivuje do minúty, hneď ako ju potvrdí platobná brána. Ak sa tu ešte neukazuje, obnov stránku.", "Payment complete. Your plan activates within a minute, as soon as the payment provider confirms it. If it isn't shown yet, refresh the page.")}
+        </Notice>
+      ) : params.platba === "minuty" ? (
+        <Notice tone="success" className="mb-6">
+          {L("Platba prebehla. Minúty sa pripíšu do minúty. Ak sa tu ešte neukazujú, obnov stránku.", "Payment complete. Your minutes are added within a minute. If they aren't shown yet, refresh the page.")}
         </Notice>
       ) : null}
 
@@ -84,13 +97,50 @@ export default async function SettingsPage({ searchParams }: PageProps<"/app/nas
 
       <Section
         id="plan"
-        title={L("Pitche", "Pitches")}
-        description={L(`Prvé ${FREE_PITCHES} pitche sú zadarmo. Ďalšie si dokúpiš v balíku, bez predplatného.`, `Your first ${FREE_PITCHES} pitches are free. Buy more in a pack, no subscription.`)}
+        title={L("Plán", "Plan")}
+        description={L(
+          `Free: ${FREE_SECONDS / 60} minút zadarmo. Pro: ${PRO_WEEKLY_SECONDS / 60} minút týždenne. Unlimited: bez limitu.`,
+          `Free: ${FREE_SECONDS / 60} free minutes. Pro: ${PRO_WEEKLY_SECONDS / 60} minutes per week. Unlimited: no limit.`,
+        )}
       >
-        <p className="text-[15px] text-paper">{balanceLabel(balance, locale)}</p>
-        <div className="mt-6">
-          {stripe ? <BuyPitchPackButton /> : <p className="text-[14.5px] text-mute">{L("Platby zatiaľ nie sú zapnuté.", "Payments are not enabled yet.")}</p>}
-        </div>
+        {membership ? (
+          <>
+            <p className="text-[15px] text-paper">
+              {L(`Tréning ti platí tím ${membership.team.name}.`, `Your training is paid for by the team ${membership.team.name}.`)} {teamBalanceLabel(balance, locale)}
+            </p>
+            <Link href="/app/tim" className={`${buttonClasses({ variant: "secondary" })} mt-6`}>
+              {L("Môj tím", "My team")}
+            </Link>
+          </>
+        ) : (
+          <div className="space-y-8">
+            <div>
+              <p className="text-[13px] font-bold uppercase tracking-widest text-mute">{L("Tvoj plán", "Your plan")}</p>
+              <p className="mt-1 text-[1.4rem] font-semibold text-paper">
+                {balance.plan === "unlimited" ? "Unlimited" : balance.plan === "pro" ? "Pro" : "Free"}
+                {balance.plan !== "free" && subscription?.interval ? (
+                  <span className="ml-2 text-base font-normal text-faint">{subscription.interval === "year" ? L("ročne", "yearly") : L("mesačne", "monthly")}</span>
+                ) : null}
+              </p>
+              <p className="mt-1 text-[15px] text-paper/90">{balanceLabel(balance, locale)}</p>
+              {balance.plan !== "free" && subscription?.cancel_at_period_end && subscription.current_period_end ? (
+                <p className="mt-1 text-[14px] text-marker">{L(`Predplatné je zrušené, platí do ${formatDate(new Date(subscription.current_period_end))}.`, `Subscription cancelled, active until ${formatDate(new Date(subscription.current_period_end))}.`)}</p>
+              ) : null}
+            </div>
+            {balance.plan === "pro" && stripe ? <TopupButton /> : null}
+            {balance.plan !== "free" && subscription?.provider_customer_id && stripe ? <ManageSubscriptionButton /> : null}
+            <PlanPicker
+              mode="app"
+              current={balance.plan}
+              currentInterval={balance.plan === "free" ? null : (subscription?.interval ?? null)}
+              paymentsEnabled={stripe}
+              showFree={false}
+              // tímový plán: ceny za zaplatený počet účtov (počet sa mení na stránke Tím)
+              seats={teamSeats}
+              currentSeats={teamSeats ?? 1}
+            />
+          </div>
+        )}
       </Section>
 
       <Section

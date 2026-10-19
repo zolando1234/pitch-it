@@ -5,6 +5,7 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import type { AdminOverview, AdminPlan, AdminUserRow } from "@/lib/admin/overview";
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { TrendChart } from "@/components/admin/trend-chart";
+import { FREE_SECONDS } from "@/lib/billing/pricing";
 
 /*
   Administrácia: používatelia, platiaci, využitie a zoznam účtov s vyhľadávaním.
@@ -29,7 +30,7 @@ const TX = {
     failed: "neúspešných analýz",
     checkouts: "otvorených platieb",
     purchases: "dokončených nákupov",
-    usedUp: "minuli pitche zadarmo, nekúpili",
+    usedUp: "minuli minúty zadarmo, neplatia",
     documents: "pridali Dokumenty",
     growth: "Vývoj",
     range: (d: number) => `${d} dní`,
@@ -69,7 +70,7 @@ const TX = {
     failed: "failed analyses",
     checkouts: "checkouts opened",
     purchases: "purchases completed",
-    usedUp: "used up free pitches, didn't buy",
+    usedUp: "used up free minutes, not paying",
     documents: "added Documents",
     growth: "Trend",
     range: (d: number) => `${d} days`,
@@ -284,11 +285,11 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
                     </p>
                   </td>
                   <td className="py-2.5 pr-3">
-                    <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-bold ${PLAN_STYLE[r.plan]}`}>{tx.plan[r.plan]}</span>
+                    <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-bold ${PLAN_STYLE[r.plan]}`}>{r.subscription === "unlimited" ? "Unlimited" : r.subscription === "pro" ? "Pro" : tx.plan[r.plan]}</span>
                   </td>
                   <td className="py-2.5 pr-3 text-mute">{fmtDate(r.registeredAt)}</td>
                   <td className="py-2.5 pr-3 font-bold tabular-nums text-paper">{r.pitches}</td>
-                  <td className="py-2.5 pr-3 tabular-nums text-mute">{r.freeUsed} / 3</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-mute">{r.freeUsed} / {FREE_SECONDS / 60} min</td>
                   <td className="py-2.5 pr-3 tabular-nums text-mute">{r.credits}</td>
                   <td className="py-2.5 pr-3 tabular-nums text-mute">{r.paidCents ? eur(r.paidCents) : "–"}</td>
                   <td className="py-2.5 pr-3 text-mute">{fmtDate(r.lastPitchAt)}</td>

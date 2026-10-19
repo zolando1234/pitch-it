@@ -2,12 +2,12 @@ import "server-only";
 
 import type { StoreError as PostgrestError } from "@/lib/store/db";
 
+// bez TS „parameter properties“: testy bežia v Node strip-only režime
 export class DbError extends Error {
-  constructor(
-    readonly code: "not_found" | "forbidden" | "conflict" | "query_failed",
-    message: string,
-  ) {
+  readonly code: "not_found" | "forbidden" | "conflict" | "query_failed";
+  constructor(code: DbError["code"], message: string) {
     super(message);
+    this.code = code;
     this.name = "DbError";
   }
 }

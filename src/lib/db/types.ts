@@ -254,7 +254,11 @@ export type ExerciseAttemptRow = {
 
 export type SubscriptionRow = {
   user_id: string;
-  plan: "free" | "pro";
+  plan: "free" | "pro" | "unlimited";
+  /** mesačná alebo ročná platba (staršie riadky: null) */
+  interval?: "month" | "year" | null;
+  /** počet zaplatených účtov (tímový plán; staršie riadky: chýba = 1) */
+  seats?: number | null;
   status: "active" | "trialing" | "past_due" | "canceled" | "incomplete";
   provider: "stripe" | null;
   provider_customer_id: string | null;

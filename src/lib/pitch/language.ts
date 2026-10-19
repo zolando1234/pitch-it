@@ -11,16 +11,15 @@ export const PITCH_LANGUAGES = [
 ] as const;
 export type PitchLanguage = (typeof PITCH_LANGUAGES)[number];
 
-export type SttProvider = "elevenlabs" | "mistral" | "openai";
+export type SttProvider = "elevenlabs" | "openai";
 
 export const STT_LABELS: Record<SttProvider, string> = {
   elevenlabs: "ElevenLabs Scribe",
-  mistral: "Mistral Voxtral",
   openai: "OpenAI Whisper",
 };
 
-/** Najprv ElevenLabs Scribe (jazyk aj časy slov v jednej požiadavke), pri výpadku ďalšie modely. */
-const STT_ORDER: SttProvider[] = ["elevenlabs", "mistral", "openai"];
+/** Najprv ElevenLabs Scribe (jazyk aj časy slov v jednej požiadavke), pri výpadku OpenAI Whisper. */
+const STT_ORDER: SttProvider[] = ["elevenlabs", "openai"];
 
 export type LanguageInfo = {
   /** názov v danom jazyku (v zozname jazykov) */

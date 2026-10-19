@@ -5,6 +5,7 @@ import { SignUpForm } from "@/components/auth/auth-forms";
 import { T } from "@/components/i18n/t";
 import { AuthPage, authAvailable } from "@/components/auth/auth-page";
 import { EarlyAccessForm } from "@/components/sections/early-access-form";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getSignupMode } from "@/config/env";
 import { isEarlyAccessConfigured } from "@/lib/early-access/store";
 
@@ -51,7 +52,10 @@ export default function SignUpPage({ searchParams }: PageProps<"/registracia">) 
         </>
       }
     >
-      <SignUpForm available={authAvailable()} />
+      {/* formulár číta ?next a ?email (pozvánka do tímu), preto za Suspense */}
+      <Suspense fallback={<Skeleton className="h-96" />}>
+        <SignUpForm available={authAvailable()} />
+      </Suspense>
     </AuthPage>
   );
 }

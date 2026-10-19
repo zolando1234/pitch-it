@@ -24,7 +24,7 @@ const checked = (message: string) =>
 export const ACCOUNT_TYPES = ["participant", "organizer"] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
-export const OAUTH_PROVIDERS = ["google", "linkedin_oidc"] as const;
+export const OAUTH_PROVIDERS = ["google"] as const;
 export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
 
 export const signUpSchema = z.object({

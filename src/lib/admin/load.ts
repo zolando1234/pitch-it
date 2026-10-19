@@ -18,13 +18,14 @@ async function all(table: string, columns: string): Promise<Row[]> {
 }
 
 export async function loadAdminOverview(): Promise<AdminOverview> {
-  const [users, profiles, wallets, attempts, events, contexts] = await Promise.all([
+  const [users, profiles, wallets, attempts, events, contexts, subscriptions] = await Promise.all([
     all("auth_users", "id, email, created_at, meta"),
     all("profiles", "id, display_name"),
-    all("pitch_wallets", "user_id, free_used, credits"),
+    all("pitch_wallets", "user_id, free_used, credits, free_seconds_used"),
     all("pitch_attempts", "user_id, created_at, status, with_camera, language, target_seconds, duration_ms, content_score, qa"),
     all("product_events", "user_id, name, created_at, properties"),
     all("pitch_contexts", "user_id, about, documents"),
+    all("subscriptions", "user_id, plan, status"),
   ]);
   const raw: AdminRaw = {
     users: users.map((u) => ({
@@ -34,7 +35,8 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
       provider: ((u.meta as { provider?: string } | null)?.provider as string) ?? null,
     })),
     profiles: profiles.map((p) => ({ id: String(p.id), display_name: (p.display_name as string) ?? null })),
-    wallets: wallets.map((w) => ({ user_id: String(w.user_id), free_used: Number(w.free_used ?? 0), credits: Number(w.credits ?? 0) })),
+    wallets: wallets.map((w) => ({ user_id: String(w.user_id), free_used: Number(w.free_used ?? 0), credits: Number(w.credits ?? 0), free_seconds_used: Number(w.free_seconds_used ?? 0) })),
+    subscriptions: subscriptions.map((x) => ({ user_id: String(x.user_id), plan: String(x.plan ?? "free"), status: String(x.status ?? "") })),
     attempts: attempts.map((a) => ({
       user_id: String(a.user_id),
       created_at: String(a.created_at ?? ""),

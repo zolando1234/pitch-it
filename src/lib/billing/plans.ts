@@ -80,7 +80,9 @@ export type UsageKind =
   | "deck_analysis"
   | "exercise_evaluation"
   | "hint"
-  | "transcription_seconds";
+  | "transcription_seconds"
+  /** nahraté sekundy prejavu (týždenný limit Pro), zapisuje sa na toho, kto platí */
+  | "speech_seconds";
 
 export type UsageTotals = Record<UsageKind, number>;
 
@@ -93,6 +95,7 @@ export function emptyUsage(): UsageTotals {
     exercise_evaluation: 0,
     hint: 0,
     transcription_seconds: 0,
+    speech_seconds: 0,
   };
 }
 
@@ -105,7 +108,7 @@ export type Entitlement =
   | { allowed: true; remaining: number }
   | { allowed: false; reason: "limit_reached" | "subscription_inactive"; remaining: 0 };
 
-const LIMIT_FOR: Record<Exclude<UsageKind, "realtime_seconds" | "transcription_seconds">, keyof PlanLimits> = {
+const LIMIT_FOR: Record<Exclude<UsageKind, "realtime_seconds" | "transcription_seconds" | "speech_seconds">, keyof PlanLimits> = {
   text_turn: "textTurns",
   report: "reports",
   deck_analysis: "deckAnalyses",
@@ -121,7 +124,7 @@ export function remainingRealtimeSeconds(plan: Plan, usage: UsageTotals): number
 export function checkEntitlement(
   plan: Plan,
   usage: UsageTotals,
-  kind: Exclude<UsageKind, "transcription_seconds">,
+  kind: Exclude<UsageKind, "transcription_seconds" | "speech_seconds">,
   subscriptionActive = true,
 ): Entitlement {
   if (!subscriptionActive) return { allowed: false, reason: "subscription_inactive", remaining: 0 };
@@ -136,8 +139,9 @@ export function checkEntitlement(
 }
 
 /** Pro plán platí iba pri aktívnom predplatnom; inak sa uplatnia limity Free. */
-export function effectivePlan(subscription: { plan: PlanId; status: string } | null): Plan {
-  if (subscription?.plan === "pro" && (subscription.status === "active" || subscription.status === "trialing")) {
+export function effectivePlan(subscription: { plan: string; status: string } | null): Plan {
+  // staršie limity (projekty, AI investor): Pro aj Unlimited dostanú limity Pro
+  if ((subscription?.plan === "pro" || subscription?.plan === "unlimited") && (subscription.status === "active" || subscription.status === "trialing")) {
     return PLANS.pro;
   }
   return PLANS.free;

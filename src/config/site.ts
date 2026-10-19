@@ -53,6 +53,6 @@ export function getPrimaryCta(): Cta {
     : {
         href: "/registracia",
         label: "Vyskúšať zadarmo",
-        note: "20 minút hlasového tréningu mesačne zadarmo. Bez platobnej karty.",
+        note: "10 minút tréningu zadarmo. Bez platobnej karty.",
       };
 }

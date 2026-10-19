@@ -679,3 +679,27 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+  Úsek, ktorý je vždy tmavý (úvodná stránka má tmavý dizajn aj v svetlej téme):
+  znovu nastaví tokeny, ktoré používajú zdieľané komponenty (napr. cenník).
+*/
+.force-dark {
+  --color-panel: #1e1e22;
+  --color-panel-2: #222228;
+  --color-line: #333333;
+  --color-line-strong: #4a4a52;
+  --color-paper: #f5f5f7;
+  --color-mute: #b4b4be;
+  --color-faint: #7a7a86;
+  --color-signal: #aaff00;
+  --color-signal-soft: #d2ff6b;
+  --color-signal-deep: #7ab800;
+  --color-accent: #aaff00;
+  --color-on-signal: #141414;
+  --color-coral: #ff7a59;
+  --color-marker: #ffc94d;
+  color: #f5f5f7;
+  color-scheme: dark;
+}
+

@@ -1,65 +1,49 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { PlanPicker } from "@/components/billing/plan-picker";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { buttonClasses } from "@/components/ui/button";
 import { getPrimaryCta } from "@/config/site";
-import { PLANS } from "@/lib/billing/plans";
+import { formatEur } from "@/lib/billing/pitch-pack";
+import { FREE_SECONDS, PRO_WEEKLY_SECONDS, SUBSCRIBER_DISCOUNT_PERCENT, TEAM_DISCOUNT_TIERS, TOPUP, topupCentsPerMinute } from "@/lib/billing/pricing";
 
 export const metadata: Metadata = {
   title: "Cenník",
-  description: "Free na vyskúšanie, Pro pre founderov, ktorí sa pripravujú na konkrétne stretnutia.",
+  description: `${FREE_SECONDS / 60} minút zadarmo, Pro s ${PRO_WEEKLY_SECONDS / 60} minútami týždenne alebo Unlimited bez limitu.`,
   alternates: { canonical: "/cennik" },
 };
 
 export default function PricingPage() {
   const cta = getPrimaryCta();
-  const plans = [PLANS.free, PLANS.pro];
   return (
     <>
       <SiteHeader cta={cta} />
       <main id="obsah" className="pt-32 pb-24 md:pt-40">
         <div className="container-page">
-          <h1 className="type-display max-w-[44rem] text-[clamp(2.5rem,1.6rem+3.6vw,4rem)]">Plať za čas, ktorý reálne natrénuješ.</h1>
-          <p className="mt-5 max-w-[38rem] text-lg leading-relaxed text-mute">
-            Hlasový rozhovor s AI investorom stojí reálne peniaze za každú minútu. Preto sú limity v minútach a nie neobmedzené.
+          <h1 className="type-display max-w-[44rem] text-[clamp(2.5rem,1.6rem+3.6vw,4rem)]">Vyskúšaj zadarmo, trénuj s plánom.</h1>
+          <p className="mt-5 mb-10 max-w-[38rem] text-lg leading-relaxed text-mute">
+            Po registrácii máš {FREE_SECONDS / 60} minút nahrávania zadarmo a rozdelíš si ich, ako chceš. Potom si vyberieš Pro alebo Unlimited, ročne ušetríš.
           </p>
 
-          <div className="mt-14 grid gap-6 md:grid-cols-2">
-            {plans.map((plan) => (
-              <section
-                key={plan.id}
-                aria-labelledby={`plan-${plan.id}`}
-                className={`flex min-w-0 flex-col rounded-[18px] border p-6 sm:p-7 md:p-9 ${plan.id === "pro" ? "border-signal/70 bg-panel" : "border-line bg-panel/50"}`}
-              >
-                <h2 id={`plan-${plan.id}`} className="type-heading text-[1.6rem]">
-                  {plan.name}
-                </h2>
-                <p className="mt-2 text-mute">{plan.tagline}</p>
-                {plan.id === "pro" ? <p className="mt-1 text-[13.5px] text-faint">Po registrácii prejdeš na Pro v nastaveniach účtu.</p> : null}
-                <p className="mt-6 text-[2.75rem] font-semibold leading-none text-paper">
-                  {plan.priceMonthlyEur === 0 ? "0 €" : `${plan.priceMonthlyEur} €`}
-                  <span className="ml-2 text-base font-normal text-faint">{plan.priceMonthlyEur === 0 ? "navždy" : "mesačne"}</span>
-                </p>
-                <ul className="mt-8 flex-1 space-y-3">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex gap-3 leading-relaxed text-paper/90">
-                      <span aria-hidden="true" className="mt-[0.7em] h-px w-4 shrink-0 bg-signal-soft" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Link href={plan.id === "free" ? cta.href : "/registracia"} className={buttonClasses({ size: "lg", variant: plan.id === "pro" ? "primary" : "secondary", className: "mt-10" })}>
-                  {plan.id === "free" ? cta.label : "Vybrať Pro"}
-                </Link>
-              </section>
-            ))}
-          </div>
+          <PlanPicker mode="public" />
 
           <div className="mt-14 max-w-[44rem] space-y-3 text-[15px] leading-relaxed text-mute">
-            <p>Platený plán zrušíš kedykoľvek, platí do konca zaplateného mesiaca. Nevyčerpané minúty sa neprenášajú.</p>
-            <p>Textový tréning a cvičenia majú vlastné limity, ktoré bežný founder nevyčerpá. Presné čerpanie vidíš v aplikácii.</p>
-            <p>PitchIt nezaručuje investíciu. Pomáha ti pripraviť sa na otázky, ktoré na stretnutí padnú.</p>
+            <p>
+              Pro má {PRO_WEEKLY_SECONDS / 60} minút nahrávania týždenne (obnovujú sa v pondelok). Keď ich minieš, dokúpiš si minúty navyše za{" "}
+              <s className="opacity-60">
+                <span className="sr-only">pôvodne </span>
+                {formatEur(TOPUP.centsPerMinute)}
+              </s>{" "}
+              <strong className="text-paper">{formatEur(topupCentsPerMinute("pro"))}</strong> za minútu (−{SUBSCRIBER_DISCOUNT_PERCENT} % pre predplatiteľov) a neprepadajú.
+            </p>
+            <p>Predplatné zrušíš kedykoľvek, platí do konca zaplateného obdobia. Medzi Pro a Unlimited môžeš prejsť kedykoľvek, rozdiel sa doúčtuje pomerne.</p>
+            <p>
+              Ceny sú za jeden účet. Firemný tím platí plán za počet účtov a dostane zľavu:{" "}
+              {[...TEAM_DISCOUNT_TIERS]
+                .reverse()
+                .map((t) => `od ${t.minSeats} účtov −${t.percent} %`)
+                .join(", ")}
+              . Pri Pro má tím {PRO_WEEKLY_SECONDS / 60} minút týždenne za každý účet, spoločne. Tím založíš v aplikácii v časti Tím.
+            </p>
           </div>
         </div>
       </main>

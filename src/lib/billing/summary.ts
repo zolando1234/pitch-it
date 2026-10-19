@@ -1,4 +1,4 @@
-import { balanceLabel, formatEur, PITCH_PACK, PITCH_PROMO, type PitchBalance } from "@/lib/billing/pitch-pack";
+import { balanceLabel, teamBalanceLabel, type PitchBalance } from "@/lib/billing/pitch-pack";
 import { remainingRealtimeSeconds, type Plan, type UsageTotals } from "@/lib/billing/plans";
 import { formatDate, plural } from "@/lib/format";
 
@@ -13,22 +13,32 @@ export type PlanSummary = {
   action: { label: string; href: string; emphasis: "primary" | "secondary" };
 };
 
-/** Karta v bočnom paneli: zostatok pitchov a nákup balíka. */
+/** Karta v bočnom paneli: plán, zostatok minút a jedna akcia. */
 export function pitchSummary(balance: PitchBalance, locale: "sk" | "en" = "sk"): PlanSummary {
   const en = locale === "en";
-  const buy = { label: en ? `Buy ${PITCH_PACK.credits} pitches` : `Kúpiť ${PITCH_PACK.credits} pitchov`, href: PLAN_HREF };
-  if (!balance.canPitch) {
-    const promo = formatEur(PITCH_PROMO.priceCents, locale);
-    const full = formatEur(PITCH_PACK.priceCents, locale);
-    return {
-      title: en ? "No pitches left" : "Pitche sú minuté",
-      detail: en
-        ? `Pack of ${PITCH_PACK.credits} pitches: ${promo} with code ${PITCH_PROMO.code} (otherwise ${full})`
-        : `Balík ${PITCH_PACK.credits} pitchov: ${promo} s kódom ${PITCH_PROMO.code} (inak ${full})`,
-      action: { ...buy, emphasis: "primary" },
-    };
+  const plans = { label: en ? "See plans" : "Pozrieť plány", href: PLAN_HREF };
+  const manage = { label: en ? "My plan" : "Môj plán", href: PLAN_HREF, emphasis: "secondary" as const };
+  if (balance.plan === "unlimited") return { title: "Unlimited", detail: balanceLabel(balance, locale), action: manage };
+  if (balance.plan === "pro") {
+    return balance.canPitch
+      ? { title: "Pro", detail: balanceLabel(balance, locale), action: manage }
+      : { title: "Pro", detail: balanceLabel(balance, locale), action: { label: en ? "Buy minutes" : "Dokúpiť minúty", href: PLAN_HREF, emphasis: "primary" } };
   }
-  return { title: en ? "Your pitches" : "Tvoje pitche", detail: balanceLabel(balance, locale), action: { ...buy, emphasis: "secondary" } };
+  return {
+    title: "Free",
+    detail: balanceLabel(balance, locale),
+    action: { ...plans, emphasis: balance.canPitch ? "secondary" : "primary" },
+  };
+}
+
+/** Karta člena firemného tímu: tréning platí vlastník, nákup sa neponúka. */
+export function teamPitchSummary(teamName: string, balance: PitchBalance, locale: "sk" | "en" = "sk"): PlanSummary {
+  const en = locale === "en";
+  return {
+    title: en ? `Team ${teamName}` : `Tím ${teamName}`,
+    detail: teamBalanceLabel(balance, locale),
+    action: { label: en ? "My team" : "Môj tím", href: "/app/tim", emphasis: "secondary" },
+  };
 }
 
 export type PlanSummaryInput = {

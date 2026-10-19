@@ -101,7 +101,7 @@ export async function signUp(_previous: AuthFormState, formData: FormData): Prom
 
   await trackEvent(account.id, "signup_completed", { email_confirmation: false });
   await startSession(account);
-  redirect("/app");
+  redirect(safeNextPath(text(formData, "next")));
 }
 
 export async function signIn(_previous: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -170,8 +170,8 @@ export async function signOut(): Promise<void> {
 }
 
 /**
- * Prihlásenie cez Google alebo LinkedIn (OpenID Connect).
- * Zapína sa premennými GOOGLE_CLIENT_ID/SECRET a LINKEDIN_CLIENT_ID/SECRET.
+ * Prihlásenie cez Google (OpenID Connect).
+ * Zapína sa premennými GOOGLE_CLIENT_ID/SECRET.
  */
 export async function signInWithProvider(formData: FormData): Promise<void> {
   const provider = text(formData, "provider") as OAuthProvider;
