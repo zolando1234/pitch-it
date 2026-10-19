@@ -40,6 +40,8 @@ export const RATE_LIMITS = {
   auth: { limit: 10, windowMs: 10 * 60 * 1000 },
   report: { limit: 10, windowMs: 60 * 60 * 1000 },
   micLink: { limit: 20, windowMs: 60 * 60 * 1000 },
+  /** overenie zľavového kódu (náhľad ceny); nízky limit proti hádaniu kódov */
+  promoCheck: { limit: 30, windowMs: 10 * 60 * 1000 },
   pitchContext: { limit: 60, windowMs: 60 * 60 * 1000 },
   pitchSegment: { limit: 400, windowMs: 60 * 60 * 1000 },
   pitchQuestions: { limit: 30, windowMs: 60 * 60 * 1000 },

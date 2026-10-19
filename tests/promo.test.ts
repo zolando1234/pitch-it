@@ -29,6 +29,12 @@ describe("zľavové kódy", () => {
     assert.equal(promoErrorMessage("unknown", "en"), "This discount code is not valid.");
   });
 
+  test("náhľad ceny: kód sa overí bez obdobia", () => {
+    const tester = PROMO_CODES.find((c) => c.code === "TESTER");
+    assert.deepEqual(resolvePromo("tester", null, false), { ok: true, promo: tester });
+    assert.deepEqual(resolvePromo("tester", null, true), { ok: false, reason: "already_subscribed" });
+  });
+
   test("TESTER pre tím: prvá platba má tímovú zľavu aj kód", () => {
     assert.equal(stackedPercent(60, 0), 60);
     assert.equal(stackedPercent(60, 10), 64);

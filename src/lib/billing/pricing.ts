@@ -72,6 +72,15 @@ export function teamChargeCents(plan: PaidPlan, interval: BillingInterval, seats
   return { fullCents, cents: Math.round((fullCents * (100 - discountPercent)) / 100), discountPercent };
 }
 
+/**
+ * Zľava prvej platby pri zľavovom kóde a tímovej zľave naraz: najprv tímová, potom kód
+ * (napr. tím −10 % a TESTER −60 % = −64 %). Stripe Checkout dovolí len jeden kupón,
+ * tímová zľava sa preto po prvej platbe vráti na predplatné (webhook).
+ */
+export function stackedPercent(promoPercent: number, teamPercent: number): number {
+  return Math.round((100 - ((100 - teamPercent) * (100 - promoPercent)) / 100) * 100) / 100;
+}
+
 /** Suma, ktorú Stripe účtuje za jedno obdobie. */
 export function chargeCents(plan: PaidPlan, interval: BillingInterval): number {
   const price = PLAN_PRICES[plan];

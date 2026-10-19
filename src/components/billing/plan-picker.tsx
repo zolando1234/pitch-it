@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { buttonClasses } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/submit-button";
@@ -10,6 +10,7 @@ import {
   FREE_SECONDS,
   PLAN_PRICES,
   PRO_WEEKLY_SECONDS,
+  stackedPercent,
   SUBSCRIBER_DISCOUNT_PERCENT,
   TEAM_DISCOUNT_TIERS,
   TEAM_MAX_SEATS,
@@ -68,6 +69,12 @@ const TX = {
     promoLabel: "Zľavový kód",
     promoPlaceholder: "napr. TESTER",
     promoNote: "Zľava sa ukáže v platobnej bráne pred zaplatením.",
+    promoChecking: "Overujem kód…",
+    promoOk: (c: string, p: number) => `Kód ${c} platí: −${p} % na prvú mesačnú platbu. Ceny nižšie sú už so zľavou.`,
+    promoWrongInterval: (c: string) => `Kód ${c} platí len na mesačné predplatné. Prepni na Mesačne.`,
+    codeBadge: (c: string, p: number) => `${c} −${p} %`,
+    firstMonth: (then: string) => `prvý mesiac, potom ${then} mesačne`,
+    teamFirstTotal: (first: string, n: string, then: string) => `prvý mesiac spolu ${first} za ${n}, potom ${then} mesačne`,
     perAccount: "/ účet / mesiac",
     accounts: (n: number) => `${n} ${n === 1 ? "účet" : n < 5 ? "účty" : "účtov"}`,
     teamTotal: (total: string, n: string, yearly: boolean) => `spolu ${total} ${yearly ? "ročne" : "mesačne"} za ${n}`,
@@ -126,6 +133,12 @@ const TX = {
     promoLabel: "Discount code",
     promoPlaceholder: "e.g. TESTER",
     promoNote: "The discount is shown in the checkout before you pay.",
+    promoChecking: "Checking the code…",
+    promoOk: (c: string, p: number) => `Code ${c} is valid: −${p}% on the first monthly payment. Prices below include it.`,
+    promoWrongInterval: (c: string) => `Code ${c} only works with monthly billing. Switch to Monthly.`,
+    codeBadge: (c: string, p: number) => `${c} −${p}%`,
+    firstMonth: (then: string) => `first month, then ${then} per month`,
+    teamFirstTotal: (first: string, n: string, then: string) => `first month ${first} in total for ${n}, then ${then} per month`,
     perAccount: "/ account / month",
     accounts: (n: number) => `${n} ${n === 1 ? "account" : "accounts"}`,
     teamTotal: (total: string, n: string, yearly: boolean) => `${total} ${yearly ? "per year" : "per month"} in total for ${n}`,
@@ -158,14 +171,38 @@ async function postForUrl(path: string, body: unknown): Promise<{ url?: string; 
   }
 }
 
-function Price({ plan, interval, locale, seats = 1 }: { plan: PaidPlan; interval: BillingInterval; locale: "sk" | "en"; seats?: number }) {
+type ActivePromo = { code: string; percentOff: number; interval: BillingInterval };
+
+function Badge({ children }: { children: ReactNode }) {
+  return <span className="ml-2 inline-block rounded-full bg-signal/15 px-2 py-0.5 text-[12px] font-bold text-accent">{children}</span>;
+}
+
+/** Cena v karte plánu: jednotlivec, tím (cena za účet a suma) a pri platnom kóde prvá platba po zľave. */
+function Price({
+  plan,
+  interval,
+  locale,
+  seats = 1,
+  promo = null,
+}: {
+  plan: PaidPlan;
+  interval: BillingInterval;
+  locale: "sk" | "en";
+  seats?: number;
+  promo?: ActivePromo | null;
+}) {
   const tx = TX[locale];
   const price = PLAN_PRICES[plan];
   const monthly = interval === "year" ? price.yearlyMonthlyCents : price.monthlyCents;
+  const yearly = interval === "year";
+  // kód platí len na svoje obdobie (TESTER: mesačne)
+  const code = promo && promo.interval === interval ? promo : null;
+  const team = teamChargeCents(plan, interval, seats);
+  const percent = code ? stackedPercent(code.percentOff, team.discountPercent) : team.discountPercent;
+  const perAccount = Math.round((monthly * (100 - percent)) / 100);
+  const firstTotal = Math.round((team.fullCents * (100 - percent)) / 100);
+
   if (seats > 1) {
-    // tímový plán: cena za účet po množstevnej zľave a suma za obdobie
-    const team = teamChargeCents(plan, interval, seats);
-    const perAccount = Math.round((monthly * (100 - team.discountPercent)) / 100);
     return (
       <>
         <p className="mt-5 text-[2.2rem] font-semibold leading-none text-paper">
@@ -173,8 +210,25 @@ function Price({ plan, interval, locale, seats = 1 }: { plan: PaidPlan; interval
           <span className="ml-2 text-base font-normal text-faint">{tx.perAccount}</span>
         </p>
         <p className="mt-2 text-[13px] text-faint">
-          {tx.teamTotal(formatEur(team.cents, locale), tx.accounts(seats), interval === "year")}
-          <span className="ml-2 inline-block rounded-full bg-signal/15 px-2 py-0.5 text-[12px] font-bold text-accent">{tx.teamDiscount(team.discountPercent)}</span>
+          {code
+            ? tx.teamFirstTotal(formatEur(firstTotal, locale), tx.accounts(seats), formatEur(team.cents, locale))
+            : tx.teamTotal(formatEur(team.cents, locale), tx.accounts(seats), yearly)}
+          <Badge>{tx.teamDiscount(team.discountPercent)}</Badge>
+          {code ? <Badge>{tx.codeBadge(code.code, code.percentOff)}</Badge> : null}
+        </p>
+      </>
+    );
+  }
+  if (code) {
+    return (
+      <>
+        <p className="mt-5 text-[2.6rem] font-semibold leading-none text-paper">
+          <DiscountedPrice fullCents={monthly} cents={perAccount} locale={locale} />
+          <span className="ml-2 text-base font-normal text-faint">{tx.perMonth}</span>
+        </p>
+        <p className="mt-2 text-[13px] text-faint">
+          {tx.firstMonth(formatEur(monthly, locale))}
+          <Badge>{tx.codeBadge(code.code, code.percentOff)}</Badge>
         </p>
       </>
     );
@@ -185,7 +239,7 @@ function Price({ plan, interval, locale, seats = 1 }: { plan: PaidPlan; interval
         {formatEur(monthly, locale)}
         <span className="ml-2 text-base font-normal text-faint">{tx.perMonth}</span>
       </p>
-      <p className="mt-2 text-[13px] text-faint">{interval === "year" ? tx.billedYearly(formatEur(price.yearlyMonthlyCents * 12, locale)) : tx.billedMonthly}</p>
+      <p className="mt-2 text-[13px] text-faint">{yearly ? tx.billedYearly(formatEur(price.yearlyMonthlyCents * 12, locale)) : tx.billedMonthly}</p>
     </>
   );
 }
@@ -265,9 +319,41 @@ export function PlanPicker({
   const [pending, setPending] = useState<PaidPlan | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [code, setCode] = useState("");
+  const [promo, setPromo] = useState<ActivePromo | null>(null);
+  const [promoState, setPromoState] = useState<{ status: "idle" | "checking" | "error"; message?: string }>({ status: "idle" });
   // kód sa zadáva len pri novom predplatnom (zmena plánu ide bez Checkoutu)
   // kód platí aj pre tím (prvá platba má obe zľavy)
   const canUseCode = mode === "app" && current === "free" && paymentsEnabled;
+
+  // náhľad zľavového kódu: server overí kód chvíľu po dopísaní, ceny v kartách sa prepočítajú
+  useEffect(() => {
+    const trimmed = code.trim();
+    if (!canUseCode || !trimmed) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/billing/kod", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: trimmed }),
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => null)) as (Partial<ActivePromo> & { error?: { message?: string } }) | null;
+        if (response.ok && data?.code && typeof data.percentOff === "number" && (data.interval === "month" || data.interval === "year")) {
+          setPromo({ code: data.code, percentOff: data.percentOff, interval: data.interval });
+          setPromoState({ status: "idle" });
+        } else {
+          setPromoState({ status: "error", message: data?.error?.message ?? tx.failed });
+        }
+      } catch {
+        if (!controller.signal.aborted) setPromoState({ status: "error", message: tx.noServer });
+      }
+    }, 450);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [code, canUseCode, tx.failed, tx.noServer]);
 
   const choose = async (plan: PaidPlan) => {
     setPending(plan);
@@ -298,7 +384,7 @@ export function PlanPicker({
       <section key={plan} className={`flex min-w-0 flex-col rounded-[18px] border p-6 sm:p-7 ${highlight ? "border-signal/70 bg-panel" : "border-line bg-panel/50"}`}>
         <h3 className="type-heading text-[1.5rem]">{tx[plan]}</h3>
         <p className="mt-1 text-mute">{plan === "pro" ? tx.proTag : tx.unlimitedTag}</p>
-        <Price plan={plan} interval={interval} locale={locale} seats={seats ?? 1} />
+        <Price plan={plan} interval={interval} locale={locale} seats={seats ?? 1} promo={canUseCode ? promo : null} />
         <Features items={tx.features[plan]} />
         {mode === "public" ? (
           <Link href="/registracia" className={buttonClasses({ size: "lg", variant: highlight ? "primary" : "secondary", className: "mt-8" })}>
@@ -353,7 +439,11 @@ export function PlanPicker({
             <input
               type="text"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setPromo(null);
+                setPromoState({ status: e.target.value.trim() ? "checking" : "idle" });
+              }}
               placeholder={tx.promoPlaceholder}
               autoComplete="off"
               autoCapitalize="characters"
@@ -362,7 +452,17 @@ export function PlanPicker({
               className="w-40 rounded-xl border border-line bg-transparent px-3 py-2 text-base font-bold uppercase text-paper placeholder:font-normal placeholder:normal-case placeholder:text-faint focus:border-signal focus:outline-none"
             />
           </label>
-          {code.trim() ? <p className="mt-1.5 text-[13px] text-faint">{tx.promoNote}</p> : null}
+          {promoState.status === "checking" ? <p className="mt-1.5 text-[13px] text-faint">{tx.promoChecking}</p> : null}
+          {promoState.status === "error" ? (
+            <p role="alert" className="mt-1.5 text-[13px] text-coral">
+              {promoState.message}
+            </p>
+          ) : null}
+          {promo ? (
+            <p role="status" className={`mt-1.5 text-[13px] ${promo.interval === interval ? "text-accent" : "text-marker"}`}>
+              {promo.interval === interval ? tx.promoOk(promo.code, promo.percentOff) : tx.promoWrongInterval(promo.code)} {tx.promoNote}
+            </p>
+          ) : null}
         </div>
       ) : null}
       <div className={`mt-6 grid gap-5 ${showFree ? "lg:grid-cols-3" : "md:grid-cols-2"}`}>

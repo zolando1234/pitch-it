@@ -1,6 +1,8 @@
 import "server-only";
 
-import type { BillingInterval } from "@/lib/billing/pricing";
+import { stackedPercent, type BillingInterval } from "@/lib/billing/pricing";
+
+export { stackedPercent };
 
 /*
   Zľavové kódy na predplatné (zadávajú sa v aplikácii pred Checkoutom). Zoznam je len na serveri,
@@ -32,28 +34,19 @@ export type PromoResult =
 
 const normalize = (code: string) => code.trim().toUpperCase();
 
-/** Overí zadaný kód pre nové predplatné; null = kód nezadaný. */
+/** Overí zadaný kód pre nové predplatné; null = kód nezadaný. interval null = obdobie sa nekontroluje (náhľad ceny). */
 export function resolvePromo(
   input: unknown,
-  interval: BillingInterval,
+  interval: BillingInterval | null,
   hadSubscription: boolean,
   codes: readonly PromoCode[] = PROMO_CODES,
 ): PromoResult | null {
   if (typeof input !== "string" || normalize(input) === "") return null;
   const promo = codes.find((c) => c.active && normalize(c.code) === normalize(input));
   if (!promo) return { ok: false, reason: "unknown" };
-  if (promo.interval !== interval) return { ok: false, reason: "wrong_interval" };
+  if (interval !== null && promo.interval !== interval) return { ok: false, reason: "wrong_interval" };
   if (hadSubscription) return { ok: false, reason: "already_subscribed" };
   return { ok: true, promo };
-}
-
-/**
- * Zľava prvej platby pri kóde a tímovej zľave naraz: najprv tímová, potom kód
- * (napr. tím −10 % a TESTER −60 % = −64 %). Stripe Checkout dovolí len jeden kupón,
- * tímová zľava sa preto po prvej platbe vráti na predplatné (webhook).
- */
-export function stackedPercent(promoPercent: number, teamPercent: number): number {
-  return Math.round((100 - ((100 - teamPercent) * (100 - promoPercent)) / 100) * 100) / 100;
 }
 
 /** Text chyby pre používateľa. */
