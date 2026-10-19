@@ -35,9 +35,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getLocale()) === "en" ? "Team" : "Tím" };
 }
 
-function Card({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+function Card({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-[18px] border border-line bg-panel/60 p-5 md:p-7">
+    <section id={id} className="scroll-mt-24 rounded-[18px] border border-line bg-panel/60 p-5 md:p-7">
       <h2 className="type-heading text-[1.2rem]">{title}</h2>
       {description ? <p className="mt-1.5 text-[14.5px] leading-relaxed text-mute">{description}</p> : null}
       <div className="mt-5">{children}</div>
@@ -191,6 +191,7 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
       {joined}
       <div className="grid gap-6">
         <Card
+          id="plan-timu"
           title={L("Plán tímu", "Team plan")}
           description={L(
             `Každý člen má ${FREE_SECONDS / 60} minút zadarmo len pre seba, potom trénuje z tvojho plánu. Plán platíš za počet účtov (s tebou), tímová zľava ${teamTiers("sk")}. Pri Pro má tím spolu ${PRO_WEEKLY_SECONDS / 60} minút týždenne za každý účet.`,
@@ -232,6 +233,27 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
             "Each person gets an email with a link. They sign in (or sign up) with the email the invitation was sent to and they're in.",
           )}
         >
+          {paidSeats === null ? (
+            <Notice tone="info" className="mb-4">
+              {L(
+                "Bez plateného plánu trénujú pozvaní kolegovia ako Free. Plán pre celý tím zaplatíš v časti Plán tímu vyššie.",
+                "Without a paid plan, invited colleagues train on Free. Pay for the whole team under Team plan above.",
+              )}{" "}
+              <a href="#plan-timu" className="font-bold underline">
+                {L("Zaplatiť za tím", "Pay for the team")}
+              </a>
+            </Notice>
+          ) : seats <= 0 ? (
+            <Notice tone="info" className="mb-4">
+              {L(
+                `Všetkých ${paidSeats} zaplatených účtov je obsadených. Ak chceš pozvať ďalších ľudí, pridaj účty v časti Plán tímu.`,
+                `All ${paidSeats} paid accounts are taken. To invite more people, add accounts under Team plan.`,
+              )}{" "}
+              <a href="#plan-timu" className="font-bold underline">
+                {L("Pridať účty", "Add accounts")}
+              </a>
+            </Notice>
+          ) : null}
           <InviteForm seats={seats} />
         </Card>
 
@@ -285,7 +307,10 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
                     <ConfirmAction
                       trigger={L("Odobrať", "Remove")}
                       title={L(`Odobrať ${m.email ?? "člena"}?`, `Remove ${m.email ?? "this member"}?`)}
-                      description={L("Účet aj tréningy mu ostanú, len mu prestaneš platiť tréning.", "They keep their account and sessions; you just stop paying for their training.")}
+                      description={L(
+                        "Účet aj tréningy mu ostanú, len mu prestaneš platiť tréning. Počet zaplatených účtov sa nezmení, uvoľnené miesto môžeš dať niekomu inému alebo znížiť počet účtov v Pláne tímu.",
+                        "They keep their account and sessions; you just stop paying for their training. Your paid accounts stay the same: invite someone else, or lower the number of accounts under Team plan.",
+                      )}
                       confirmLabel={L("Odobrať", "Remove")}
                       pendingLabel={L("Odoberám…", "Removing…")}
                       action={removeMemberAction.bind(null, m.userId)}

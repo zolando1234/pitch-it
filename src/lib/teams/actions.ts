@@ -201,7 +201,12 @@ export async function removeMemberAction(memberId: string): Promise<FormState> {
   const team = await getOwnedTeam(user.id);
   if (!team) return { status: "error", message: L("Tím nemáš.", "You don't have a team.") };
   await removeMember(team.id, memberId);
-  return done(L("Člen je odobratý. Jeho účet aj tréningy ostávajú, tréning si už platí sám.", "The member is removed. Their account and sessions stay; they now pay for their own training."));
+  return done(
+    L(
+      "Člen je odobratý. Jeho účet aj tréningy ostávajú, tréning si už platí sám. Ak chceš platiť menej, zníž počet účtov v Pláne tímu.",
+      "The member is removed. Their account and sessions stay; they now pay for their own training. To pay less, lower the number of accounts under Team plan.",
+    ),
+  );
 }
 
 export async function leaveTeamAction(): Promise<FormState> {

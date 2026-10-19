@@ -80,8 +80,9 @@ const TX = {
     more: "Viac účtov",
     forMe: "Pre mňa",
     forTeam: "Pre tím (viac účtov)",
-    teamIntro: "Zaplatíš plán za viac účtov naraz s tímovou zľavou. Kolegov potom pozveš v časti",
-    teamLink: "Tím",
+    teamIntro: "Zaplatíš plán za viac účtov naraz s tímovou zľavou.",
+    manageTeam: "Spravovať tím: pozvať alebo odobrať ľudí",
+    createTeam: "Založiť tím a pozvať kolegov",
     topupNote: `Dokúpené minúty neprepadajú, míňajú sa až po týždenných ${PRO_WEEKLY_SECONDS / 60} minútach.`,
     manage: "Spravovať predplatné",
     manageNote: "Zrušenie, platobná karta a faktúry.",
@@ -137,8 +138,9 @@ const TX = {
     more: "More accounts",
     forMe: "Just me",
     forTeam: "For a team (several accounts)",
-    teamIntro: "Pay for several accounts at once with a team discount. Then invite colleagues under",
-    teamLink: "Team",
+    teamIntro: "Pay for several accounts at once with a team discount.",
+    manageTeam: "Manage team: invite or remove people",
+    createTeam: "Create a team and invite colleagues",
     topupNote: `Extra minutes don't expire and are used only after your weekly ${PRO_WEEKLY_SECONDS / 60} minutes.`,
     manage: "Manage subscription",
     manageNote: "Cancel, payment card and invoices.",
@@ -500,13 +502,12 @@ export function PlanChooser({
       </div>
       {team ? (
         <>
-          <p className="mb-5 text-[14.5px] text-mute">
-            {tx.teamIntro}{" "}
-            <Link href="/app/tim" className="font-bold text-accent underline">
-              {tx.teamLink}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <p className="text-[14.5px] text-mute">{tx.teamIntro}</p>
+            <Link href="/app/tim" className={buttonClasses({ variant: "secondary" })}>
+              {ownsTeam ? tx.manageTeam : tx.createTeam}
             </Link>
-            .
-          </p>
+          </div>
           <TeamPlanPicker current={current} currentInterval={currentInterval} currentSeats={currentSeats} minSeats={minTeamSeats} paymentsEnabled={paymentsEnabled} />
         </>
       ) : (
