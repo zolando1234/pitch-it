@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ConsentToggle, ForgetDevicesButton, SettingsForm } from "@/components/settings/settings-forms";
-import { ManageSubscriptionButton, PlanPicker, TopupButton } from "@/components/billing/plan-picker";
+import { ManageSubscriptionButton, PlanChooser, TopupButton } from "@/components/billing/plan-picker";
 import { buttonClasses } from "@/components/ui/button";
 import { ConfirmAction } from "@/components/ui/confirm-action";
 import { Notice } from "@/components/ui/notice";
@@ -14,7 +14,8 @@ import { getSubscription } from "@/lib/db/usage";
 import { formatDate } from "@/lib/format";
 import { getCurrentConsents, getProfile, getSettings } from "@/lib/db/profile";
 import { getPitchBalance } from "@/lib/db/pitch-wallet";
-import { getMembership } from "@/lib/db/teams";
+import { getMembership, getOwnedTeam, teamHeadcount } from "@/lib/db/teams";
+import { minPaidSeats } from "@/lib/teams/core";
 import { getLocale } from "@/lib/i18n/server";
 import { MEDIA_CONSENT_VERSION } from "@/lib/privacy/consent-texts";
 import { deleteAccountAction, deleteAllSessionsAction } from "@/lib/privacy/settings-actions";
@@ -53,7 +54,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/app/nas
   ]);
   const stripe = isStripeConfigured();
   const paidSeats = balance.plan === "free" ? 1 : Math.max(1, subscription?.seats ?? 1);
-  const teamSeats = paidSeats > 1 ? paidSeats : undefined;
+  // vlastník tímu: koľko účtov musí plán pokryť
+  const owned = membership ? null : await getOwnedTeam(user.id);
+  const headcount = owned ? await teamHeadcount(owned.id) : null;
   const locale = await getLocale();
   const en = locale === "en";
   const L = (sk: string, enText: string) => (en ? enText : sk);
@@ -129,15 +132,13 @@ export default async function SettingsPage({ searchParams }: PageProps<"/app/nas
             </div>
             {balance.plan === "pro" && stripe ? <TopupButton /> : null}
             {balance.plan !== "free" && subscription?.provider_customer_id && stripe ? <ManageSubscriptionButton /> : null}
-            <PlanPicker
-              mode="app"
+            <PlanChooser
               current={balance.plan}
               currentInterval={balance.plan === "free" ? null : (subscription?.interval ?? null)}
+              currentSeats={paidSeats}
+              minTeamSeats={headcount ? minPaidSeats(headcount.members, headcount.invites) : 1}
               paymentsEnabled={stripe}
-              showFree={false}
-              // tímový plán: ceny za zaplatený počet účtov (počet sa mení na stránke Tím)
-              seats={teamSeats}
-              currentSeats={teamSeats ?? 1}
+              ownsTeam={headcount !== null}
             />
           </div>
         )}

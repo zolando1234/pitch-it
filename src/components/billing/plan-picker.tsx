@@ -78,6 +78,10 @@ const TX = {
     tier: (min: number, p: number) => `od ${min} účtov −${p} %`,
     less: "Menej účtov",
     more: "Viac účtov",
+    forMe: "Pre mňa",
+    forTeam: "Pre tím (viac účtov)",
+    teamIntro: "Zaplatíš plán za viac účtov naraz s tímovou zľavou. Kolegov potom pozveš v časti",
+    teamLink: "Tím",
     topupNote: `Dokúpené minúty neprepadajú, míňajú sa až po týždenných ${PRO_WEEKLY_SECONDS / 60} minútach.`,
     manage: "Spravovať predplatné",
     manageNote: "Zrušenie, platobná karta a faktúry.",
@@ -131,6 +135,10 @@ const TX = {
     tier: (min: number, p: number) => `${min}+ accounts −${p}%`,
     less: "Fewer accounts",
     more: "More accounts",
+    forMe: "Just me",
+    forTeam: "For a team (several accounts)",
+    teamIntro: "Pay for several accounts at once with a team discount. Then invite colleagues under",
+    teamLink: "Team",
     topupNote: `Extra minutes don't expire and are used only after your weekly ${PRO_WEEKLY_SECONDS / 60} minutes.`,
     manage: "Manage subscription",
     manageNote: "Cancel, payment card and invoices.",
@@ -447,6 +455,63 @@ export function TeamPlanPicker({
       <div className="mt-6">
         <PlanPicker mode="app" current={current} currentInterval={currentInterval} paymentsEnabled={paymentsEnabled} showFree={false} seats={seats} currentSeats={currentSeats} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Výber plánu v Nastaveniach: pre jednotlivca alebo pre tím (počet účtov s tímovou zľavou).
+ * Vlastník tímu alebo ten, kto už platí viac účtov, začína na karte tímu.
+ */
+export function PlanChooser({
+  current,
+  currentInterval,
+  currentSeats,
+  minTeamSeats,
+  paymentsEnabled,
+  ownsTeam,
+}: {
+  current: PlanId;
+  currentInterval: BillingInterval | null;
+  currentSeats: number;
+  /** vlastník + členovia + pozvánky (bez tímu 1) */
+  minTeamSeats: number;
+  paymentsEnabled: boolean;
+  ownsTeam: boolean;
+}) {
+  const locale = useLocale();
+  const tx = TX[locale];
+  const [team, setTeam] = useState(ownsTeam || currentSeats > 1);
+  return (
+    <div>
+      <div role="tablist" className="mb-6 inline-flex flex-wrap rounded-full border border-line p-1">
+        {([false, true] as const).map((value) => (
+          <button
+            key={String(value)}
+            type="button"
+            role="tab"
+            aria-selected={team === value}
+            onClick={() => setTeam(value)}
+            className={`rounded-full px-4 py-2 text-sm font-bold transition ${team === value ? "bg-signal text-on-signal" : "text-mute hover:text-paper"}`}
+          >
+            {value ? tx.forTeam : tx.forMe}
+          </button>
+        ))}
+      </div>
+      {team ? (
+        <>
+          <p className="mb-5 text-[14.5px] text-mute">
+            {tx.teamIntro}{" "}
+            <Link href="/app/tim" className="font-bold text-accent underline">
+              {tx.teamLink}
+            </Link>
+            .
+          </p>
+          <TeamPlanPicker current={current} currentInterval={currentInterval} currentSeats={currentSeats} minSeats={minTeamSeats} paymentsEnabled={paymentsEnabled} />
+        </>
+      ) : (
+        <PlanPicker mode="app" current={current} currentInterval={currentInterval} paymentsEnabled={paymentsEnabled} showFree={false} seats={1} currentSeats={currentSeats} />
+      )}
     </div>
   );
 }
