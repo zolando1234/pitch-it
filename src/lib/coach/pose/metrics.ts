@@ -165,6 +165,8 @@ type Frame = {
   noseRelY: number;
   fingerMotion: number;
   sw: number;
+  /** stabilná šírka ramien (maximum za posledné ~3 s): pri natočení bokom sa skutočná šírka zúži */
+  refSw: number;
 };
 
 /** Riedka dlhá história (10 Hz) pre pohľad a pohyb po pódiu. */
@@ -273,7 +275,11 @@ export class MetricsTracker {
     const lh = px(LM.leftHip);
     const rh = px(LM.rightHip);
     const hip = hipsVisible ? { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 } : null;
-    const body = hip ?? shoulderMid;
+    // poloha na pódiu podľa stredu ramien: boky na spodnom okraji záberu blikajú a bod by preskakoval
+    // medzi bokmi a ramenami, čo vyzerá ako chôdza
+    const body = shoulderMid;
+    // pohyb delíme stabilnou šírkou ramien: pri otočení bokom sa sw zúži a malý posun by vyzeral ako veľký krok
+    const refSw = Math.max(sw, ...this.frames.slice(-90).map((f) => f.refSw * 0.995));
 
     // ── Dlane (HandLandmarker beží len na každom druhom snímku) ──
     let fingerMotion = 0;
@@ -313,6 +319,25 @@ export class MetricsTracker {
     }
     const micSide = this.micMode ? this.micSide : null;
     const hd: Hands = micSide ? { ...handsFresh, [micSide]: null } : handsFresh;
+
+    // ── Natočenie tela (potrebujeme ho skôr: bokom alebo chrbtom telo zakrýva ruky) ──
+    let turned = false;
+    let turnDeg: number | null = null;
+    let noseBehind = false;
+    if (world) {
+      const wl = world[LM.leftShoulder];
+      const wr = world[LM.rightShoulder];
+      turned = Math.abs(wl.z - wr.z) / Math.max(Math.abs(wl.x - wr.x), 0.01) > CONFIG.turnedRatio;
+      turnDeg = Math.round((Math.atan2(Math.abs(wl.z - wr.z), Math.abs(wl.x - wr.x)) * 180) / Math.PI);
+      // nos za rovinou ramien = hlava je otočená od kamery
+      noseBehind = world[LM.nose].z - (wl.z + wr.z) / 2 > CONFIG.backNoseDepth;
+    }
+    // chrbtom: model nevidí tvár (nos, oči), hoci ramená vidí
+    const faceVis = Math.max(...[LM.nose, LM.leftEye, LM.rightEye].map((i) => lm[i].visibility ?? 1));
+    const shouldersSeen = vis(LM.leftShoulder) && vis(LM.rightShoulder);
+    const back = shouldersSeen && (faceVis < CONFIG.backFaceVisibility || noseBehind);
+    const facing: Facing = back ? "back" : turned ? "side" : "front";
+    if (back) turned = false;
 
     // ── Skryté ruky (vrecká, za chrbtom, v bok) ────────────
     // MediaPipe si polohu zápästia "domyslí" aj vtedy, keď ruku nevidno, preto
@@ -354,6 +379,12 @@ export class MetricsTracker {
     const isHidden = (side: "left" | "right") => {
       const L = side === "left";
       if (side === micSide) return false;
+      // bokom alebo chrbtom ruku zakryje vlastné telo: to nie je vrecko
+      if (facing !== "front") {
+        if (L) this.pocketFramesL = 0;
+        else this.pocketFramesR = 0;
+        return false;
+      }
       if (!vis(L ? LM.leftWrist : LM.rightWrist)) return true;
       const a = L ? armL : armR;
       const pocketLike = a.nearHip && (a.bent || a.fingersHidden) && !hd[side] && !handsOnHips && !claspedInFront;
@@ -388,7 +419,7 @@ export class MetricsTracker {
     const lwSpeed = speed(lw, prev?.lw);
     const rwSpeed = speed(rw, prev?.rw);
 
-    this.frames.push({ t, lw, rw, lwSpeed, rwSpeed, body, noseRelY: (shoulderMid.y - nose.y) / sw, fingerMotion, sw });
+    this.frames.push({ t, lw, rw, lwSpeed, rwSpeed, body, noseRelY: (shoulderMid.y - nose.y) / sw, fingerMotion, sw, refSw });
     while (this.frames.length && t - this.frames[0].t > HISTORY_MS) this.frames.shift();
 
     // ── Power zóna ─────────────────────────────────────────
@@ -549,23 +580,6 @@ export class MetricsTracker {
 
     // ── Postoj ─────────────────────────────────────────────
     const shoulderTilt = (Math.atan2(Math.abs(ls.y - rs.y), Math.abs(ls.x - rs.x)) * 180) / Math.PI;
-    let turned = false;
-    let turnDeg: number | null = null;
-    let noseBehind = false;
-    if (world) {
-      const wl = world[LM.leftShoulder];
-      const wr = world[LM.rightShoulder];
-      turned = Math.abs(wl.z - wr.z) / Math.max(Math.abs(wl.x - wr.x), 0.01) > CONFIG.turnedRatio;
-      turnDeg = Math.round((Math.atan2(Math.abs(wl.z - wr.z), Math.abs(wl.x - wr.x)) * 180) / Math.PI);
-      // nos za rovinou ramien = hlava je otočená od kamery
-      noseBehind = world[LM.nose].z - (wl.z + wr.z) / 2 > CONFIG.backNoseDepth;
-    }
-    // chrbtom: model nevidí tvár (nos, oči), hoci ramená vidí
-    const faceVis = Math.max(...[LM.nose, LM.leftEye, LM.rightEye].map((i) => lm[i].visibility ?? 1));
-    const shouldersSeen = vis(LM.leftShoulder) && vis(LM.rightShoulder);
-    const back = shouldersSeen && (faceVis < CONFIG.backFaceVisibility || noseBehind);
-    const facing: Facing = back ? "back" : turned ? "side" : "front";
-    if (back) turned = false;
     // nohy: pri natočení bokom sa strany nôh prekrývajú, vtedy ich nehodnotíme
     const legPoint = (i: number) => (vis(i) ? px(i) : null);
     const legs = legsPose(
@@ -589,7 +603,7 @@ export class MetricsTracker {
     if (!this.stepAnchor) {
       this.stepAnchor = body;
       this.lastStepAt = t;
-    } else if (dist(body, this.stepAnchor) / sw > CONFIG.stepDistance) {
+    } else if (dist(body, this.stepAnchor) / refSw > CONFIG.stepDistance) {
       this.stepAnchor = body;
       this.lastStepAt = t;
       this.pendingStep = true;
@@ -606,7 +620,7 @@ export class MetricsTracker {
     }
 
     if (!this.long.length || t - this.long[this.long.length - 1].t >= LONG_SAMPLE_MS) {
-      this.long.push({ t, gaze, bodyX: body.x, sw });
+      this.long.push({ t, gaze, bodyX: body.x, sw: refSw });
       while (this.long.length && t - this.long[0].t > LONG_HISTORY_MS) this.long.shift();
     }
 
@@ -615,7 +629,9 @@ export class MetricsTracker {
     const gazeStuck =
       gazeSpanMs >= CONFIG.gazeWindowMs * 0.9 &&
       Math.max(gazeShare.left, gazeShare.center, gazeShare.right) > CONFIG.gazeStuckShare;
-    if (this.sweptAudience(t) && !gazeDarting) highlights.push("sweep");
+    if (this.sweptAudience(t) && !gazeDarting && facing === "front") highlights.push("sweep");
+    // bez tváre a dlaní ku kamere nemáme čo chváliť (okrem zámerného presunu)
+    if (facing === "back") highlights.splice(0, highlights.length, ...highlights.filter((h) => h === "planted"));
 
     return {
       sw,
@@ -755,14 +771,14 @@ export class MetricsTracker {
     const a = fr[0];
     const b = fr[fr.length - 1];
     const secs = (b.t - a.t) / 1000;
-    return secs > 0 ? Math.abs(b.body.x - a.body.x) / b.sw / secs : 0;
+    return secs > 0 ? Math.abs(b.body.x - a.body.x) / b.refSw / secs : 0;
   }
 
   /** Hojdanie zo strany na stranu: časté zmeny smeru tela na malom priestore. */
   private sway(t: number): boolean {
     const fr = this.window(t, CONFIG.swayWindowMs);
     if (fr.length < 20) return false;
-    const sw = fr[fr.length - 1].sw;
+    const sw = fr[fr.length - 1].refSw;
     const xs = fr.map((f) => f.body.x);
     const range = (Math.max(...xs) - Math.min(...xs)) / sw;
     if (range < CONFIG.swayRange || range > CONFIG.stepDistance * 1.5) return false;
@@ -778,10 +794,18 @@ export class MetricsTracker {
     for (let i = 1; i < s.length; i++) {
       const d = Math.abs(s[i].bodyX - s[i - 1].bodyX) / s[i].sw;
       const v = d / ((s[i].t - s[i - 1].t) / 1000);
-      path += d;
+      // drobné chvenie odhadu polohy sa do prejdenej dráhy nepočíta
+      if (d > CONFIG.pacingJitter) path += d;
       if (v < CONFIG.plantedSpeed) still++;
     }
-    return path > CONFIG.pacingPath && still / (s.length - 1) < CONFIG.pacingMaxStillShare;
+    // „sem a tam“ = naozaj prejdený kus pódia, nie prešľapovanie na mieste
+    const xs = s.map((x) => x.bodyX);
+    const range = (Math.max(...xs) - Math.min(...xs)) / s[s.length - 1].sw;
+    return (
+      path > CONFIG.pacingPath &&
+      range > CONFIG.pacingMinRange &&
+      still / (s.length - 1) < CONFIG.pacingMaxStillShare
+    );
   }
 
   /** Hlava rýchlo hore-dole (neustále prikyvovanie). */

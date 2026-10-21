@@ -76,8 +76,6 @@ const TX = {
       precise: ["Presná", "výkonný počítač", "Najpresnejšie sledovanie tela, najlepšie keď stojíš ďalej. Potrebuje silnú grafiku."],
     },
     before: ["Postav sa 2 až 3 m od kamery.", "Kamera vidí trup, ideálne po kolená.", "Odpočet beží, až keď ťa kamera vidí."],
-    fullscreen: "Spustiť na celú obrazovku",
-    fullscreenNote: "Veľký záber, ktorý uvidíš aj z diaľky. Na obrazovke bude len tlačidlo Zastaviť.",
     phoneFirst: "Najprv pripoj mobil cez odkaz vyššie, alebo prepni na mikrofón počítača.",
     micDenied: "Prístup k mikrofónu je zamietnutý. Povoľ ho v nastaveniach prehliadača a obnov stránku.",
     noRecorder: "Tento prehliadač nevie nahrávať. Skús Chrome, Edge alebo Safari.",
@@ -146,8 +144,6 @@ const TX = {
       precise: ["Precise", "powerful computer", "The most accurate body tracking, best when you stand further away. Needs a strong GPU."],
     },
     before: ["Stand 2 to 3 m from the camera.", "The camera sees your torso, ideally down to the knees.", "The countdown runs only once the camera sees you."],
-    fullscreen: "Start in full screen",
-    fullscreenNote: "A big view you can see from a distance. Only the Stop button stays on screen.",
     phoneFirst: "Connect your phone using the link above first, or switch to the computer microphone.",
     micDenied: "Microphone access is denied. Allow it in your browser settings and reload the page.",
     noRecorder: "This browser can't record. Try Chrome, Edge or Safari.",
@@ -180,7 +176,6 @@ const TX = {
   },
 };
 
-const FULLSCREEN_KEY = "pitchit-pitch-fullscreen";
 const ANALYSIS_KEY = "pitchit-video-analysis";
 const CLIENT_COUNT_KEY = "pitchit-client-questions";
 const CLIENT_KIND_KEY = "pitchit-client-kind";
@@ -309,7 +304,8 @@ export function CameraRecordScreen({
   const [k, setK] = useState(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [take, setTake] = useState(0);
-  const [fullscreen, setFullscreen] = useState(true);
+  // nahrávanie kamerou je vždy na celú obrazovku (bez prepínača)
+  const fullscreen = true;
   const [questions, setQuestions] = useState<string[] | null>(null);
   const [questionsFailed, setQuestionsFailed] = useState(false);
   const audioStarted = useRef<Promise<boolean> | null>(null);
@@ -321,14 +317,9 @@ export function CameraRecordScreen({
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- localStorage je len na klientovi */
-    setFullscreen(readPref(FULLSCREEN_KEY) !== "0");
     setAnalysis(readPref(ANALYSIS_KEY) === "live" ? "live" : "quick");
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
-  const toggleFullscreen = () => {
-    writePref(FULLSCREEN_KEY, fullscreen ? "0" : "1");
-    setFullscreen(!fullscreen);
-  };
   const chooseAnalysis = (value: VideoAnalysis) => {
     writePref(ANALYSIS_KEY, value);
     setAnalysis(value);
@@ -496,6 +487,7 @@ export function CameraRecordScreen({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           count: qa.count,
+          durationMs: recording?.durationMs ?? targetSeconds * 1000,
           language,
           draftId: recording?.draftId ?? null,
           segments: recording?.segments ?? 0,
@@ -891,7 +883,7 @@ export function CameraRecordScreen({
               <p className="mt-3 text-sm text-mute">{tx.clientQuestionsNote(maxClientQuestions)}</p>
             </Section>
           ) : !client ? (
-            <QaSettings {...qa} />
+            <QaSettings {...qa} durationMs={(fileMode ? maxVideoSeconds : targetSeconds) * 1000} />
           ) : null}
 
           {!fileMode ? (
@@ -903,27 +895,11 @@ export function CameraRecordScreen({
                   ))}
                 </ul>
               </section>
-              {!client ? (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={fullscreen}
-                onClick={toggleFullscreen}
-                className={`flex w-full items-center gap-4 rounded-3xl border-2 p-5 text-left transition md:p-6 ${fullscreen ? "border-signal bg-signal/10" : "border-line hover:border-faint"}`}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-lg font-bold">{tx.fullscreen}</span>
-                  <span className="block text-sm leading-snug text-mute">{tx.fullscreenNote}</span>
-                </span>
-                <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${fullscreen ? "bg-signal" : "bg-line"}`} aria-hidden="true">
-                  <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${fullscreen ? "left-6" : "left-1"}`} />
-                </span>
-              </button>
-              ) : null}
             </>
           ) : null}
 
-          <div className="flex flex-col items-start gap-3">
+          {/* na telefóne ostáva tlačidlo štartu stále dole na obrazovke, nie na konci dlhej stránky */}
+          <div className="sticky bottom-0 z-30 -mx-4 flex flex-col items-stretch gap-2 border-t border-line bg-[#141414]/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur md:static md:mx-0 md:items-start md:gap-3 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
             {error ? <p className="rounded-xl bg-danger/15 p-4 text-coral">{error}</p> : null}
             {hint ? (
               <p className="text-sm text-marker" role="status">
@@ -934,11 +910,11 @@ export function CameraRecordScreen({
               type="button"
               onClick={start}
               disabled={!micReady || !sourceReady}
-              className="rounded-full bg-signal px-10 py-5 text-xl font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40"
+              className="w-full rounded-full bg-signal px-6 py-4 text-lg font-bold text-on-signal transition hover:bg-signal-hover disabled:opacity-40 md:w-auto md:px-10 md:py-5 md:text-xl"
             >
               {fileMode ? (realMeeting ? tx.analyzeRecording : tx.analyzeVideo) : tx.startRecording} →
             </button>
-            <p className="text-sm text-faint">{tx.consent}</p>
+            <p className="text-xs text-faint md:text-sm">{tx.consent}</p>
           </div>
         </main>
       ) : (

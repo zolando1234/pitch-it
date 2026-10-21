@@ -25,6 +25,31 @@ async function saveWallet(userId: string, wallet: PitchWallet): Promise<void> {
   check({ error }, "pitch_wallet.save");
 }
 
+/** Jednorazové minúty zadarmo navyše pre konkrétne účty (sekundy). */
+const FREE_BONUS_SECONDS: Record<string, number> = { "matohustak2401@gmail.com": 20 * 60 };
+
+/**
+ * Pripíše bonusové minúty zadarmo účtu z FREE_BONUS_SECONDS, a to presne raz: negatívna spotreba zadarmo
+ * znamená viac ako 10 minút (zvyšok kódu s tým počíta). Ostatné účty prejdú len jednou kontrolou e-mailu.
+ */
+async function applyFreeBonusOnce(userId: string): Promise<void> {
+  const kv = getKv();
+  const key = `bonus:free:v1:${userId}`;
+  if (!(await kv.setnx(key, "1"))) return;
+  try {
+    const { data, error } = await getAdminDb().from("auth_users").select("email").eq("id", userId).maybeSingle<{ email: string | null }>();
+    check({ error }, "pitch_wallet.bonus_email");
+    const bonus = FREE_BONUS_SECONDS[(data?.email ?? "").trim().toLowerCase()] ?? 0;
+    if (bonus <= 0) return;
+    const wallet = await getWallet(userId);
+    await saveWallet(userId, { ...wallet, free_used: wallet?.free_used ?? 0, credits: wallet?.credits ?? 0, free_seconds_used: (wallet?.free_seconds_used ?? 0) - bonus });
+  } catch (error) {
+    // zlyhalo: povolíme nový pokus pri ďalšej požiadavke
+    await kv.del([key]);
+    throw error;
+  }
+}
+
 /** Aktívny plán a počet zaplatených účtov (tímový plán) podľa predplatného. */
 async function getPlanSeats(userId: string): Promise<{ plan: PlanId; seats: number }> {
   const { data, error } = await getAdminDb().from("subscriptions").select("plan, status, seats").eq("user_id", userId).maybeSingle<Pick<SubscriptionRow, "plan" | "status" | "seats">>();
@@ -67,6 +92,7 @@ async function accessOf(payer: string, now: Date) {
  * a po nich trénuje z plánu vlastníka tímu.
  */
 export async function getPitchBalance(userId: string, now = new Date()): Promise<PitchBalance> {
+  await applyFreeBonusOnce(userId);
   const payer = await billingUserId(userId);
   const owner = await accessOf(payer, now);
   if (payer === userId) return owner.balance;

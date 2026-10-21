@@ -70,7 +70,7 @@ export const CONFIG = {
   // Počet gest za minútu (TOP TED prejavy majú okolo 25 / min)
   gestureOnsetSpeed: 1.1,
   gestureCalmSpeed: 0.4,
-  gestureRateMinMs: 20000,
+  gestureRateMinMs: 45000, // tempo gest hodnotíme až z dlhšieho úseku, nie z prvých sekúnd
   fewGesturesPerMin: 8,
   idealGesturesPerMin: 20,
 
@@ -115,6 +115,8 @@ export const CONFIG = {
   pacingWindowMs: 10000,
   pacingPath: 5, // za 10 s prejdeš viac ako 5 sw
   pacingMaxStillShare: 0.3, // a takmer vôbec nezastavíš
+  pacingMinRange: 1.5, // a naozaj prejdeš kus pódia (aspoň 1,5 šírky ramien)
+  pacingJitter: 0.02, // posun pod 0,02 sw za 100 ms je chvenie odhadu, nie krok
   edgeMargin: 0.12, // 12 % od okraja záberu
   // stred pódia = ±12 % šírky záberu od stredu; pri webkamere je už krok do strany mimo stredu
   stageCenterHalfWidth: 0.12,

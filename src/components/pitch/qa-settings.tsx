@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
-import { QA_MAX_QUESTIONS } from "@/lib/pitch/qa";
+import { QA_MAX_QUESTIONS, qaMaxQuestionsFor } from "@/lib/pitch/qa";
 
 /*
-  Q&A po prejave: zapnutie a počet otázok (1 až 4). Voľba sa pamätá v prehliadači.
+  Q&A po prejave: zapnutie a počet otázok (1 až 5, najviac podľa dĺžky prejavu). Voľba sa pamätá v prehliadači.
 */
 
 const KEY = "pitchit-qa";
@@ -36,8 +36,11 @@ export function useQaPrefs() {
   return { ...prefs, save };
 }
 
-export function QaSettings({ enabled, count, save }: ReturnType<typeof useQaPrefs>) {
+export function QaSettings({ enabled, count, save, durationMs }: ReturnType<typeof useQaPrefs> & { durationMs: number }) {
   const en = useLocale() === "en";
+  const max = qaMaxQuestionsFor(durationMs);
+  // uložená voľba ostáva; pri kratšom prejave sa len zobrazí (a použije) nižší počet
+  const shown = Math.min(count, max);
   return (
     <section className="w-full rounded-3xl border border-line p-5 md:p-6" aria-labelledby="qa-nadpis">
       <button
@@ -64,18 +67,25 @@ export function QaSettings({ enabled, count, save }: ReturnType<typeof useQaPref
       {enabled ? (
         <div className="mt-4 flex flex-wrap items-center gap-2" role="radiogroup" aria-label={en ? "Number of questions" : "Počet otázok"}>
           <span className="mr-1 text-sm font-bold text-mute">{en ? "Questions" : "Počet otázok"}</span>
-          {Array.from({ length: QA_MAX_QUESTIONS }, (_, i) => i + 1).map((n) => (
+          {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
             <button
               key={n}
               type="button"
               role="radio"
-              aria-checked={count === n}
+              aria-checked={shown === n}
               onClick={() => save({ enabled, count: n })}
-              className={`h-10 w-10 rounded-full border-2 text-sm font-bold transition ${count === n ? "border-signal bg-signal/10 text-paper" : "border-line text-mute hover:border-faint"}`}
+              className={`h-10 w-10 rounded-full border-2 text-sm font-bold transition ${shown === n ? "border-signal bg-signal/10 text-paper" : "border-line text-mute hover:border-faint"}`}
             >
               {n}
             </button>
           ))}
+          {max < QA_MAX_QUESTIONS ? (
+            <span className="basis-full text-xs leading-snug text-mute">
+              {en
+                ? "More questions for longer talks: 2 from 5 min, 3 from 10 min, up to 5 from 30 min."
+                : "Viac otázok pri dlhšom prejave: 2 od 5 min, 3 od 10 min, až 5 od 30 min."}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </section>

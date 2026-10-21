@@ -229,3 +229,11 @@ describe("člen firemného tímu", () => {
     assert.equal(member.canPitch, false);
   });
 });
+
+test("bonus minút zadarmo: záporná spotreba zadarmo predĺži čas nad 10 minút", async () => {
+  const { pitchBalance, afterFreeSpeech } = await import("../src/lib/billing/pitch-pack.ts");
+  const bonus = { free_used: 0, credits: 0, free_seconds_used: -20 * 60 };
+  assert.equal(pitchBalance(bonus).freeSecondsLeft, 30 * 60);
+  const after = afterFreeSpeech(bonus, 5 * 60);
+  assert.equal(pitchBalance(after).freeSecondsLeft, 25 * 60);
+});

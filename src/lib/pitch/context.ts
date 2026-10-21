@@ -19,7 +19,7 @@ const PROMPT_MAX = 3_000;
 export type PitchDocument = {
   id: string;
   name: string;
-  kind: "pdf" | "pptx";
+  kind: "pdf" | "pptx" | "docx" | "text";
   /** počet strán či slidov */
   pages: number;
   text: string;
@@ -38,7 +38,7 @@ export type PitchContext = {
 export const pitchDocumentSchema = z.object({
   id: z.string().min(1).max(64),
   name: z.string().trim().min(1).max(160),
-  kind: z.enum(["pdf", "pptx"]),
+  kind: z.enum(["pdf", "pptx", "docx", "text"]),
   pages: z.number().int().min(0).max(1000),
   text: z.string().max(DOCUMENT_TEXT_MAX),
   added_at: z.string().max(40),

@@ -51,6 +51,23 @@ const TX = {
     cols: ["Používateľ", "Účet", "Registrácia", "Pitche", "Zadarmo", "Kredity", "Zaplatil", "Posledný pitch"],
     none: "Nikto nevyhovuje filtru.",
     min: "min",
+    ai: {
+      title: "Náklady na AI",
+      note: "Claude podľa skutočných tokenov, prepis reči (ElevenLabs) podľa dĺžky zvuku s odhadnutou cenou. Faktúra dodávateľa je rozhodujúca. Meria sa od nasadenia tejto funkcie.",
+      today: "Dnes",
+      d7: "7 dní",
+      d30: "30 dní",
+      total: "Spolu",
+      perPitch: "na pitch (30 dní)",
+      empty: "Zatiaľ žiadne záznamy. Objavia sa po ďalšej analýze.",
+      claude: "Claude (rozbory, otázky)",
+      eleven: "ElevenLabs (prepis reči)",
+      tokens: (i: number, o: number) => `${i.toLocaleString("sk-SK")} vstup · ${o.toLocaleString("sk-SK")} výstup tokenov`,
+      minutes: (m: number) => `${m.toLocaleString("sk-SK")} min zvuku`,
+      cols: ["Účel", "Volaní", "Vstup (tokeny)", "Výstup (tokeny)", "USD"],
+      purposes: { stt: "Prepis reči", pitch_content: "Rozbor prejavu", pitch_sentences: "Označenie viet", pitch_roles: "Rozlíšenie rečníkov", meeting_evaluation: "Vyhodnotenie stretnutia", qa_questions: "Otázky Q&A", qa_evaluation: "Hodnotenie Q&A", context_summary: "Výťah z dokumentov", pitch_outline: "Osnova", hint: "Nápoveda", report: "Report" } as Record<string, string>,
+      audio: (min: number) => `${min} min zvuku`,
+    },
   },
   en: {
     title: "Admin",
@@ -91,6 +108,23 @@ const TX = {
     cols: ["User", "Plan", "Registered", "Pitches", "Free used", "Credits", "Paid", "Last pitch"],
     none: "Nobody matches the filter.",
     min: "min",
+    ai: {
+      title: "AI costs",
+      note: "Claude by actual tokens, speech-to-text (ElevenLabs) by audio length at an estimated price. The vendor's invoice is authoritative. Measured since this feature went live.",
+      today: "Today",
+      d7: "7 days",
+      d30: "30 days",
+      total: "Total",
+      perPitch: "per pitch (30 days)",
+      empty: "No records yet. They appear after the next analysis.",
+      claude: "Claude (analyses, questions)",
+      eleven: "ElevenLabs (speech-to-text)",
+      tokens: (i: number, o: number) => `${i.toLocaleString("en-GB")} input · ${o.toLocaleString("en-GB")} output tokens`,
+      minutes: (m: number) => `${m.toLocaleString("en-GB")} min of audio`,
+      cols: ["Purpose", "Calls", "Input (tokens)", "Output (tokens)", "USD"],
+      purposes: { stt: "Speech-to-text", pitch_content: "Talk analysis", pitch_sentences: "Sentence flags", pitch_roles: "Speaker roles", meeting_evaluation: "Meeting evaluation", qa_questions: "Q&A questions", qa_evaluation: "Q&A evaluation", context_summary: "Document summary", pitch_outline: "Outline", hint: "Hint", report: "Report" } as Record<string, string>,
+      audio: (min: number) => `${min} min of audio`,
+    },
   },
 };
 
@@ -130,6 +164,8 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
     iso ? new Date(iso).toLocaleDateString(locale === "en" ? "en-GB" : "sk-SK", { day: "numeric", month: "numeric", year: "2-digit" }) : "–";
   const eur = (cents: number) => (locale === "en" ? `€${(cents / 100).toFixed(2)}` : `${(cents / 100).toFixed(2).replace(".", ",")} €`);
   const dec = (v: number) => (locale === "en" ? String(v) : String(v).replace(".", ","));
+  const usd = (v: number) => (locale === "en" ? `$${v.toFixed(v < 1 ? 3 : 2)}` : `${v.toFixed(v < 1 ? 3 : 2).replace(".", ",")} $`);
+  const num = (v: number) => v.toLocaleString(locale === "en" ? "en-GB" : "sk-SK");
   const max = Math.max(1, ...data.daily.map((d) => Math.max(d.signups, d.pitches)));
 
   const rows = useMemo(() => {
@@ -195,6 +231,88 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
         <Small value={data.paying.checkoutsStarted} label={tx.checkouts} />
         <Small value={data.paying.purchases} label={tx.purchases} />
         <Small value={data.paying.freeUsedUp} label={tx.usedUp} />
+      </section>
+
+      <section aria-labelledby="ai-naklady" className="flex flex-col gap-3">
+        <div>
+          <h2 id="ai-naklady" className="text-[17px] font-bold text-paper">
+            {tx.ai.title}
+          </h2>
+          <p className="text-[13px] text-mute">{tx.ai.note}</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {(
+            [
+              [tx.ai.claude, data.ai.providers.claude, tx.ai.tokens(data.ai.providers.claude.inputTokens, data.ai.providers.claude.outputTokens)],
+              [tx.ai.eleven, data.ai.providers.elevenlabs, tx.ai.minutes(Math.round(data.ai.providers.elevenlabs.seconds / 60))],
+            ] as const
+          ).map(([name, p, detail]) => (
+            <div key={name} className="dash-card p-5">
+              <p className="text-[13px] font-semibold text-mute">{name}</p>
+              <p className="mt-2 text-[28px] font-extrabold leading-none text-paper tabular-nums">{usd(p.total)}</p>
+              <p className="mt-2 text-[13px] text-faint">{detail}</p>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
+                {(
+                  [
+                    [tx.ai.today, p.today],
+                    [tx.ai.d7, p.last7],
+                    [tx.ai.d30, p.last30],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label}>
+                    <dd className="font-bold text-paper tabular-nums">{usd(value)}</dd>
+                    <dt className="text-mute">{label}</dt>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <Small value={usd(data.ai.today)} label={tx.ai.today} />
+          <Small value={usd(data.ai.last7)} label={tx.ai.d7} />
+          <Small value={usd(data.ai.last30)} label={tx.ai.d30} />
+          <Small value={data.ai.perPitch30 === null ? "–" : usd(data.ai.perPitch30)} label={tx.ai.perPitch} />
+          <Small value={usd(data.ai.total.costUsd)} label={tx.ai.total} />
+        </div>
+        {data.ai.byPurpose.length ? (
+          <div className="dash-card overflow-x-auto p-0">
+            <table className="w-full min-w-[560px] text-left text-[14px]">
+              <thead>
+                <tr className="border-b border-line text-[12px] font-semibold uppercase tracking-wider text-faint">
+                  {tx.ai.cols.map((c, i) => (
+                    <th key={c} className={`px-4 py-3 ${i > 0 ? "text-right" : ""}`}>
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/60">
+                {data.ai.byPurpose.map((l) => (
+                  <tr key={l.key}>
+                    <td className="px-4 py-3 text-paper">
+                      {tx.ai.purposes[l.key] ?? l.key}
+                      {l.key === "stt" ? <span className="ml-2 text-[12px] text-faint">{tx.ai.audio(Math.round(l.seconds / 60))}</span> : null}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-mute">{num(l.calls)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-mute">{l.key === "stt" ? "–" : num(l.inputTokens)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-mute">{l.key === "stt" ? "–" : num(l.outputTokens)}</td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums text-paper">{usd(l.costUsd)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="px-4 py-3 font-bold text-paper">{tx.ai.total}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-mute">{num(data.ai.total.calls)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-mute">{num(data.ai.total.inputTokens)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-mute">{num(data.ai.total.outputTokens)}</td>
+                  <td className="px-4 py-3 text-right font-bold tabular-nums text-accent">{usd(data.ai.total.costUsd)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-[14px] text-mute">{tx.ai.empty}</p>
+        )}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">

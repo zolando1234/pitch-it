@@ -44,10 +44,14 @@ const CATEGORIES: { id: GroupId; title: string; weight: number }[] = [
 const TIME_PENALTY = { bad: 200, warn: 100 };
 const REPEAT_PENALTY = { bad: 5, warn: 3 };
 const REPEAT_CAP = { bad: 25, warn: 15 };
+/** trendy (pravidlá s oknom): prvých 10 % času sa nestrháva, pokoj medzi gestami k prejavu patrí */
+const TREND_TOLERANCE = 0.1;
 
 // ciele pre merané hodnoty
-const ZONE_TARGET = 0.75;
-const GESTURE_RATE_TARGET = 20;
+// aj dobrý rečník nechá ruky medzi gestami odpočívať pri tele (~30–50 % času), preto nie 75 %
+const ZONE_TARGET = 0.55;
+// priemer najmenej sledovaných TED prednášok je ~15 gest/min (272 za 18 min), najsledovanejších ~26
+const GESTURE_RATE_TARGET = 15;
 const GESTURE_RATE_MAX = 45;
 const GAZE_SIDE_MIN = 0.15;
 
@@ -126,7 +130,7 @@ export function computeFinalScore(
     for (const r of rules) {
       const issue = issueById.get(r.id);
       if (!issue || !person) continue;
-      const f = Math.min(1, issue.ms / person);
+      const f = Math.max(0, Math.min(1, issue.ms / person) - (r.window ? TREND_TOLERANCE : 0));
       const points =
         (r.scoreWeight ?? 1) *
         (TIME_PENALTY[r.severity] * f + Math.min(issue.count * REPEAT_PENALTY[r.severity], REPEAT_CAP[r.severity]));
@@ -151,7 +155,7 @@ export function computeFinalScore(
         if (g < GESTURE_RATE_TARGET) {
           deductions.push({
             reason: L(`${g} gest za minútu (najlepší TED rečníci ~25)`, `${g} gestures per minute (top TED speakers ~25)`),
-            points: round1(Math.min(40, (GESTURE_RATE_TARGET - g) * 2)),
+            points: round1(Math.min(30, (GESTURE_RATE_TARGET - g) * 2)),
           });
         } else if (g > GESTURE_RATE_MAX) {
           deductions.push({

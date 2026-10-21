@@ -198,7 +198,7 @@ export async function acceptInvite(inviteId: string, user: { id: string; email: 
   Progres členov pre vlastníka tímu. Čítajú sa iba stĺpce potrebné na skóre a počty:
   prepis ani audio sa vlastníkovi nikdy nenačítajú.
 */
-const PROGRESS_COLUMNS = "id, user_id, created_at, status, mode, target_seconds, duration_ms, language, metrics, content_score, body, outline, qa";
+const PROGRESS_COLUMNS = "id, user_id, created_at, status, mode, target_seconds, duration_ms, language, metrics, content_score, materials_match, body, outline, qa";
 
 /** Vyhodnotené pokusy člena; prázdne, ak človek nie je členom daného tímu. */
 export async function listMemberAttempts(teamId: string, memberId: string, limit = 200): Promise<PitchAttemptRow[]> {

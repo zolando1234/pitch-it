@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getElevenLabsSttConfig, getOpenAiRealtimeConfig } from "@/config/server-env";
+import { logSttUsage } from "@/lib/ai/usage-log";
 import { LANGUAGE_INFO, sttOrder, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
 
 /*
@@ -118,7 +119,7 @@ async function transcribeWithElevenLabs(audio: Blob, fileName: string, language:
   if (!response.ok) {
     throw new TranscriptionError(response.status >= 500 || response.status === 429 ? "unavailable" : "rejected", `Prepis zlyhal (${response.status}).`);
   }
-  const data = (await response.json()) as { text?: unknown; words?: unknown };
+  const data = (await response.json()) as { text?: unknown; words?: unknown; audio_duration_secs?: unknown };
   const words = Array.isArray(data.words)
     ? data.words
         .filter(
@@ -133,6 +134,9 @@ async function transcribeWithElevenLabs(audio: Blob, fileName: string, language:
         .map((w) => ({ word: w.text.trim(), start: w.start, end: w.end, ...(diarize && w.speaker_id ? { speaker: w.speaker_id } : {}) }))
         .filter((w) => w.word)
     : [];
+  // prepis sa účtuje podľa dĺžky zvuku
+  const seconds = typeof data.audio_duration_secs === "number" ? data.audio_duration_secs : (words[words.length - 1]?.end ?? 0);
+  if (seconds > 0) void logSttUsage({ model: config.model, seconds });
   return { text: typeof data.text === "string" ? data.text.trim() : "", words };
 }
 

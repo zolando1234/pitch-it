@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { PasteTextDocument } from "@/components/pitch/paste-text-document";
 import { extractDocument } from "@/lib/documents/extract-client";
 import { sanitizeFileName } from "@/lib/documents/file-check";
 import { ABOUT_MAX, MAX_DOCUMENTS, type PitchContext, type PitchDocument } from "@/lib/pitch/context";
@@ -18,7 +19,7 @@ const TX = {
     aboutPlaceholder:
       "Napríklad: PitchIt je AI tréner prezentácií. Pomáhame zakladateľom a manažérom pripraviť sa na vystúpenie pred publikom. Máme 120 používateľov, pilot s dvomi firmami a hľadáme 150 000 € na rast.",
     docs: "Dokumenty",
-    drop: "Pretiahni sem PDF alebo PPTX",
+    drop: "Pretiahni sem PDF, PPTX alebo DOCX",
     dropOr: "alebo klikni a vyber súbor",
     dropNote: `Najviac ${MAX_DOCUMENTS} dokumentov, každý do 25 MB. Súbor sa nikam nenahráva, uloží sa len jeho text.`,
     reading: (name: string) => `Čítam ${name}…`,
@@ -30,7 +31,7 @@ const TX = {
     saved: "Uložené",
     unsaved: "Máš neuložené zmeny",
     errors: {
-      type: "Toto nie je PDF ani PPTX.",
+      type: "Toto nie je PDF, PPTX ani DOCX.",
       size: "Súbor má viac ako 25 MB.",
       empty: "V dokumente sme nenašli text (napríklad naskenované PDF). Dôležité veci napíš do poľa vyššie.",
       encrypted: "Dokument je chránený heslom.",
@@ -45,7 +46,7 @@ const TX = {
     aboutPlaceholder:
       "For example: PitchIt is an AI presentation coach. We help founders and managers prepare for talks in front of an audience. We have 120 users, a pilot with two companies and we're raising €150,000 for growth.",
     docs: "Documents",
-    drop: "Drop a PDF or PPTX here",
+    drop: "Drop a PDF, PPTX or DOCX here",
     dropOr: "or click to choose a file",
     dropNote: `At most ${MAX_DOCUMENTS} documents, each up to 25 MB. The file isn't uploaded, only its text is saved.`,
     reading: (name: string) => `Reading ${name}…`,
@@ -57,7 +58,7 @@ const TX = {
     saved: "Saved",
     unsaved: "You have unsaved changes",
     errors: {
-      type: "This is neither a PDF nor a PPTX.",
+      type: "This is not a PDF, PPTX or DOCX.",
       size: "The file is larger than 25 MB.",
       empty: "We found no text in the document (e.g. a scanned PDF). Write the important points in the field above.",
       encrypted: "The document is password protected.",
@@ -122,6 +123,17 @@ export function PitchContextForm({ initial }: { initial: PitchContext }) {
       // dokument sa uloží hneď (text v poli len ak je aj on uložený, aby sa neuložil rozpísaný)
       await save({ about: savedAbout, documents: next });
     }
+  };
+
+  const addText = async (doc: PitchDocument) => {
+    if (documents.length >= MAX_DOCUMENTS) {
+      setError(tx.errors.limit);
+      return;
+    }
+    setError(null);
+    const next = [...documents, doc];
+    setDocuments(next);
+    await save({ about: savedAbout, documents: next });
   };
 
   const remove = async (id: string) => {
@@ -200,7 +212,7 @@ export function PitchContextForm({ initial }: { initial: PitchContext }) {
         <input
           ref={input}
           type="file"
-          accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          accept=".pdf,.pptx,.docx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           multiple
           hidden
           onChange={(e) => {
@@ -208,6 +220,9 @@ export function PitchContextForm({ initial }: { initial: PitchContext }) {
             e.target.value = "";
           }}
         />
+        <div className="mt-3">
+          <PasteTextDocument disabled={!!reading} onAdd={addText} />
+        </div>
         <p className="mt-2 text-xs text-faint">{tx.dropNote}</p>
         {error ? (
           <p role="alert" className="mt-3 text-sm text-coral">
@@ -221,7 +236,7 @@ export function PitchContextForm({ initial }: { initial: PitchContext }) {
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-semibold text-paper">{doc.name}</p>
                   <p className="text-[13px] text-mute">
-                    {doc.kind.toUpperCase()} · {tx.pages(doc.pages)} · {tx.chars(doc.text.length)}
+                    {doc.kind === "text" ? "TXT" : doc.kind.toUpperCase()} · {tx.pages(doc.pages)} · {tx.chars(doc.text.length)}
                   </p>
                 </div>
                 <button type="button" onClick={() => void remove(doc.id)} className="shrink-0 text-sm font-semibold text-coral hover:underline">

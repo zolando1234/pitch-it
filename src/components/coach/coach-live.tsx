@@ -56,7 +56,9 @@ export function useCoachPrefs() {
     const q = readPref(QUALITY_KEY);
     /* eslint-disable react-hooks/set-state-in-effect -- localStorage je dostupný až na klientovi */
     setMicMode(readPref(MIC_KEY) === "1");
-    setQuality(q === "fast" || q === "precise" ? q : "balanced");
+    // bez uloženej voľby: telefón (dotykový displej) dostane ľahký model, aby sledovanie spoľahlivo naskočilo
+    const phone = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
+    setQuality(q === "fast" || q === "precise" || q === "balanced" ? q : phone ? "fast" : "balanced");
     const c = Number(readPref(COUNTDOWN_KEY));
     setCountdown(COUNTDOWN_OPTIONS.find((o) => o === c) ?? 5);
     /* eslint-enable react-hooks/set-state-in-effect */

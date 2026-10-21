@@ -148,3 +148,37 @@ test("prostredník v ruke sa prejaví ako vulgárne gesto v metrikách", () => {
   assert.equal(m.vulgar, true);
   assert.equal(m.rightHand?.gesture, "middle_finger");
 });
+
+// ── Pohyb po pódiu: chvenie a otáčanie nie je chodenie sem a tam ───────────────
+
+function shifted(dx: number, turn = 0, jitter = 0) {
+  const { lm, world } = body();
+  for (const p of lm) p.x += dx + (Math.random() - 0.5) * jitter;
+  // otočenie bokom: ramená sa v obraze zúžia, v 3D rozídu do hĺbky
+  lm[LM.leftShoulder].x -= turn * 0.07;
+  lm[LM.rightShoulder].x += turn * 0.07;
+  world[LM.leftShoulder].z = -turn * 0.15;
+  world[LM.rightShoulder].z = turn * 0.15;
+  return { lm, world };
+}
+
+test("stáť na mieste s chvením a otáčaním nie je „chodíš sem a tam“", () => {
+  const tracker = new MetricsTracker();
+  let pacing = false;
+  for (let t = 0; t <= 14000; t += 33) {
+    const turn = Math.abs(Math.sin(t / 1500));
+    const { lm, world } = shifted(0, turn, 0.012);
+    pacing ||= tracker.update(lm, world, null, t, W, H).pacing;
+  }
+  assert.equal(pacing, false);
+});
+
+test("skutočná chôdza tam a späť po pódiu je „chodíš sem a tam“", () => {
+  const tracker = new MetricsTracker();
+  let pacing = false;
+  for (let t = 0; t <= 14000; t += 33) {
+    const { lm, world } = shifted(0.3 * Math.sin(t / 900));
+    pacing ||= tracker.update(lm, world, null, t, W, H).pacing;
+  }
+  assert.equal(pacing, true);
+});

@@ -3,11 +3,20 @@ import { countFillers } from "@/lib/analytics/speech/text-metrics";
 import type { PitchLanguage } from "@/lib/pitch/language";
 
 /*
-  Q&A po prejave: AI položí 1 až 4 otázky k téme (z podkladov a toho, čo zaznelo),
+  Q&A po prejave: AI položí 1 až 5 otázok (podľa dĺžky prejavu) k téme (z podkladov a toho, čo zaznelo),
   v jazyku prejavu. Odpovede sa nahrajú, prepíšu a ohodnotia zvlášť od prejavu.
 */
 
-export const QA_MAX_QUESTIONS = 4;
+export const QA_MAX_QUESTIONS = 5;
+
+/** Najviac otázok podľa dĺžky prejavu: do 5 min 1, do 10 min 2, do 30 min 3, potom 5. */
+export function qaMaxQuestionsFor(durationMs: number): number {
+  const minutes = durationMs / 60_000;
+  if (minutes < 5) return 1;
+  if (minutes < 10) return 2;
+  if (minutes < 30) return 3;
+  return QA_MAX_QUESTIONS;
+}
 /** otázky klienta počas stretnutia */
 export const CLIENT_MAX_QUESTIONS = 10;
 /** najviac hodnotených odpovedí (Q&A aj stretnutie s klientom) */

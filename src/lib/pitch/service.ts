@@ -8,6 +8,7 @@ import type { StoredCoach } from "@/lib/coach/stored";
 import { canUseLength } from "@/lib/billing/pitch-pack";
 import { FREE_SECONDS } from "@/lib/billing/pricing";
 import { getPitchContext } from "@/lib/db/pitch-context";
+import { getTeamMaterialsForUser } from "@/lib/db/team-materials";
 import { insertPitchAttempt, updatePitchAttempt } from "@/lib/db/pitch";
 import type { PitchAttemptRow } from "@/lib/db/types";
 import { consumeSpeech, getPitchBalance } from "@/lib/db/pitch-wallet";
@@ -15,6 +16,7 @@ import { recordUsage } from "@/lib/db/usage";
 import { trackEvent } from "@/lib/events/track";
 import { summarizeBody } from "@/lib/pitch/body";
 import { contextForPrompt } from "@/lib/pitch/context";
+import { criteriaForPrompt, materialsAsContext } from "@/lib/pitch/team-materials";
 import { LANGUAGE_INFO, type PitchLanguage, type SttProvider } from "@/lib/pitch/language";
 import { mergeSegments, missingSegments, speakerTurns } from "@/lib/pitch/segment-merge";
 import { applyRoles, buildMeetingPrompt, buildRolesPrompt, dialogForPrompt, rolesFromCodes, speakerCodes, MEETING_SYSTEM, meetingSchema, meetingToQa, ROLES_SYSTEM, rolesSchema, type DialogLine } from "@/lib/pitch/meeting-dialog";
@@ -22,7 +24,7 @@ import type { QaResult } from "@/lib/pitch/qa";
 import { dropSegments, loadSegments } from "@/lib/pitch/segments";
 import { buildMetrics } from "@/lib/pitch/metrics";
 import { outlineByKeywords, TRANSCRIPT_PROMPT_MAX, type OutlineResult, type PitchOutline } from "@/lib/pitch/outline";
-import { buildSpeechPrompt, combineAnalysis, contentScoreOf, maxFlaggedFor, OVERVIEW_SYSTEM, outlineFromAnalysis, SENTENCES_SYSTEM, sentenceFlagsSchema, speechOverviewSchema, splitSentences, type StoredSpeechAnalysis } from "@/lib/pitch/speech-analysis";
+import { buildSpeechPrompt, combineAnalysis, contentScoreOf, maxFlaggedFor, OVERVIEW_SYSTEM, outlineFromAnalysis, SENTENCES_SYSTEM, sentenceFlagsSchema, speechOverviewMatchSchema, speechOverviewSchema, splitSentences, type StoredSpeechAnalysis } from "@/lib/pitch/speech-analysis";
 
 const AUDIENCE_BRIEF: Record<PitchAttemptRow["audience"], string> = {
   investor: "investori",
@@ -177,13 +179,15 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       try {
         const turns = speakerTurns(transcript.words);
         const roles = await llm.generateStructured({
-          purpose: "pitch_content",
+          purpose: "pitch_roles",
           system: ROLES_SYSTEM,
           messages: [{ role: "user", content: buildRolesPrompt(turns, input.outline?.topic || null) }],
           schema: rolesSchema,
           effort: "low",
-          maxTokens: 2_000,
+          // rezerva aj na premýšľanie, ktoré Haiku robí predvolene
+          maxTokens: 4_000,
           speed: "interactive",
+          tier: "simple",
         });
         const split = applyRoles(transcript.words, rolesFromCodes(speakerCodes(turns), roles.data.roles));
         dialog = split.dialog;
@@ -211,7 +215,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       if (outline) outlineResult = outlineByKeywords(outline, transcript.text);
       if (!llm) return;
       try {
-        const context = await getPitchContext(userId);
+        const [context, teamMaterials] = await Promise.all([getPitchContext(userId), getTeamMaterialsForUser(userId)]);
+        const team = teamMaterials ? { facts: contextForPrompt(materialsAsContext(teamMaterials)) ?? "", criteria: criteriaForPrompt(teamMaterials.criteria) } : null;
         const sentences = capSentences(splitSentences(transcript.text));
         const prompt = (part: "overview" | "sentences") =>
           buildSpeechPrompt({
@@ -224,6 +229,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
             feedbackLocale: ui,
             outline,
             context: contextForPrompt(context),
+            team: team?.facts ? team : null,
             dialog: dialogText,
           });
         // dve paralelné volania: čas určuje dĺžka výstupu, preto je rozbor rýchlejší a približne rovnako lacný
@@ -232,13 +238,13 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
             purpose: "pitch_content",
             system: OVERVIEW_SYSTEM,
             messages: [{ role: "user", content: prompt("overview") }],
-            schema: speechOverviewSchema,
+            schema: team?.facts ? speechOverviewMatchSchema : speechOverviewSchema,
             effort: "low",
             maxTokens: 3_500,
             speed: "interactive",
           }),
           llm.generateStructured({
-            purpose: "pitch_content",
+            purpose: "pitch_sentences",
             system: SENTENCES_SYSTEM,
             messages: [{ role: "user", content: prompt("sentences") }],
             schema: sentenceFlagsSchema,
@@ -274,7 +280,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       try {
         const context = await getPitchContext(userId);
         const review = await llm.generateStructured({
-          purpose: "qa_evaluation",
+          purpose: "meeting_evaluation",
           system: MEETING_SYSTEM,
           messages: [
             {
@@ -301,6 +307,7 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
       metrics,
       content: content as Record<string, unknown> | null,
       content_score: score,
+      materials_match: (content as StoredSpeechAnalysis | null)?.analysis.materialsMatch ?? null,
       body,
       outline: outlineResult as Record<string, unknown> | null,
       ...(qa ? { qa: qa as unknown as Record<string, unknown> } : {}),

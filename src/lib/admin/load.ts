@@ -18,7 +18,7 @@ async function all(table: string, columns: string): Promise<Row[]> {
 }
 
 export async function loadAdminOverview(): Promise<AdminOverview> {
-  const [users, profiles, wallets, attempts, events, contexts, subscriptions] = await Promise.all([
+  const [users, profiles, wallets, attempts, events, contexts, subscriptions, aiUsage] = await Promise.all([
     all("auth_users", "id, email, created_at, meta"),
     all("profiles", "id, display_name"),
     all("pitch_wallets", "user_id, free_used, credits, free_seconds_used"),
@@ -26,8 +26,19 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
     all("product_events", "user_id, name, created_at, properties"),
     all("pitch_contexts", "user_id, about, documents"),
     all("subscriptions", "user_id, plan, status"),
+    all("ai_usage", "created_at, kind, purpose, model, input_tokens, output_tokens, seconds, cost_usd"),
   ]);
   const raw: AdminRaw = {
+    aiUsage: aiUsage.map((r) => ({
+      created_at: String(r.created_at ?? ""),
+      kind: r.kind === "stt" ? "stt" : "llm",
+      purpose: String(r.purpose ?? ""),
+      model: String(r.model ?? ""),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
+      seconds: Number(r.seconds ?? 0),
+      cost_usd: Number(r.cost_usd ?? 0),
+    })),
     users: users.map((u) => ({
       id: String(u.id),
       email: (u.email as string) ?? null,

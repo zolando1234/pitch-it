@@ -90,7 +90,8 @@ export function handLabel(h: HandInfo, lang: Lang = "sk"): string {
   const what =
     h.gesture === "middle_finger" || h.gesture === "finger_gun" || h.gesture === "thumb_down"
       ? GESTURE_LABEL[lang][h.gesture]
-      : h.count !== null
+      : // číslo len pri zjavnom počítaní (1–3 prsty hore); otvorená ruka je „otvorená“, nie „5“
+        h.count !== null && h.shape === "count"
         ? String(h.count)
         : (h.gesture && GESTURE_LABEL[lang][h.gesture]) || SHAPE_LABEL[lang][h.shape] || `${h.extendedFingers}`;
   return h.palm ? `${what} · ${PALM_LABEL[lang][h.palm]}` : what!;
@@ -106,6 +107,8 @@ export class StageRenderer {
   /** plátno je na obrazovke zrkadlené (kamera): text treba kresliť obrátene, aby sa dal čítať */
   mirrored = false;
   lang: Lang = "sk";
+  /** jemná silueta (záber cez celú obrazovku, rečník sa má dobre vidieť) */
+  subtle: () => boolean = () => false;
 
   // malé plátno na lacnú žiaru: zmenšená silueta roztiahnutá späť = rozmazaný okraj
   private glowCanvas: HTMLCanvasElement;
@@ -170,9 +173,10 @@ export class StageRenderer {
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     const r = this.maskRect ?? { x: 0, y: 0, w: W, h: H };
-    ctx.globalAlpha = 0.55;
+    const k = this.subtle() ? 0.3 : 1;
+    ctx.globalAlpha = 0.55 * k;
     ctx.drawImage(this.glowCanvas, r.x - r.w * 0.03, r.y - r.h * 0.03, r.w * 1.06, r.h * 1.06);
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.5 * k;
     ctx.drawImage(this.maskCanvas, r.x, r.y, r.w, r.h);
     ctx.restore();
 

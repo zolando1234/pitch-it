@@ -59,3 +59,23 @@ test("administrátor podľa e-mailu (bez ohľadu na veľké písmená)", () => {
   assert.equal(isAdminEmail("niekto@iny.sk"), false);
   assert.equal(isAdminEmail(null), false);
 });
+
+test("administrácia: náklady na AI v tokenoch a USD", async () => {
+  const { summarizeAiUsage } = await import("../src/lib/admin/ai-cost.ts");
+  const { llmCostUsd, sttCostUsd } = await import("../src/lib/ai/cost.ts");
+  assert.equal(llmCostUsd("claude-sonnet-5-5", 1_000_000, 100_000), 3);
+  assert.equal(Math.round(sttCostUsd(3600) * 100) / 100, 0.4);
+  const row = (daysAgo: number, purpose: string, cost: number, extra = {}) => ({ created_at: ago(daysAgo), kind: "llm" as const, purpose, model: "claude-sonnet-5-5", input_tokens: 1000, output_tokens: 500, seconds: 0, cost_usd: cost, ...extra });
+  const s = summarizeAiUsage([row(0.1, "pitch_content", 0.05), row(2, "pitch_content", 0.03), row(40, "context_summary", 0.02), row(1, "stt", 0.1, { kind: "stt", seconds: 900 })], 4, now);
+  assert.equal(s.total.costUsd, 0.2);
+  assert.equal(s.last7, 0.18);
+  assert.equal(s.last30, 0.18);
+  assert.equal(s.perPitch30, 0.045);
+  assert.equal(s.byPurpose[0].key, "stt");
+  assert.equal(s.byPurpose.find((l) => l.key === "pitch_content")?.calls, 2);
+  assert.equal(s.providers.claude.total, 0.1);
+  assert.equal(s.providers.claude.calls, 3);
+  assert.equal(s.providers.elevenlabs.total, 0.1);
+  assert.equal(s.providers.elevenlabs.seconds, 900);
+  assert.equal(summarizeAiUsage([], 0, now).perPitch30, null);
+});

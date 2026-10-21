@@ -53,3 +53,14 @@
 .pi-fb .sn-why-minor{border-color:#FFC94D}
 .pi-fb .sn-why-major{border-color:#FF6B5B}
 .pi-fb .sn-why b{font-weight:700}
+@media(max-width:560px){
+.pi-fb .wrap{padding-left:12px;padding-right:12px}
+.pi-fb main.wrap{padding-top:20px!important;padding-bottom:40px!important}
+.pi-fb h1.h{font-size:30px!important}
+.pi-fb .card{padding:16px;border-radius:16px}
+.pi-fb .card h2.h{font-size:21px!important}
+.pi-fb .big{font-size:36px}
+.pi-fb main.wrap>div:first-child>div:last-child{width:100%}
+.pi-fb main.wrap>div:first-child .btn{flex:1 1 100%}
+.pi-fb video,.pi-fb img{max-width:100%}
+}

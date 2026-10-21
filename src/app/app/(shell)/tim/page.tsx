@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { TeamPlanPicker } from "@/components/billing/plan-picker";
+import { UseTeamMaterials } from "@/components/team/use-team-materials";
+import { TeamMaterials } from "@/components/team/team-materials";
 import { ActionButton, CreateTeamForm, InviteForm, RenameTeamForm } from "@/components/team/team-forms";
 import { buttonClasses } from "@/components/ui/button";
 import { ConfirmAction } from "@/components/ui/confirm-action";
@@ -12,6 +14,8 @@ import { balanceLabel, teamBalanceLabel } from "@/lib/billing/pitch-pack";
 import { activePlan, FREE_SECONDS, PRO_WEEKLY_SECONDS, TEAM_DISCOUNT_TIERS } from "@/lib/billing/pricing";
 import { isStripeConfigured } from "@/lib/billing/stripe";
 import { getPitchBalance } from "@/lib/db/pitch-wallet";
+import { getAvailableTeamMaterials, getTeamMaterials, getUseTeamMaterials } from "@/lib/db/team-materials";
+import { averageMatch } from "@/lib/pitch/team-materials";
 import { getMembership, getOwnedTeam, invitesForEmail, listInvites, listTeamAttempts, listTeamMembers } from "@/lib/db/teams";
 import { getSubscription } from "@/lib/db/usage";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -42,15 +46,6 @@ function Card({ id, title, description, children }: { id?: string; title: string
       {description ? <p className="mt-1.5 text-[14.5px] leading-relaxed text-mute">{description}</p> : null}
       <div className="mt-5">{children}</div>
     </section>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-line/70 bg-panel px-3.5 py-3">
-      <dt className="text-[12px] font-semibold text-mute">{label}</dt>
-      <dd className="mt-1 text-[1.4rem] font-extrabold leading-none text-paper">{value}</dd>
-    </div>
   );
 }
 
@@ -85,6 +80,7 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
 
   // Člen tímu: iba informácia a odchod
   if (membership) {
+    const [teamMaterials, useTeam] = await Promise.all([getAvailableTeamMaterials(user.id), getUseTeamMaterials(user.id)]);
     return (
       <>
         <PageHeader title={L("Môj tím", "My team")} description={L("Si členom firemného tímu.", "You're a member of a company team.")} />
@@ -111,6 +107,11 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
             />
           </div>
         </Card>
+        {teamMaterials ? (
+          <div className="mt-6">
+            <UseTeamMaterials initial={useTeam} documentNames={teamMaterials.documents.map((d) => d.name)} />
+          </div>
+        ) : null}
       </>
     );
   }
@@ -159,11 +160,12 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
   }
 
   // Vlastník tímu
-  const [members, invites, attemptsByMember, subscription] = await Promise.all([
+  const [members, invites, attemptsByMember, subscription, materials] = await Promise.all([
     listTeamMembers(owned.id),
     listInvites(owned.id),
     listTeamAttempts(owned.id),
     getSubscription(user.id),
+    getTeamMaterials(owned.id),
   ]);
   const plan = activePlan(subscription);
   const paidSeats = plan === "free" ? null : Math.max(1, subscription?.seats ?? 1);
@@ -177,39 +179,189 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
       return [m.userId, summarizeMember(progressRows(attempts), durations)];
     }),
   );
+  const matchByMember = new Map(members.map((m) => [m.userId, averageMatch((attemptsByMember.get(m.userId) ?? []).map((a) => a.materials_match))]));
+  const hasMaterials = materials.documents.length > 0;
   const totals = teamTotals([...summaries.values()]);
+
+  const inviteSlots = paidSeats === null ? null : seats;
+  const statusLabel = (active: boolean, never: boolean) =>
+    active ? L("Aktívny", "Active") : never ? L("Ešte nič", "Not started") : L("Neaktívny", "Inactive");
 
   return (
     <>
-      <PageHeader
-        title={owned.name}
-        description={L(
-          `Firemný tím: ${members.length} ${members.length === 1 ? "člen" : "členov"}, tento mesiac ${totals.thisMonth} prejavov. Tréning platíš ty.`,
-          `Company team: ${members.length} ${members.length === 1 ? "member" : "members"}, ${totals.thisMonth} talks this month. You pay for the training.`,
-        )}
-      />
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
+        <div className="min-w-0">
+          <p className="text-[13px] text-faint">{L("Oddelenie / spoločnosť", "Department / company")}</p>
+          <h1 className="type-heading mt-1 truncate text-[2.2rem] leading-tight md:text-[2.6rem]">{owned.name}</h1>
+        </div>
+        <dl className="flex gap-8">
+          {[
+            [members.length + 1, L("členov", "members")],
+            [totals.active7, L("aktívnych", "active")],
+            [totals.thisMonth, L("prejavov tento mesiac", "talks this month")],
+          ].map(([value, label]) => (
+            <div key={String(label)}>
+              <dd className="text-[1.5rem] font-extrabold leading-none text-paper">{value}</dd>
+              <dt className="mt-1 max-w-[7rem] text-[12.5px] leading-tight text-mute">{label}</dt>
+            </div>
+          ))}
+        </dl>
+      </header>
       {joined}
-      <div className="grid gap-6">
-        <Card
-          id="plan-timu"
-          title={L("Plán tímu", "Team plan")}
-          description={L(
-            `Každý člen má ${FREE_SECONDS / 60} minút zadarmo len pre seba, potom trénuje z tvojho plánu. Plán platíš za počet účtov (s tebou), tímová zľava ${teamTiers("sk")}. Pri Pro má tím spolu ${PRO_WEEKLY_SECONDS / 60} minút týždenne za každý účet.`,
-            `Every member gets ${FREE_SECONDS / 60} free minutes of their own, then trains on your plan. You pay per account (including you), team discount ${teamTiers("en")}. On Pro the team shares ${PRO_WEEKLY_SECONDS / 60} minutes per week for each account.`,
-          )}
-        >
-          <p className="text-[15px] text-paper">{left}</p>
-          {paidSeats !== null ? (
-            <p className={`mt-2 text-[14.5px] ${paidSeats < accounts ? "text-coral" : "text-mute"}`}>
-              {L(
-                `Zaplatené účty: ${paidSeats}, v tíme (s tebou a pozvánkami): ${accounts}.`,
-                `Paid accounts: ${paidSeats}, in the team (with you and invitations): ${accounts}.`,
-              )}
-              {paidSeats < accounts ? ` ${L("Pridaj účty, aby si mohol pozývať ďalších.", "Add accounts to invite more people.")}` : ""}
+      <div className="grid gap-8">
+        <section aria-labelledby="clenovia">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <h2 id="clenovia" className="type-heading text-[1.25rem]">
+              {L("Členovia", "Members")}
+            </h2>
+            <p className="text-[13.5px] text-mute">
+              {L(`Každý nový člen má ${FREE_SECONDS / 60} min zadarmo, potom trénuje z tvojho plánu.`, `Every new member gets ${FREE_SECONDS / 60} free min, then trains on your plan.`)}
             </p>
-          ) : null}
+          </div>
+          <div className="mt-4">
+            {paidSeats === null ? (
+              <Notice tone="info" className="mb-3">
+                {L("Bez plateného plánu trénujú pozvaní kolegovia ako Free.", "Without a paid plan, invited colleagues train on Free.")}{" "}
+                <a href="#plan-timu" className="font-bold underline">
+                  {L("Zaplatiť za tím", "Pay for the team")}
+                </a>
+              </Notice>
+            ) : seats <= 0 ? (
+              <Notice tone="info" className="mb-3">
+                {L(`Všetkých ${paidSeats} zaplatených účtov je obsadených.`, `All ${paidSeats} paid accounts are taken.`)}{" "}
+                <a href="#plan-timu" className="font-bold underline">
+                  {L("Pridať účty", "Add accounts")}
+                </a>
+              </Notice>
+            ) : null}
+            <InviteForm seats={seats} compact />
+            {inviteSlots !== null && inviteSlots > 0 ? (
+              <p className="mt-2 text-[12.5px] text-faint">{L(`Môžeš pozvať ešte ${inviteSlots}. Viac e-mailov oddeľ čiarkou.`, `You can invite ${inviteSlots} more. Separate several emails with commas.`)}</p>
+            ) : null}
+          </div>
+
+          {members.length > 0 || invites.length > 0 ? (
+            <div className="mt-5 overflow-hidden rounded-[18px] border border-line bg-panel/60">
+              <div className="hidden grid-cols-[minmax(0,2.2fr)_1fr_1fr_1fr_auto] gap-4 border-b border-line px-5 py-3 text-[11.5px] font-semibold uppercase tracking-wider text-faint md:grid">
+                <span>{L("Meno", "Name")}</span>
+                <span>{L("Stav", "Status")}</span>
+                <span>{L("Minúty", "Minutes")}</span>
+                <span>{hasMaterials ? L("Zhoda s materiálmi", "Match with materials") : L("Skóre obsahu", "Content score")}</span>
+                <span className="w-24" />
+              </div>
+              <ul className="divide-y divide-line/60">
+                {members.map((m) => {
+                  const sum = summaries.get(m.userId)!;
+                  const active = sum.last7 > 0;
+                  const trend = sum.trend === "up" ? " ↑" : sum.trend === "down" ? " ↓" : "";
+                  return (
+                    <li key={m.userId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-4 md:grid-cols-[minmax(0,2.2fr)_1fr_1fr_1fr_auto]">
+                      <Link href={`/app/tim/clen/${m.userId}`} className="group flex min-w-0 items-center gap-3">
+                        <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-panel-2 text-[12px] font-bold text-mute">
+                          {(m.name || m.email || "?").trim().slice(0, 2).toUpperCase()}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-paper group-hover:underline">{m.name || m.email}</span>
+                          <span className="block truncate text-[12.5px] text-faint">
+                            {m.name && m.email ? m.email : L(`od ${formatDate(new Date(m.joinedAt))}`, `since ${formatDate(new Date(m.joinedAt))}`)}
+                          </span>
+                        </span>
+                      </Link>
+                      <span className={`col-start-1 text-[13.5px] md:col-start-auto ${active ? "text-accent" : "text-mute"}`}>
+                        {statusLabel(active, sum.attempts === 0)}
+                        <span className="text-faint md:hidden">{` · ${sum.minutes} min`}</span>
+                      </span>
+                      <span className="hidden text-[14px] text-paper md:block">
+                        {sum.minutes} min <span className="text-faint">· {sum.attempts}×</span>
+                      </span>
+                      <span className="hidden text-[14px] font-bold md:block">
+                        {hasMaterials ? (
+                          matchByMember.get(m.userId) !== null && matchByMember.get(m.userId) !== undefined ? (
+                            <span className="text-accent">{matchByMember.get(m.userId)} %</span>
+                          ) : (
+                            <span className="font-normal text-faint">—</span>
+                          )
+                        ) : sum.content ? (
+                          <span className="text-accent">
+                            {formatNumber(sum.content.last, 1)}/10{trend}
+                          </span>
+                        ) : (
+                          <span className="font-normal text-faint">—</span>
+                        )}
+                      </span>
+                      <span className="col-start-2 row-span-2 row-start-1 justify-self-end md:col-start-auto md:row-span-1 md:row-start-auto md:w-24 md:text-right">
+                        <ConfirmAction
+                          trigger={L("Odobrať", "Remove")}
+                          title={L(`Odobrať ${m.email ?? "člena"}?`, `Remove ${m.email ?? "this member"}?`)}
+                          description={L(
+                            "Účet aj tréningy mu ostanú, len mu prestaneš platiť tréning. Počet zaplatených účtov sa nezmení, uvoľnené miesto môžeš dať niekomu inému alebo znížiť počet účtov v Pláne tímu.",
+                            "They keep their account and sessions; you just stop paying for their training. Your paid accounts stay the same: invite someone else, or lower the number of accounts under Team plan.",
+                          )}
+                          confirmLabel={L("Odobrať", "Remove")}
+                          pendingLabel={L("Odoberám…", "Removing…")}
+                          action={removeMemberAction.bind(null, m.userId)}
+                        />
+                      </span>
+                    </li>
+                  );
+                })}
+                {invites.map((invite) => (
+                  <li key={invite.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-4 md:grid-cols-[minmax(0,2.2fr)_1fr_1fr_1fr_auto]">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-panel-2 text-[12px] font-bold text-mute">
+                        {invite.email.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="block min-w-0 truncate font-medium text-paper">{invite.email}</span>
+                    </div>
+                    <span className="col-start-1 text-[13.5px] text-mute md:col-start-auto">
+                      {invite.sent_at ? L("Pozvánka odoslaná", "Invitation sent") : L("E-mail neodišiel", "Email not sent")}
+                    </span>
+                    <span className="hidden text-faint md:block">—</span>
+                    <span className="hidden text-faint md:block">—</span>
+                    <span className="col-start-2 row-span-2 row-start-1 flex flex-wrap justify-end gap-1 md:col-start-auto md:row-span-1 md:row-start-auto md:w-auto">
+                      <ActionButton action={resendInviteAction.bind(null, invite.id)} label={L("Poslať znova", "Send again")} pendingLabel={L("Posielam…", "Sending…")} />
+                      <ConfirmAction
+                        trigger={L("Zrušiť", "Cancel")}
+                        title={L(`Zrušiť pozvánku pre ${invite.email}?`, `Cancel the invitation for ${invite.email}?`)}
+                        description={L("Odkaz v e-maile prestane fungovať.", "The link in the email will stop working.")}
+                        confirmLabel={L("Zrušiť pozvánku", "Cancel invitation")}
+                        pendingLabel={L("Ruším…", "Cancelling…")}
+                        action={cancelInviteAction.bind(null, invite.id)}
+                      />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="mt-5 text-[14.5px] text-mute">{L("Zatiaľ nikto. Pozvi prvých kolegov vyššie.", "Nobody yet. Invite your first colleagues above.")}</p>
+          )}
+        </section>
+
+        <TeamMaterials initialDocuments={materials.documents} initialCriteria={materials.criteria} />
+
+        <section id="plan-timu" className="scroll-mt-24">
+          <h2 className="type-heading text-[1.25rem]">{L("Plán tímu", "Team plan")}</h2>
+          <p className="mt-1 text-[13.5px] text-mute">
+            {L(
+              `Platíš ty, za každý účet vrátane seba. Tímová zľava ${teamTiers("sk")}. Pri Pro má tím ${PRO_WEEKLY_SECONDS / 60} minút týždenne za každý účet.`,
+              `You pay, per account including yourself. Team discount ${teamTiers("en")}. On Pro the team gets ${PRO_WEEKLY_SECONDS / 60} minutes per week per account.`,
+            )}
+          </p>
+          <div className="mt-4 rounded-[18px] border border-accent/25 bg-lime-tint/40 p-5 md:p-6">
+            <p className="text-[1.15rem] font-bold leading-snug text-accent md:text-[1.4rem]">{left}</p>
+            {paidSeats !== null ? (
+              <p className={`mt-2 text-[14px] ${paidSeats < accounts ? "text-coral" : "text-mute"}`}>
+                {L(
+                  `Zaplatené účty: ${paidSeats}, v tíme (s tebou a pozvánkami): ${accounts}.`,
+                  `Paid accounts: ${paidSeats}, in the team (with you and invitations): ${accounts}.`,
+                )}
+                {paidSeats < accounts ? ` ${L("Pridaj účty, aby si mohol pozývať ďalších.", "Add accounts to invite more people.")}` : ""}
+              </p>
+            ) : null}
+          </div>
           {stripe ? (
-            <div className="mt-6">
+            <div className="mt-5">
               <TeamPlanPicker
                 current={plan}
                 currentInterval={plan === "free" ? null : (subscription?.interval ?? null)}
@@ -219,138 +371,12 @@ export default async function TeamPage({ searchParams }: PageProps<"/app/tim">) 
               />
             </div>
           ) : (
-            <p className="mt-2 text-sm text-marker">{L("Platby zatiaľ nie sú zapnuté.", "Payments are not enabled yet.")}</p>
+            <p className="mt-3 text-sm text-marker">{L("Platby zatiaľ nie sú zapnuté.", "Payments are not enabled yet.")}</p>
           )}
           <Link href="/app/nastavenia#plan" className={`${buttonClasses({ variant: "secondary" })} mt-5`}>
             {L("Spravovať plán", "Manage plan")}
           </Link>
-        </Card>
-
-        <Card
-          title={L("Pozvať kolegov", "Invite colleagues")}
-          description={L(
-            "Každému príde e-mail s odkazom. Prihlási sa (alebo zaregistruje) e-mailom, na ktorý prišla pozvánka, a je v tíme.",
-            "Each person gets an email with a link. They sign in (or sign up) with the email the invitation was sent to and they're in.",
-          )}
-        >
-          {paidSeats === null ? (
-            <Notice tone="info" className="mb-4">
-              {L(
-                "Bez plateného plánu trénujú pozvaní kolegovia ako Free. Plán pre celý tím zaplatíš v časti Plán tímu vyššie.",
-                "Without a paid plan, invited colleagues train on Free. Pay for the whole team under Team plan above.",
-              )}{" "}
-              <a href="#plan-timu" className="font-bold underline">
-                {L("Zaplatiť za tím", "Pay for the team")}
-              </a>
-            </Notice>
-          ) : seats <= 0 ? (
-            <Notice tone="info" className="mb-4">
-              {L(
-                `Všetkých ${paidSeats} zaplatených účtov je obsadených. Ak chceš pozvať ďalších ľudí, pridaj účty v časti Plán tímu.`,
-                `All ${paidSeats} paid accounts are taken. To invite more people, add accounts under Team plan.`,
-              )}{" "}
-              <a href="#plan-timu" className="font-bold underline">
-                {L("Pridať účty", "Add accounts")}
-              </a>
-            </Notice>
-          ) : null}
-          <InviteForm seats={seats} />
-        </Card>
-
-        <Card
-          title={L(`Členovia (${members.length})`, `Members (${members.length})`)}
-          description={
-            members.length
-              ? L(
-                  "Koľkokrát si kto tréning skúsil a ako sa mu darí. Klikni na člena pre celý priebeh. Nahrávky ani prepisy nevidíš.",
-                  "How many times each person tried the training and how they're doing. Click a member for the full history. You don't see recordings or transcripts.",
-                )
-              : undefined
-          }
-        >
-          {members.length > 0 ? (
-            <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Tile label={L("Aktívni za 7 dní", "Active in 7 days")} value={`${totals.active7} / ${totals.members}`} />
-              <Tile label={L("Pokusov spolu", "Attempts in total")} value={String(totals.attempts)} />
-              <Tile label={L("Tento mesiac", "This month")} value={String(totals.thisMonth)} />
-              <Tile label={L("Ešte nič nevyskúšali", "Haven't tried yet")} value={String(totals.neverTried)} />
-            </dl>
-          ) : null}
-          {members.length === 0 ? (
-            <p className="text-[14.5px] text-mute">{L("Zatiaľ nikto. Pozvi prvých kolegov vyššie.", "Nobody yet. Invite your first colleagues above.")}</p>
-          ) : (
-            <ul className="divide-y divide-line/60">
-              {members.map((m) => {
-                const sum = summaries.get(m.userId)!;
-                const trend = sum.trend === "up" ? " ↑" : sum.trend === "down" ? " ↓" : sum.trend === "flat" ? " →" : "";
-                return (
-                  <li key={m.userId} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <Link href={`/app/tim/clen/${m.userId}`} className="group min-w-0 flex-1">
-                      <p className="truncate font-medium text-paper group-hover:underline">{m.name || m.email}</p>
-                      <p className="truncate text-[13.5px] text-faint">
-                        {m.name && m.email ? `${m.email} · ` : ""}
-                        {L(`od ${formatDate(new Date(m.joinedAt))}`, `since ${formatDate(new Date(m.joinedAt))}`)}
-                      </p>
-                      <p className="mt-1 text-[13.5px] text-mute">
-                        {sum.attempts === 0
-                          ? L("Ešte nič nevyskúšal(a).", "Hasn't tried anything yet.")
-                          : [
-                              L(`${sum.attempts}× vyskúšal(a)`, `${sum.attempts} attempts`),
-                              L(`${sum.thisWeek} tento týždeň`, `${sum.thisWeek} this week`),
-                              sum.daysSince === 0 ? L("naposledy dnes", "last today") : L(`naposledy pred ${sum.daysSince} d`, `last ${sum.daysSince} d ago`),
-                              sum.content ? `${L("obsah", "content")} ${formatNumber(sum.content.last, 1)}/10${trend}` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                      </p>
-                    </Link>
-                    <ConfirmAction
-                      trigger={L("Odobrať", "Remove")}
-                      title={L(`Odobrať ${m.email ?? "člena"}?`, `Remove ${m.email ?? "this member"}?`)}
-                      description={L(
-                        "Účet aj tréningy mu ostanú, len mu prestaneš platiť tréning. Počet zaplatených účtov sa nezmení, uvoľnené miesto môžeš dať niekomu inému alebo znížiť počet účtov v Pláne tímu.",
-                        "They keep their account and sessions; you just stop paying for their training. Your paid accounts stay the same: invite someone else, or lower the number of accounts under Team plan.",
-                      )}
-                      confirmLabel={L("Odobrať", "Remove")}
-                      pendingLabel={L("Odoberám…", "Removing…")}
-                      action={removeMemberAction.bind(null, m.userId)}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-
-        {invites.length ? (
-          <Card title={L(`Čakajúce pozvánky (${invites.length})`, `Pending invitations (${invites.length})`)}>
-            <ul className="divide-y divide-line/60">
-              {invites.map((invite) => (
-                <li key={invite.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-paper">{invite.email}</p>
-                    <p className="text-[13.5px] text-faint">
-                      {invite.sent_at
-                        ? L(`odoslaná ${formatDate(new Date(invite.sent_at))}`, `sent ${formatDate(new Date(invite.sent_at))}`)
-                        : L("e-mail zatiaľ neodišiel", "email not sent yet")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-start gap-1">
-                    <ActionButton action={resendInviteAction.bind(null, invite.id)} label={L("Poslať znova", "Send again")} pendingLabel={L("Posielam…", "Sending…")} />
-                    <ConfirmAction
-                      trigger={L("Zrušiť", "Cancel")}
-                      title={L(`Zrušiť pozvánku pre ${invite.email}?`, `Cancel the invitation for ${invite.email}?`)}
-                      description={L("Odkaz v e-maile prestane fungovať.", "The link in the email will stop working.")}
-                      confirmLabel={L("Zrušiť pozvánku", "Cancel invitation")}
-                      pendingLabel={L("Ruším…", "Cancelling…")}
-                      action={cancelInviteAction.bind(null, invite.id)}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        ) : null}
+        </section>
 
         <Card title={L("Nastavenia tímu", "Team settings")}>
           <RenameTeamForm name={owned.name} />

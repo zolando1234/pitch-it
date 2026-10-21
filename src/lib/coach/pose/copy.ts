@@ -25,6 +25,7 @@ const RULES_EN: Record<string, Copy> = {
   "hands-on-hips": { title: "Hands on hips", tip: "Hands on hips look arrogant or defensive. Drop them and gesture in the power zone." },
   crossed: { title: "Arms crossed", tip: "Crossed arms put a barrier between you and the audience. Relax them and open up." },
   "face-touch": { title: "Touching your face", tip: "Touching your face, hair or neck shows nerves. Bring your hands back to the power zone." },
+  "frozen-long": { title: "Standing like a statue", tip: "You haven't moved for a long time. Raise your hands to the power zone and show what you mean: size, direction, numbers." },
   frozen: { title: "Standing like a statue", tip: "Let your hands talk too: show size, direction, numbers. A gesture should illustrate what you say." },
   "fig-leaf": { title: "Fig leaf", tip: "Hands clasped low in front of you is a defensive pose. Raise them to the power zone and open up." },
   pointing: { title: "Pointing your finger", tip: "A pointing finger feels accusing. Gesture with an open palm instead: an invitation, not a reproach." },

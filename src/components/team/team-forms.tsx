@@ -53,7 +53,7 @@ export function RenameTeamForm({ name }: { name: string }) {
   );
 }
 
-export function InviteForm({ seats }: { seats: number }) {
+export function InviteForm({ seats, compact = false }: { seats: number; compact?: boolean }) {
   const [state, action] = useActionState(inviteMembersAction, IDLE);
   const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -65,6 +65,27 @@ export function InviteForm({ seats }: { seats: number }) {
     formRef.current?.reset();
   }, [state, toast]);
 
+  if (compact) {
+    return (
+      <form ref={formRef} action={action} className="space-y-3" noValidate>
+        {state.status === "error" && state.message ? <Notice tone="error">{state.message}</Notice> : null}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Input
+            id={`${id}-emails`}
+            name="emails"
+            aria-label={en ? "Colleagues' emails" : "E-maily kolegov"}
+            placeholder={en ? "email@company.com, another@company.com" : "email@firma.sk, ďalší@firma.sk"}
+            error={state.fieldErrors?.emails}
+            className="flex-1"
+          />
+          <SubmitButton pendingLabel={en ? "Sending…" : "Posielam…"} disabled={seats <= 0}>
+            {en ? "Invite" : "Pozvať"}
+          </SubmitButton>
+        </div>
+        {state.fieldErrors?.emails ? <p className="text-[13px] text-coral">{state.fieldErrors.emails}</p> : null}
+      </form>
+    );
+  }
   return (
     <form ref={formRef} action={action} className="space-y-4" noValidate>
       {state.status === "error" && state.message ? <Notice tone="error">{state.message}</Notice> : null}

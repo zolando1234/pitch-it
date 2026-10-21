@@ -237,6 +237,20 @@ function Pill({ children }: { children: ReactNode }) {
   return <span className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur">{children}</span>;
 }
 
+/** Veľký odpočet vľavo hore (pri celej obrazovke): zostávajúci čas, posledných 10 s červeno. */
+function BigTimer({ live, paused, elapsedMs, durationMs }: { live: boolean; paused: boolean; elapsedMs: number; durationMs: number | null }) {
+  const left = durationMs !== null ? Math.max(0, durationMs - elapsedMs) : elapsedMs;
+  const ending = durationMs !== null && live && left <= 10_000;
+  return (
+    <div className="pointer-events-none absolute left-4 top-4 z-20 flex items-center gap-3 rounded-2xl bg-black/55 px-5 py-2 backdrop-blur md:left-6 md:top-6">
+      <span className={`h-4 w-4 rounded-full ${live ? "animate-pulse bg-danger" : paused ? "bg-danger" : "bg-faint"}`} />
+      <span className={`font-mono text-4xl font-black tabular-nums leading-none sm:text-6xl md:text-8xl ${ending ? "text-danger" : "text-white"}`}>
+        {fmtClock(durationMs !== null ? Math.ceil(left / 1000) * 1000 : left)}
+      </span>
+    </div>
+  );
+}
+
 export function PitchStudio({
   mode,
   title,
@@ -348,7 +362,8 @@ export function PitchStudio({
   };
 
   // celá obrazovka: iba záber s trénerom a tlačidlo Zastaviť
-  const [full, setFull] = useState(startFull);
+  // predvolene záber cez celé okno: rečník sa má vidieť čo najlepšie, nič okolo kamery
+  const [full, setFull] = useState(startFull || !quiet);
   const enterFull = () => {
     setFull(true);
     // kde prehliadač nevie Fullscreen API (iPhone), stačí záber cez celé okno
@@ -359,12 +374,8 @@ export function PitchStudio({
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
   };
   useEffect(() => {
-    const onChange = () => {
-      if (!document.fullscreenElement) setFull(false);
-    };
-    document.addEventListener("fullscreenchange", onChange);
+    // po odchode z režimu celej obrazovky prehliadača (Esc) ostáva záber cez celé okno
     return () => {
-      document.removeEventListener("fullscreenchange", onChange);
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     };
   }, []);
@@ -574,11 +585,20 @@ export function PitchStudio({
                   onReady={session.onReady}
                   onError={session.onStageError}
                   file={file}
+                  fill={full}
                   onSourceEnded={() => void session.finish()}
                 />
               </div>
 
-              <div className="absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-3">
+              {full ? (
+                <BigTimer
+                  live={phase === "live"}
+                  paused={phase === "paused"}
+                  elapsedMs={elapsedMs}
+                  durationMs={durationMs}
+                />
+              ) : null}
+              <div className={`absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-3 ${full ? "hidden" : ""}`}>
                 <Pill>
                   <span className={`h-2 w-2 rounded-full ${phase === "live" ? "animate-pulse bg-danger" : phase === "paused" ? "bg-danger" : "bg-faint"}`} />
                   <span className="uppercase tracking-wider">{status}</span>
@@ -636,8 +656,13 @@ export function PitchStudio({
               {!quiet && (phase === "live" || phase === "paused") ? (
                 <div
                   ref={bubbleRef}
-                  className="absolute z-20 w-[92%] max-w-[900px] -translate-x-1/2 -translate-y-full transition-[left,top] duration-100 ease-out"
-                  style={anchor ? { left: anchor.x, top: anchor.y } : { left: "50%", top: "60%" }}
+                  className={
+                    full
+                      ? "absolute bottom-28 left-1/2 z-20 w-[92%] max-w-[760px] -translate-x-1/2"
+                      : "absolute z-20 w-[92%] max-w-[900px] -translate-x-1/2 -translate-y-full transition-[left,top] duration-100 ease-out"
+                  }
+                  // pri celej obrazovke je bublina dole, aby nezakrývala tvár
+                  style={full ? undefined : anchor ? { left: anchor.x, top: anchor.y } : { left: "50%", top: "60%" }}
                 >
                   <FeedbackBubble fb={fb} />
                 </div>
@@ -682,7 +707,7 @@ export function PitchStudio({
                 </div>
               ) : null}
 
-              {!quiet && (phase === "live" || phase === "paused") ? (
+              {!quiet && !full && (phase === "live" || phase === "paused") ? (
                 <div
                   className={`absolute inset-x-3 z-20 rounded-xl bg-black/75 px-4 py-3 text-sm text-white backdrop-blur ${full ? "bottom-24 mx-auto max-w-3xl" : "bottom-3"}`}
                   aria-live="off"

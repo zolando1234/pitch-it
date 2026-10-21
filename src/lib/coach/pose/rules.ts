@@ -19,6 +19,12 @@ export type Rule = {
    * count against mistake-free time; above 1 = hurts more than a typical warning.
    */
   scoreWeight?: number;
+  /**
+   * Trend namiesto okamžitej chyby: pravidlo sa ozve, až keď platilo aspoň `share` času za posledných `ms`
+   * (a platí aj teraz). Profesionáli striedajú gestá s pokojom: rečník s ~25 gestami/min (najsledovanejšie
+   * TED prednášky) má ruky v pokoji zhruba 30–50 % času, preto krátka pauza nie je chyba.
+   */
+  window?: { ms: number; share: number };
   test: (m: Metrics) => boolean;
 };
 
@@ -185,12 +191,30 @@ export const RULES: Rule[] = [
     test: (m) => m.faceTouch,
   },
   {
-    id: "frozen",
+    // dlhá socha: bez akéhokoľvek pohybu ~10 s v kuse je už vážna chyba (krátka pauza je v poriadku)
+    id: "frozen-long",
     group: "gestures",
     severity: "bad",
     title: "Stojíš ako socha",
+    tip: "Už dlho sa nehýbeš. Zdvihni ruky do power zóny a ukáž, o čom hovoríš: veľkosť, smer, počet.",
+    activateMs: 10000,
+    test: (m) =>
+      m.visibleWrists > 0 &&
+      m.activity3s < CONFIG.frozenSpeed &&
+      !m.walking &&
+      !m.handsOnHips &&
+      !m.figLeaf &&
+      !m.clasped &&
+      !m.crossed,
+  },
+  {
+    id: "frozen",
+    group: "gestures",
+    severity: "warn",
+    title: "Stojíš ako socha",
     tip: "Nech hovoria aj ruky: ukáž veľkosť, smer, počet. Gesto má ilustrovať, čo hovoríš.",
-    activateMs: 2500,
+    activateMs: 1500,
+    window: { ms: 20000, share: 0.6 },
     // a specific pose (hands on hips, clasped…) takes precedence over the generic "statue"
     test: (m) =>
       m.visibleWrists > 0 &&
@@ -207,7 +231,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Figový list",
     tip: "Ruky zopnuté nízko pred telom sú obranná póza. Zdvihni ich do power zóny a otvor sa.",
-    activateMs: 2000,
+    activateMs: 1500,
+    window: { ms: 20000, share: 0.6 },
     test: (m) => m.figLeaf,
   },
   {
@@ -244,6 +269,7 @@ export const RULES: Rule[] = [
     title: "Ukazuješ prstom",
     tip: "Ukazovák pôsobí obviňujúco. Gestikuluj radšej otvorenou dlaňou: pozvanie, nie výčitka.",
     activateMs: 800,
+    window: { ms: 20000, share: 0.25 },
     test: (m) => m.pointing,
   },
   {
@@ -253,6 +279,7 @@ export const RULES: Rule[] = [
     title: "Zovreté päste",
     tip: "Päste prezrádzajú napätie. Uvoľni prsty a gestikuluj otvorenými dlaňami.",
     activateMs: 2000,
+    window: { ms: 15000, share: 0.4 },
     test: (m) => m.fists,
   },
   {
@@ -271,6 +298,7 @@ export const RULES: Rule[] = [
     title: "Ukáž dlane",
     tip: "Publikum vidí len chrbty tvojich rúk. Otoč dlane k nemu, otvorené dlane budujú dôveru.",
     activateMs: 1000,
+    window: { ms: 30000, share: 0.5 },
     test: (m) => m.palmsAway,
   },
   {
@@ -280,7 +308,8 @@ export const RULES: Rule[] = [
     title: "Dlane dole",
     scoreWeight: 0.5,
     tip: "Dlane otočené dole pôsobia ako príkaz alebo tlmenie. Keď niečo ponúkaš alebo pozývaš, otoč dlane hore alebo k publiku.",
-    activateMs: 3000,
+    activateMs: 1500,
+    window: { ms: 30000, share: 0.5 },
     test: (m) => m.palmsDown,
   },
   {
@@ -309,7 +338,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Ruky visia dole",
     tip: "Zdvihni ruky do power zóny, medzi pás a hrudník. Gestá tam pôsobia sebaisto.",
-    activateMs: 2000,
+    activateMs: 1000,
+    window: { ms: 30000, share: 0.6 },
     test: (m) => m.handsLow && !m.walking && !m.figLeaf,
   },
   {
@@ -319,6 +349,7 @@ export const RULES: Rule[] = [
     title: "Nepokojné ruky",
     tip: "Drobné trhavé pohyby rúk prezrádzajú nervozitu. Urob jedno pokojné, zámerné gesto a nechaj ho doznieť.",
     activateMs: 1000,
+    window: { ms: 15000, share: 0.4 },
     test: (m) => m.fidget,
   },
   {
@@ -327,7 +358,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Zopnuté ruky",
     tip: "Ruky zopnuté pred sebou ťa uzatvárajú. Rozdeľ ich a nechaj ich hovoriť.",
-    activateMs: 2500,
+    activateMs: 1500,
+    window: { ms: 20000, share: 0.6 },
     test: (m) => m.clasped,
   },
   {
@@ -336,7 +368,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Uzavreté gestá",
     tip: "Ruky máš príliš blízko seba. Rozšír gestá na šírku ramien a dlane otoč k publiku.",
-    activateMs: 3000,
+    activateMs: 1500,
+    window: { ms: 30000, share: 0.5 },
     test: (m) => m.spread !== null && m.spread < CONFIG.closedSpread && m.wristsInZone > 0,
   },
   {
@@ -345,7 +378,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Lakte prilepené k telu",
     tip: "Gestá len predlaktím pôsobia stiesnene. Uvoľni lakte a gestikuluj celou rukou.",
-    activateMs: 4000,
+    activateMs: 1500,
+    window: { ms: 30000, share: 0.5 },
     test: (m) => m.tRex,
   },
   {
@@ -355,6 +389,7 @@ export const RULES: Rule[] = [
     title: "Priveľa pohybu",
     tip: "Menej je viac. Gestami zdôrazni kľúčové myšlienky a medzi nimi nechaj ruky odpočívať v power zóne.",
     activateMs: 2000,
+    window: { ms: 20000, share: 0.6 },
     test: (m) => m.activity5s > CONFIG.overGestureSpeed * (m.micSide ? CONFIG.overGestureOneHandFactor : 1),
   },
   {
@@ -364,6 +399,7 @@ export const RULES: Rule[] = [
     title: "Podrž gesto",
     tip: "Ruky sa nikdy nezastavia. Keď povieš pointu, nechaj gesto na sekundu stáť.",
     activateMs: 1000,
+    window: { ms: 30000, share: 0.5 },
     test: (m) => m.noHold,
   },
   {
@@ -373,6 +409,7 @@ export const RULES: Rule[] = [
     title: "Stále to isté gesto",
     tip: "Opakuješ stále jeden pohyb. Striedaj gestá: ukáž veľkosť, smer, počet alebo kontrast.",
     activateMs: 1500,
+    window: { ms: 30000, share: 0.5 },
     test: (m) => m.repetitive,
   },
   {
@@ -381,7 +418,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Gestikuluješ jednou rukou",
     tip: "Druhá ruka len visí. Použi aj ju, napríklad keď porovnávaš dve veci.",
-    activateMs: 8000,
+    activateMs: 2000,
+    window: { ms: 30000, share: 0.7 },
     test: (m) => m.oneHand,
   },
   {
@@ -390,7 +428,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Ruky nad hlavou",
     tip: "Gestá nad hlavou si nechaj na veľký dôraz. Väčšinu času drž ruky medzi pásom a hrudníkom.",
-    activateMs: 2500,
+    activateMs: 1500,
+    window: { ms: 20000, share: 0.5 },
     test: (m) => m.handsHigh,
   },
 
@@ -401,7 +440,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Pozeráš do zeme",
     tip: "Zdvihni bradu a hľadaj očný kontakt s publikom.",
-    activateMs: 2000,
+    activateMs: 1000,
+    window: { ms: 20000, share: 0.4 },
     scoreWeight: 1.5,
     test: (m) => m.headDown,
   },
@@ -440,7 +480,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Stojíš bokom",
     tip: "Natoč ramená k publiku. Telo smeruje tam, kam smeruje tvoja pozornosť.",
-    activateMs: 2500,
+    activateMs: 1500,
+    window: { ms: 20000, share: 0.6 },
     test: (m) => m.turned && !m.walking,
   },
   {
@@ -449,7 +490,8 @@ export const RULES: Rule[] = [
     severity: "warn",
     title: "Nakláňaš sa",
     tip: "Rozlož váhu rovnomerne na obe nohy a vyrovnaj ramená.",
-    activateMs: 3000,
+    activateMs: 1500,
+    window: { ms: 20000, share: 0.6 },
     test: (m) => m.shoulderTilt > CONFIG.shoulderTiltDeg,
   },
 
@@ -481,6 +523,7 @@ export const RULES: Rule[] = [
     title: "Prešľapuješ",
     tip: "Prešľapovanie z nohy na nohu rozptyľuje. Postav sa pevne a keď sa chceš pohnúť, urob zámerný krok.",
     activateMs: 1500,
+    window: { ms: 20000, share: 0.4 },
     test: (m) => m.sway,
   },
   {

@@ -59,10 +59,13 @@ export const speechAnalysisSchema = z.object({
     .max(MAX_FLAGGED_SENTENCES),
   advice: z.string().min(1).max(300),
 });
-export type SpeechAnalysis = z.infer<typeof speechAnalysisSchema>;
+/** `materialsMatch`: zhoda prejavu s materiálmi tímu (0–100); len pri členoch tímu s nahratými materiálmi. */
+export type SpeechAnalysis = z.infer<typeof speechAnalysisSchema> & { materialsMatch?: number };
 
 /** Prvé volanie: prehľad (téma, osnova, zrozumiteľnosť, skóre, body osnovy, zbytočné časti, rada). */
 export const speechOverviewSchema = speechAnalysisSchema.omit({ sentences: true });
+/** Prehľad pre člena tímu s materiálmi: navyše zhoda s materiálmi. */
+export const speechOverviewMatchSchema = speechOverviewSchema.extend({ materialsMatch: z.number().int().min(0).max(100) });
 /** Druhé volanie: iba označené vety. */
 export const sentenceFlagsSchema = speechAnalysisSchema.pick({ sentences: true });
 
@@ -189,6 +192,8 @@ export function buildSpeechPrompt(input: {
   feedbackLocale: "sk" | "en";
   outline: PitchOutline | null;
   context: string | null;
+  /** materiály tímu (výťah faktov) a kritériá; len pri `overview` a členoch tímu */
+  team?: { facts: string; criteria: string } | null;
   /** skutočné stretnutie: celý rozhovor s klientom ako kontext (hodnotia sa len vety rečníka) */
   dialog?: string | null;
 }): string {
@@ -205,6 +210,9 @@ export function buildSpeechPrompt(input: {
     input.outline?.topic ? `Téma (záväzné zadanie):\n"""${input.outline.topic}"""` : "Téma nie je zadaná, odvoď ju z prejavu a podkladov.",
     overview ? (points.length ? `Osnova (index: bod):\n${points.map((p, i) => `${i}: ${p}`).join("\n")}` : "Osnova nie je zadaná: points vráť prázdne.") : null,
     overview && input.context ? `Podklady o firme a prezentácii (fakty, na porovnanie):\n"""${input.context}"""` : null,
+    overview && input.team
+      ? `Materiály tímu (záväzné podklady, podľa nich sa prejav hodnotí):\n"""${input.team.facts}"""\nHodnotí sa:\n${input.team.criteria}\nmaterialsMatch = zhoda prejavu s materiálmi tímu v percentách (0–100) podľa vybraných kritérií; 100 = prejav je vo všetkom v súlade s materiálmi.`
+      : null,
     dialog,
     overview
       ? `Prepis:\n${input.sentences.join(" ")}`

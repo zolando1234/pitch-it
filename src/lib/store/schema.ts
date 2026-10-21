@@ -84,6 +84,21 @@ export const TABLES: Record<string, TableSpec> = {
     updatedAt: true,
     refs: [user("owner_id")],
   },
+  /** Materiály tímu (prezentácie, produktové listy, skripty) a čo sa pri prejavoch členov hodnotí. Spravuje vlastník. */
+  team_materials: {
+    pk: ["team_id"],
+    defaults: () => ({ documents: [], summary: "", summary_of: [], criteria: ["topic", "points", "facts"] }),
+    updatedAt: true,
+    refs: [{ column: "team_id", table: "teams", onDelete: "cascade" }],
+  },
+  /** Voľba človeka v tíme: hodnotiť prejavy podľa materiálov tímu (predvolene áno) alebo len podľa vlastných podkladov. */
+  team_prefs: {
+    pk: ["user_id"],
+    defaults: () => ({ use_materials: true }),
+    updatedAt: true,
+    refs: [user()],
+    read: own("user_id"),
+  },
   /** Člen tímu; používateľ môže byť najviac v jednom tíme. */
   team_members: {
     pk: ["team_id", "user_id"],
@@ -282,6 +297,11 @@ export const TABLES: Record<string, TableSpec> = {
     updatedAt: true,
     refs: [user()],
     read: own("user_id"),
+  },
+  /** Denník nákladov na AI (tokeny Claude, sekundy prepisu) pre administráciu. */
+  ai_usage: {
+    pk: ["id"],
+    defaults: uuid,
   },
   usage_events: {
     pk: ["id"],

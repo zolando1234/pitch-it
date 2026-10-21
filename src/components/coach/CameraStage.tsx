@@ -107,12 +107,34 @@ type Props = {
   file?: File | null;
   /** nahraté video dohralo do konca */
   onSourceEnded?: () => void;
+  /**
+   * záber cez celú plochu (object-cover) a jasné video: rečník sa má dobre vidieť,
+   * silueta je len jemná a kostra s popiskami ostáva
+   */
+  fill?: boolean;
   ref?: Ref<StageApi>;
 };
 
 const SNAPSHOT_WIDTH = 360;
+
+/**
+ * Rozmer záberu z kamery. Pri nahrávaní cez celú plochu má mať záber tvar obrazovky (telefón na výšku
+ * 9:19, na šírku 19:9, počítač 16:9), aby sa rečník nezrezal a videl sa celý; inak štandardných 16:9.
+ */
+export function cameraSize(fill: boolean): MediaTrackConstraints {
+  if (!fill || typeof window === "undefined") return { width: { ideal: 1280 }, height: { ideal: 720 } };
+  const portrait = window.innerHeight > window.innerWidth;
+  const long = 1280;
+  const short = 720;
+  const aspect = Math.max(0.4, Math.min(2.4, window.innerWidth / Math.max(1, window.innerHeight)));
+  return portrait
+    ? { width: { ideal: short }, height: { ideal: long }, aspectRatio: { ideal: aspect } }
+    : { width: { ideal: long }, height: { ideal: short }, aspectRatio: { ideal: aspect } };
+}
 /** stlmenie videa, aby vynikla silueta (CSS filter beží na kompozítore, je lacný) */
 const VIDEO_DIM = 0.38;
+/** pri zábere cez celú obrazovku chceme rečníka vidieť takmer naplno */
+const VIDEO_DIM_FILL = 0.9;
 
 type PoseVariant = "full" | "lite" | "heavy";
 /** fast = ľahký model, balanced = štandard, precise = najpresnejší (ťažký) model */
@@ -157,7 +179,11 @@ export function preloadCoachModels(quality: TrackingQuality) {
   for (const f of ["vision_wasm_internal.js", "vision_wasm_internal.wasm"]) void fetch(`${WASM_BASE}/${f}`).catch(() => {});
 }
 
-async function createModels(variant: PoseVariant): Promise<Models> {
+/** telefón (dotykový displej, úzka obrazovka) */
+const isPhone = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
+
+/** `masks`: silueta je len ozdoba, na telefóne ju nepočítame (šetrí GPU a pamäť), kostra a pokyny ostávajú */
+async function createModels(variant: PoseVariant, masks = true): Promise<Models> {
   const [{ FilesetResolver, PoseLandmarker, HandLandmarker }, poseBuf, handsBuf] = await Promise.all([
     loadVision(),
     loadAsset(poseModel(variant)),
@@ -169,7 +195,7 @@ async function createModels(variant: PoseVariant): Promise<Models> {
       baseOptions: { modelAssetBuffer: poseBuf, delegate },
       runningMode: "VIDEO",
       numPoses: 1,
-      outputSegmentationMasks: true,
+      outputSegmentationMasks: masks,
       // nižší prah sledovania = model sa drží človeka aj pri rýchlom pohybe a zriedkavejšie ho "stratí"
       minPoseDetectionConfidence: 0.5,
       minPosePresenceConfidence: 0.4,
@@ -228,8 +254,13 @@ export default function CameraStage({
   ruleFilter = null,
   file = null,
   onSourceEnded,
+  fill = false,
   ref,
 }: Props) {
+  const fillRef = useRef(fill);
+  useEffect(() => {
+    fillRef.current = fill;
+  }, [fill]);
   // súbor sa počas jedného štúdia nemení; video zo súboru sa nezrkadlí (kamera áno, ako v zrkadle)
   const [source] = useState(file);
   const locale = useLocale();
@@ -372,10 +403,10 @@ export default function CameraStage({
     headAnchor(m) {
       const canvas = canvasRef.current;
       if (!canvas || !canvas.width) return null;
-      // plátno je zobrazené cez object-contain a pri kamere zrkadlovo
+      // plátno je zobrazené cez object-contain (alebo object-cover pri celej ploche) a pri kamere zrkadlovo
       const cw = canvas.clientWidth;
       const ch = canvas.clientHeight;
-      const s = Math.min(cw / canvas.width, ch / canvas.height);
+      const s = (fillRef.current ? Math.max : Math.min)(cw / canvas.width, ch / canvas.height);
       const ox = (cw - canvas.width * s) / 2;
       const oy = (ch - canvas.height * s) / 2;
       return {
@@ -415,6 +446,7 @@ export default function CameraStage({
     const t = () => TEXT[localeRef.current];
     engineRef.current = engine;
     const renderer = new StageRenderer();
+    renderer.subtle = () => fillRef.current;
     renderer.mirrored = !source;
     renderer.lang = localeRef.current === "en" ? "en" : "sk";
     const detectCanvas = document.createElement("canvas");
@@ -439,7 +471,7 @@ export default function CameraStage({
 
     /** Nahraté video: načíta súbor a čaká na prvý snímok; prehrávanie spustí až playSource(). */
     async function startFromFile(source: File) {
-      const modelsReady = createModels(variant);
+      const modelsReady = createModels(variant, !isPhone());
       modelsReady.catch(() => {});
       const video = videoRef.current!;
       const url = URL.createObjectURL(source);
@@ -488,7 +520,7 @@ export default function CameraStage({
         return;
       }
       // modely sa načítavajú súbežne so zapínaním kamery
-      const modelsReady = createModels(variant);
+      const modelsReady = createModels(variant, !isPhone());
       modelsReady.catch(() => {});
       const dropModels = () =>
         void modelsReady.then((m) => {
@@ -497,7 +529,7 @@ export default function CameraStage({
         }, () => {});
       try {
         stream = streamRef.current = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: "user" },
+          video: { ...cameraSize(fillRef.current), frameRate: { ideal: 30 }, facingMode: "user" },
           audio: false,
         });
       } catch (e) {
@@ -552,7 +584,7 @@ export default function CameraStage({
         return;
       }
       try {
-        const m = await createModels(variant);
+        const m = await createModels(variant, !isPhone());
         if (cancelled) {
           m.pose.close();
           m.hands?.close();
@@ -740,16 +772,19 @@ export default function CameraStage({
       {/* živé video ide priamo na obrazovku bez čakania na model, zrkadlovo */}
       <video
         ref={videoRef}
-        className={`absolute inset-0 h-full w-full object-contain ${mirrored ? "-scale-x-100" : ""}`}
-        style={{ filter: `brightness(${VIDEO_DIM}) saturate(0.5)` }}
+        className={`absolute inset-0 h-full w-full ${fill ? "object-cover" : "object-contain"} ${mirrored ? "-scale-x-100" : ""}`}
+        style={{ filter: fill ? `brightness(${VIDEO_DIM_FILL})` : `brightness(${VIDEO_DIM}) saturate(0.5)` }}
         playsInline
         muted
       />
       {/* priehľadná vrstva so siluetou, kostrou a power zónou */}
-      <canvas ref={canvasRef} className={`absolute inset-0 h-full w-full object-contain ${mirrored ? "-scale-x-100" : ""}`} />
+      <canvas
+        ref={canvasRef}
+        className={`absolute inset-0 h-full w-full ${fill ? "object-cover" : "object-contain"} ${mirrored ? "-scale-x-100" : ""}`}
+      />
       <div
         ref={hudRef}
-        className="pointer-events-none absolute right-3 top-3 rounded bg-black/60 px-2 py-1 font-mono text-[11px] text-white/70"
+        className={`pointer-events-none absolute right-3 top-3 rounded bg-black/60 px-2 py-1 font-mono text-[11px] text-white/70 ${fill ? "hidden" : ""}`}
       />
     </div>
   );

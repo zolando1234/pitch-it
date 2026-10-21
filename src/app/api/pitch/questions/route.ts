@@ -5,7 +5,7 @@ import { getPitchContext } from "@/lib/db/pitch-context";
 import { apiError, apiOk, handleRouteError, parseJson, rateLimited, requireApiUser } from "@/lib/http/route";
 import { contextForPrompt } from "@/lib/pitch/context";
 import { LANGUAGE_INFO, PITCH_LANGUAGES } from "@/lib/pitch/language";
-import { buildQuestionsPrompt, CLIENT_QUESTIONS_SYSTEM, QA_MAX_QUESTIONS, QUESTIONS_SYSTEM, questionsSchema } from "@/lib/pitch/qa";
+import { buildQuestionsPrompt, CLIENT_QUESTIONS_SYSTEM, QA_MAX_QUESTIONS, qaMaxQuestionsFor, QUESTIONS_SYSTEM, questionsSchema } from "@/lib/pitch/qa";
 import { MAX_SEGMENTS, mergeSegments } from "@/lib/pitch/segment-merge";
 import { loadSegments } from "@/lib/pitch/segments";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
@@ -14,6 +14,8 @@ export const maxDuration = 60;
 
 const bodySchema = z.object({
   count: z.number().int().min(1).max(QA_MAX_QUESTIONS),
+  /** dĺžka prejavu; určuje, koľko otázok Q&A sa smie položiť (otázky klienta majú vlastný plán) */
+  durationMs: z.number().int().min(0).max(4 * 60 * 60 * 1000).optional(),
   language: z.enum(PITCH_LANGUAGES),
   draftId: z.uuid().nullable(),
   segments: z.number().int().min(0).max(MAX_SEGMENTS),
@@ -36,7 +38,11 @@ export async function POST(request: Request) {
   if (!llm) return apiError(503, "not_configured", "Otázky momentálne nevieme pripraviť.");
   try {
     const [context, segments] = await Promise.all([getPitchContext(user.id), body.draftId ? loadSegments(user.id, body.draftId, body.segments) : []]);
-    const transcript = segments.length ? mergeSegments(segments).text : null;
+    const merged = segments.length ? mergeSegments(segments) : null;
+    const transcript = merged?.text ?? null;
+    // dĺžku od klienta overí prepis: koniec poslednej vety + minúta rezervy na ticho na konci
+    const spokenMs = merged?.words.length ? (merged.words[merged.words.length - 1].end + 60) * 1000 : Infinity;
+    const count = body.mode === "client" ? body.count : Math.min(body.count, qaMaxQuestionsFor(Math.min(body.durationMs ?? 0, spokenMs)));
     const result = await llm.generateStructured({
       purpose: "qa_questions",
       system: body.mode === "client" ? CLIENT_QUESTIONS_SYSTEM : QUESTIONS_SYSTEM,
@@ -44,7 +50,7 @@ export async function POST(request: Request) {
         {
           role: "user",
           content: buildQuestionsPrompt({
-            count: body.count,
+            count,
             language: LANGUAGE_INFO[body.language].english,
             topic: body.topic,
             outline: body.outline,
@@ -61,7 +67,7 @@ export async function POST(request: Request) {
       maxTokens: 1_000,
       speed: "interactive",
     });
-    return apiOk({ questions: result.data.questions.slice(0, body.count) });
+    return apiOk({ questions: result.data.questions.slice(0, count) });
   } catch (error) {
     if (error instanceof LlmError) {
       console.error("[qa] otázky zlyhali:", error.code);

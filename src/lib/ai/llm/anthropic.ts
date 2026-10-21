@@ -5,6 +5,7 @@ import { z } from "zod";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { getAnthropicConfig, type AnthropicConfig } from "@/config/server-env";
 import { fitToSchema } from "@/lib/ai/llm/fit-schema";
+import { logLlmUsage } from "@/lib/ai/usage-log";
 import { LlmError, type LlmProvider, type StructuredRequest, type StructuredResult } from "@/lib/ai/llm/types";
 
 /*
@@ -31,7 +32,8 @@ export class AnthropicLlmProvider implements LlmProvider {
   }
 
   async generateStructured<T>(request: StructuredRequest<T>): Promise<StructuredResult<T>> {
-    const model = request.speed === "interactive" ? this.config.fastModel : this.config.model;
+    const simple = request.tier === "simple";
+    const model = simple ? this.config.simpleModel : request.speed === "interactive" ? this.config.fastModel : this.config.model;
     // schéma pre API (bez nepodporovaných obmedzení) a pôvodná schéma s limitmi na opravu výstupu
     const apiSchema = betaZodOutputFormat(request.schema).schema;
     const fullSchema = z.toJSONSchema(request.schema, { unrepresentable: "any" }) as Record<string, unknown>;
@@ -61,13 +63,17 @@ export class AnthropicLlmProvider implements LlmProvider {
         const response = await this.client.beta.messages.create({
           model,
           max_tokens: request.maxTokens ?? 16_000,
-          betas: [FALLBACK_BETA],
-          fallbacks: "default",
+          // Haiku server-side fallback nepodporuje; odmietnutie rieši opakovanie nižšie
+          ...(simple ? {} : { betas: [FALLBACK_BETA], fallbacks: "default" as const }),
           system: request.system,
           messages,
           output_config: { effort: request.effort ?? "medium", format: { type: "json_schema", schema: apiSchema } },
         });
 
+        // každé volanie sa platí, aj neplatná odpoveď: zapíšeme ho do denníka nákladov
+        void logLlmUsage({ purpose: request.purpose, model: response.model, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens });
+
+        if (response.stop_reason === "refusal" && simple) return this.generateStructured({ ...request, tier: "default" });
         if (response.stop_reason === "refusal") throw new LlmError("refusal", "Model požiadavku odmietol.");
         if (response.stop_reason === "max_tokens") throw new LlmError("invalid_output", "Odpoveď modelu bola príliš dlhá a skrátila sa.");
 

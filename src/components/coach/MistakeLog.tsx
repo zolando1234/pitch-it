@@ -119,7 +119,7 @@ export default function MistakeLog({
               className="scroll-mt-6 overflow-hidden rounded-2xl border-2 bg-ink target:ring-4 target:ring-white"
               style={{ borderColor: severityColor(m.id) }}
             >
-              <div className="relative aspect-video bg-panel">
+              <div className="relative aspect-video bg-black">
                 {videoUrl ? (
                   <MistakeClip
                     src={videoUrl}
@@ -130,7 +130,7 @@ export default function MistakeLog({
                   />
                 ) : m.snapshot ? (
                   // eslint-disable-next-line @next/next/no-img-element -- lokálny data URL z kamery
-                  <img src={m.snapshot} alt={`${en ? "Mistake moment" : "Moment chyby"}: ${rule?.title}`} className="h-full w-full object-cover" />
+                  <img src={m.snapshot} alt={`${en ? "Mistake moment" : "Moment chyby"}: ${rule?.title}`} className="h-full w-full object-contain" />
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm text-faint">{en ? "no photo" : "bez fotky"}</div>
                 )}

@@ -56,7 +56,7 @@ export default function MistakeClip({ src, snapshot, startMs, endMs, alt }: Prop
   };
 
   return (
-    <button onClick={play} className="group relative block aspect-video w-full overflow-hidden bg-panel" aria-label={alt}>
+    <button onClick={play} className="group relative block aspect-video w-full overflow-hidden bg-black" aria-label={alt}>
       {/* nahrávka je nezrkadlená, zobrazíme ju zrkadlovo ako počas tréningu */}
       <video
         ref={ref}
@@ -65,12 +65,12 @@ export default function MistakeClip({ src, snapshot, startMs, endMs, alt }: Prop
         muted
         playsInline
         onTimeUpdate={onTime}
-        className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
+        className="absolute inset-0 h-full w-full -scale-x-100 object-contain"
       />
       {state !== "playing" &&
         (snapshot ? (
           // eslint-disable-next-line @next/next/no-img-element -- lokálny data URL z kamery
-          <img src={snapshot} alt={alt} className="absolute inset-0 h-full w-full object-cover" />
+          <img src={snapshot} alt={alt} className="absolute inset-0 h-full w-full object-contain" />
         ) : (
           <div className="absolute inset-0 bg-panel" />
         ))}

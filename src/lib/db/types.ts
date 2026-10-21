@@ -300,6 +300,8 @@ export type PitchAttemptRow = {
   /** Tvar `ContentScore` (src/lib/pitch/content.ts). */
   content: Record<string, unknown> | null;
   content_score: number | null;
+  /** zhoda prejavu s materiálmi tímu 0–100 (len členovia tímu s materiálmi) */
+  materials_match?: number | null;
   /** Tvar `BodySummary` (src/lib/pitch/body.ts). */
   body: Record<string, unknown> | null;
   /** Tvar `OutlineResult` (src/lib/pitch/outline.ts): téma, osnova a zhoda s pitchom. */

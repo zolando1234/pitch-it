@@ -23,8 +23,21 @@ const SCORE_TAU_MS = 4000;
 const HIGHLIGHT_COOLDOWN_MS = 6000;
 const HIGHLIGHT_SHOW_MS = 3500;
 const HIGHLIGHT_BONUS = 6;
+/** vyriešený trend sa znova ozve najskôr po tomto čase, nech tréner neotravuje stále tou istou radou */
+const TREND_COOLDOWN_MS = 30000;
+/** upozornenie (žlté) svieti v kuse najviac takto dlho, potom sa na chvíľu stiahne (do skóre sa ráta ďalej) */
+const MAX_NAG_MS = 7000;
+const NAG_SNOOZE_MS = 30000;
 
-type RuleTrack = { since: number | null; clearSince: number | null; active: boolean };
+type RuleTrack = {
+  since: number | null;
+  clearSince: number | null;
+  active: boolean;
+  /** trendy: kedy pravidlo platilo (úseky snímok) za posledné okno */
+  hist?: { t: number; dt: number; on: boolean }[];
+  onMs?: number;
+  cooldownUntil?: number;
+};
 
 /**
  * Premieňa surové pravidlá na stabilný feedback: pravidlo sa aktivuje až keď
@@ -35,6 +48,8 @@ export class FeedbackEngine {
   private tracks = new Map<string, RuleTrack>();
   private shownId: string | null = null;
   private shownAt = 0;
+  /** kedy sa ktoré upozornenie môže znova ukázať po stiahnutí */
+  private snoozedUntil = new Map<string, number>();
   private praiseIdx = 0;
   private praiseAt = 0;
   private score = 70;
@@ -57,6 +72,7 @@ export class FeedbackEngine {
 
   reset() {
     this.tracks.clear();
+    this.snoozedUntil.clear();
     this.highlightAt.clear();
     this.shownHighlight = null;
     this.shownId = null;
@@ -76,21 +92,39 @@ export class FeedbackEngine {
   }
 
   update(m: Metrics, t: number): FeedbackState {
+    const frameDt = this.lastT ? Math.min(t - this.lastT, 200) : 0;
     for (const rule of RULES) {
       const tr = this.tracks.get(rule.id) ?? { since: null, clearSince: null, active: false };
       if (this.ruleFilter && !this.ruleFilter(rule.id)) {
         this.tracks.set(rule.id, { since: null, clearSince: null, active: false });
         continue;
       }
-      if (rule.test(m)) {
+      const on = rule.test(m);
+      // trend: podiel času, keď pravidlo platilo, za posledné okno
+      let trendOk = true;
+      if (rule.window) {
+        tr.hist ??= [];
+        tr.onMs ??= 0;
+        tr.hist.push({ t, dt: frameDt, on });
+        if (on) tr.onMs += frameDt;
+        while (tr.hist.length && t - tr.hist[0].t > rule.window.ms) {
+          const old = tr.hist.shift()!;
+          if (old.on) tr.onMs -= old.dt;
+        }
+        trendOk = tr.onMs >= rule.window.share * rule.window.ms && t >= (tr.cooldownUntil ?? 0);
+      }
+      if (on && trendOk) {
         tr.clearSince = null;
         tr.since ??= t;
         if (!tr.active && t - tr.since >= rule.activateMs) tr.active = true;
       } else {
-        tr.since = null;
+        if (!on) tr.since = null;
         if (tr.active) {
           tr.clearSince ??= t;
-          if (t - tr.clearSince >= DEACTIVATE_MS) tr.active = false;
+          if (t - tr.clearSince >= DEACTIVATE_MS) {
+            tr.active = false;
+            if (rule.window) tr.cooldownUntil = t + TREND_COOLDOWN_MS;
+          }
         }
       }
       this.tracks.set(rule.id, tr);
@@ -100,7 +134,7 @@ export class FeedbackEngine {
     const top = this.pick(active, t);
 
     // Skóre: okamžitá hodnota vyhladená exponenciálne
-    const dt = this.lastT ? Math.min(t - this.lastT, 200) : 0;
+    const dt = frameDt;
     this.lastT = t;
     const bad = active.filter((r) => r.severity === "bad").length;
     const warn = active.length - bad;
@@ -142,7 +176,13 @@ export class FeedbackEngine {
     };
   }
 
-  private pick(active: Rule[], t: number): Rule | null {
+  private pick(activeAll: Rule[], t: number): Rule | null {
+    // žlté upozornenie, ktoré už dlho svieti, sa stiahne, nech tréner neopakuje stále to isté
+    const shownRule = this.shownId ? RULE_BY_ID[this.shownId] : null;
+    if (shownRule?.severity === "warn" && t - this.shownAt > MAX_NAG_MS) {
+      this.snoozedUntil.set(shownRule.id, t + NAG_SNOOZE_MS);
+    }
+    const active = activeAll.filter((r) => r.severity === "bad" || t >= (this.snoozedUntil.get(r.id) ?? 0));
     if (!active.length) {
       this.shownId = null;
       return null;

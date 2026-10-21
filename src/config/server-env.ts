@@ -10,7 +10,7 @@ function read(name: string): string | null {
   return value ? value : null;
 }
 
-export type AnthropicConfig = { apiKey: string | null; model: string; fastModel: string };
+export type AnthropicConfig = { apiKey: string | null; model: string; fastModel: string; simpleModel: string };
 
 /**
  * Claude: analýza decku, reporty, nápoveda, textový investor, hodnotenie cvičení.
@@ -25,6 +25,8 @@ export function getAnthropicConfig(): AnthropicConfig | null {
     apiKey,
     model: read("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5",
     fastModel: read("ANTHROPIC_FAST_MODEL") ?? read("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5",
+    // jednoduché úlohy (napr. rozlíšenie rečníkov), kde lacnejší model nezhorší výsledok
+    simpleModel: read("ANTHROPIC_SIMPLE_MODEL") ?? "claude-haiku-5-5",
   };
 }
 

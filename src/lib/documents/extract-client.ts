@@ -8,7 +8,7 @@ import type { ExtractedSlide } from "@/lib/documents/extract-pptx";
 */
 
 export type ExtractResult =
-  | { ok: true; kind: DocumentKind; pages: number; text: string }
+  | { ok: true; kind: DocumentKind | "docx"; pages: number; text: string }
   | { ok: false; reason: "type" | "size" | "empty" | "encrypted" | "invalid" };
 
 function slidesToText(slides: ExtractedSlide[]): string {
@@ -25,6 +25,15 @@ export async function extractDocument(file: File): Promise<ExtractResult> {
   const kind = sniffDocumentKind(bytes);
   if (!kind) return { ok: false, reason: "type" };
   try {
+    if (kind === "pptx") {
+      const JSZip = (await import("jszip")).default;
+      const docx = await import("@/lib/documents/extract-docx");
+      if (await docx.isDocx(await JSZip.loadAsync(bytes))) {
+        const result = await docx.extractDocx(bytes);
+        const text = result.text.slice(0, DOCUMENT_TEXT_MAX);
+        return text.trim() ? { ok: true, kind: "docx", pages: result.pages, text } : { ok: false, reason: "empty" };
+      }
+    }
     const slides =
       kind === "pdf"
         ? await (await import("@/lib/documents/extract-pdf")).extractPdf(bytes)

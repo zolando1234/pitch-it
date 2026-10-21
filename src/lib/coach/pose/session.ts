@@ -105,7 +105,8 @@ export class SessionRecorder {
       if (!this.prevActive.has(id)) {
         this.issueCount.set(id, (this.issueCount.get(id) ?? 0) + 1);
         // hláška sa ukáže až po activateMs, ale chyba trvala už odvtedy: ten čas tiež započítame
-        const lead = Math.min(RULE_BY_ID[id]?.activateMs ?? 0, rel);
+        // pri trendoch sa okno nepočíta: chybou je až to, čo trvá po prekročení tolerancie
+        const lead = RULE_BY_ID[id]?.window ? 0 : Math.min(RULE_BY_ID[id]?.activateMs ?? 0, rel);
         this.issueMs.set(id, (this.issueMs.get(id) ?? 0) + lead);
         this.openMistake(id, rel, lead, snapshot);
       }

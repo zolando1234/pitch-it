@@ -54,3 +54,18 @@
 .pi-ld .brain-pill:hover,.pi-ld .brain-pill:focus-visible{border-color:#AAFF00;background-color:rgba(36,48,10,.82);box-shadow:0 0 28px rgba(170,255,0,.28);scale:1.05;outline:none}
 .pi-ld .brain-pill .dotp{width:8px;height:8px;border-radius:50%;background:#AAFF00;box-shadow:0 0 12px #AAFF00}
 @media(max-width:900px){.pi-ld #top{flex-direction:column}.pi-ld #top>.wrap{padding-bottom:0!important}.pi-ld .hero-brain{position:relative;top:auto;left:auto;right:auto;height:min(78vw,440px);margin:-20px 0 24px;order:2}.pi-ld .brain-pill{font-size:11px;padding:7px 12px 7px 10px}}
+@media(max-width:560px){
+.pi-ld .wrap{padding-left:16px;padding-right:16px}
+.pi-ld #ako,.pi-ld #cennik{padding-top:64px!important;padding-bottom:64px!important}
+.pi-ld #ako h2,.pi-ld #cennik h2{font-size:34px!important}
+.pi-ld #ako h3{font-size:30px!important;margin:8px 0 10px!important}
+.pi-ld #ako p.muted{font-size:16px!important}
+.pi-ld #ako .rv[style*="grid-template-columns"]{grid-template-columns:40px minmax(0,1fr)!important;gap:0 16px!important;margin-top:48px!important}
+.pi-ld #ako .np{width:40px!important;height:40px!important;font-size:15px!important;box-shadow:0 0 0 5px rgba(170,255,0,.12)!important}
+.pi-ld #ako .cn{left:19px!important;top:44px!important}
+.pi-ld #ako .rv>div:last-child{gap:20px!important}
+.pi-ld #ako .rv>div:last-child>div{flex-basis:100%!important;max-width:none!important}
+.pi-ld #cta{padding:80px 16px 72px!important}
+.pi-ld #cta h2{font-size:38px!important}
+.pi-ld .mq span.h{font-size:30px!important;padding:0 18px!important}
+}

@@ -1,3 +1,4 @@
+import { summarizeAiUsage, type AiCostSummary, type AiUsageRow } from "@/lib/admin/ai-cost";
 import { activePlan, FREE_SECONDS } from "@/lib/billing/pricing";
 
 /*
@@ -25,6 +26,8 @@ export type AdminRaw = {
   purchases: Array<{ user_id: string | null; created_at: string; amount: number | null; credits: number | null }>;
   checkouts: Array<{ user_id: string | null; created_at: string }>;
   contexts: Array<{ user_id: string; documents: number; hasAbout: boolean }>;
+  /** denník nákladov na AI (staršie dáta ho nemajú) */
+  aiUsage?: AiUsageRow[];
 };
 
 export type AdminPlan = "paid" | "free" | "free_used_up";
@@ -63,6 +66,8 @@ export type AdminOverview = {
   /** dnes: aktívni za 7 dní a koľkí zaplatili viac ako raz */
   now: { active: number; repeatPayers: number };
   rows: AdminUserRow[];
+  /** náklady na AI: tokeny a USD */
+  ai: AiCostSummary;
 };
 
 const DAY = 86_400_000;
@@ -94,7 +99,7 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
     const sub = subscriptions.get(u.id);
     const subscription = sub === "pro" || sub === "unlimited" ? sub : null;
     const plan: AdminPlan = subscription || bought || credits > 0 ? "paid" : freeSeconds >= FREE_SECONDS ? "free_used_up" : "free";
-    const freeUsed = Math.round(freeSeconds / 60);
+    const freeUsed = Math.max(0, Math.round(freeSeconds / 60));
     const last = attempts.reduce<string | null>((max, a) => (!max || a.created_at > max ? a.created_at : max), null);
     return {
       id: u.id,
@@ -181,5 +186,6 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
     growth,
     now: { active: today.active, repeatPayers: today.repeatPayers },
     rows,
+    ai: summarizeAiUsage(raw.aiUsage ?? [], ready.filter((a) => within(a.created_at, 30)).length, now),
   };
 }
