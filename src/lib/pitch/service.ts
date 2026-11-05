@@ -240,7 +240,8 @@ export async function analyzePitch(userId: string, input: PitchInput): Promise<P
             messages: [{ role: "user", content: prompt("overview") }],
             schema: team?.facts ? speechOverviewMatchSchema : speechOverviewSchema,
             effort: "low",
-            maxTokens: 3_500,
+            // rezerva aj na pohľad troch úrovní poslucháčov
+            maxTokens: 4_500,
             speed: "interactive",
           }),
           llm.generateStructured({

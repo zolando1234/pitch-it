@@ -4,7 +4,7 @@ import { decimal, pausesLabel, TEMPO_ADVICE, TEMPO_ADVICE_EN, tempoPosition, tem
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { matchPct, parseOutlineResult, type OrderVerdict, type PointStatus } from "@/lib/pitch/outline";
 import { parseQaResult, type QaResult } from "@/lib/pitch/qa";
-import { parseSpeechAnalysis, stripSentenceRefs, type SentenceIssue, type SpeechAnalysis, type WasteKind } from "@/lib/pitch/speech-analysis";
+import { LISTENER_LEVELS, parseSpeechAnalysis, stripSentenceRefs, type JargonFit, type ListenerLevel, type SentenceIssue, type SpeechAnalysis, type WasteKind } from "@/lib/pitch/speech-analysis";
 import type { PitchAttemptRow } from "@/lib/db/types";
 
 /*
@@ -50,6 +50,8 @@ export type FeedbackData = {
   speech: {
     overall: { score: number; tone: ScoreTone; summary: string } | null;
     takeaway: string | null;
+    /** čo si odnesie laik, človek, ktorý tému pozná z okraja, a odborník; null = starší rozbor bez tejto časti */
+    listeners: Array<{ level: ListenerLevel; takeaway: string; jargon: JargonFit; note: string; examples: string[] }> | null;
     points: Array<{ text: string; status: PointStatus; note: string | null }>;
     waste: Array<{ quote: string; label: string; note: string }>;
     advice: string | null;
@@ -220,6 +222,14 @@ function cleanAnalysis(a: SpeechAnalysis): SpeechAnalysis {
     clarity: { ...a.clarity, note: c(a.clarity.note) },
     overall: { ...a.overall, summary: c(a.overall.summary) },
     takeaway: c(a.takeaway),
+    listeners: a.listeners
+      ? (Object.fromEntries(
+          LISTENER_LEVELS.map((level) => {
+            const v = a.listeners![level];
+            return [level, v && { ...v, takeaway: c(v.takeaway), note: c(v.note) }];
+          }),
+        ) as NonNullable<SpeechAnalysis["listeners"]>)
+      : undefined,
     points: a.points.map((p) => ({ ...p, note: c(p.note) })),
     waste: a.waste.map((w) => ({ ...w, note: c(w.note) })),
     sentences: a.sentences.map((s) => ({ ...s, note: c(s.note) })),
@@ -272,6 +282,12 @@ export function buildFeedback(
       ? {
           overall: analysis ? { score: analysis.overall.score, tone: scoreTone(analysis.overall.score), summary: analysis.overall.summary } : null,
           takeaway: analysis?.takeaway ?? check?.takeaway ?? null,
+          listeners: analysis?.listeners
+            ? LISTENER_LEVELS.filter((level) => analysis.listeners?.[level]?.takeaway).map((level) => {
+                const v = analysis.listeners![level];
+                return { level, takeaway: v.takeaway, jargon: v.jargon, note: v.note, examples: (v.examples ?? []).filter((e) => e.trim()) };
+              })
+            : null,
           points,
           waste: analysis
             ? analysis.waste.map((w) => ({ quote: w.quote, label: WASTE_LABELS[locale][w.kind], note: w.note }))

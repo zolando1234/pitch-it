@@ -21,6 +21,12 @@ const analysis: SpeechAnalysis = {
   advice: "Pridaj pilot.",
 };
 
+const listeners = {
+  novice: { takeaway: "Je to appka, ktorá pomáha nacvičiť prejav.", jargon: "too_much" as const, note: "Veta [2] vysvetli, čo je pitch deck.", examples: ["pitch deck", "  ", "ARR"] },
+  familiar: { takeaway: "AI tréner prejavov s rozborom reči.", jargon: "fits" as const, note: "Sedí.", examples: [] },
+  expert: { takeaway: "Chýba, ako presne hodnotia obsah.", jargon: "too_little" as const, note: "Pridaj metriku.", examples: ["AI to vyhodnotí"] },
+};
+
 describe("report prejavu", () => {
   test("vety prepisu a zakoktania", () => {
     assert.deepEqual(splitSentences("Ahoj svet. Je je to tu? Áno"), ["Ahoj svet.", "Je je to tu?", "Áno"]);
@@ -41,7 +47,9 @@ describe("report prejavu", () => {
     const outline = outlineFromAnalysis({ topic: "AI tréner", points: ["Problém", "Pilot"] }, analysis);
     assert.equal(outline.check?.points[1].status, "missing");
     assert.equal(outline.check?.onTopicPct, 85);
-    assert.ok(speechAnalysisSchema.safeParse(analysis).success);
+    assert.ok(speechAnalysisSchema.safeParse({ ...analysis, listeners }).success);
+    // nový rozbor bez úrovní poslucháčov schémou neprejde (model ich musí vrátiť)
+    assert.equal(speechAnalysisSchema.safeParse(analysis).success, false);
   });
 
   test("report zostaví sekcie 1–7 z rozboru a označí vety", () => {
@@ -74,6 +82,24 @@ describe("report prejavu", () => {
     const noOutline = buildFeedback({ ...attempt, outline: null } as PitchAttemptRow, { number: 1, retryHref: "/app/nahravka" });
     assert.equal(noOutline.content, null);
     assert.deepEqual(noOutline.speech?.points, []);
+    // starší rozbor bez úrovní poslucháčov
+    assert.equal(data.speech?.listeners, null);
+
+    const withListeners = buildFeedback({ ...attempt, content: { version: 2, analysis: { ...analysis, listeners }, derivedPoints: false } } as PitchAttemptRow, {
+      number: 1,
+      retryHref: "/app/nahravka",
+    });
+    const rows = withListeners.speech?.listeners ?? [];
+    assert.deepEqual(rows.map((l) => l.level), ["novice", "familiar", "expert"]);
+    assert.deepEqual(rows.map((l) => l.jargon), ["too_much", "fits", "too_little"]);
+    assert.equal(rows[0].note, "Vysvetli, čo je pitch deck.");
+    assert.deepEqual(rows[0].examples, ["pitch deck", "ARR"]);
+    // neúplný záznam: chýbajúca úroveň sa vynechá, nespadne
+    const partial = buildFeedback({ ...attempt, content: { version: 2, analysis: { ...analysis, listeners: { novice: listeners.novice } }, derivedPoints: false } } as unknown as PitchAttemptRow, {
+      number: 1,
+      retryHref: "/app/nahravka",
+    });
+    assert.deepEqual(partial.speech?.listeners?.map((l) => l.level), ["novice"]);
   });
 });
 

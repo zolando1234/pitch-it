@@ -27,6 +27,11 @@ test("rozbor prejavu s príliš dlhými poznámkami prejde", () => {
     clarity: { score: 8, note: long },
     overall: { score: 7, summary: long },
     takeaway: long,
+    listeners: {
+      novice: { takeaway: long, jargon: "too_much", note: long, examples: [long, "a", "b", "c", "d"] },
+      familiar: { takeaway: long, jargon: "fits", note: long, examples: [] },
+      expert: { takeaway: long, jargon: "too_little", note: long, examples: ["x"] },
+    },
     onTopicPct: 104,
     points: [],
     waste: Array.from({ length: 9 }, () => ({ quote: long, kind: "unnecessary", note: long })),

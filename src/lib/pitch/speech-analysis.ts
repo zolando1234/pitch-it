@@ -3,7 +3,7 @@ import { OUTLINE_MAX_POINTS, type OutlineResult, type PitchOutline } from "@/lib
 
 /*
   Rozbor prejavu: držanie sa témy a osnovy, zrozumiteľnosť, celkové skóre reči, čo si poslucháč
-  odnesie, zbytočné časti, problematické vety v prepise a obsahové skóre podľa osnovy, ktorú si
+  odnesie (aj podľa toho, ako tému pozná: laik, z okraja, odborník), zbytočné časti, problematické vety v prepise a obsahové skóre podľa osnovy, ktorú si
   človek zadal. Beží ako dve paralelné volania AI (prehľad a označené vety): trvá približne o polovicu
   kratšie, lebo čas určuje dĺžka výstupu, a stojí skoro rovnako (vstup je lacný, výstup rovnaký).
   Počet označených viet sa prispôsobuje dĺžke prejavu, aby výstup zbytočne nenarastal.
@@ -24,6 +24,22 @@ export type SentenceIssue = (typeof SENTENCE_ISSUES)[number];
 export const WASTE_KINDS = ["offtopic", "unnecessary", "overexplain"] as const;
 export type WasteKind = (typeof WASTE_KINDS)[number];
 
+/** Poslucháči podľa znalosti témy: laik, pozná ju z okraja, odborník. */
+export const LISTENER_LEVELS = ["novice", "familiar", "expert"] as const;
+export type ListenerLevel = (typeof LISTENER_LEVELS)[number];
+/** Miera odborných slov pre danú úroveň: priveľa, primerane, primálo. */
+export const JARGON_FITS = ["too_much", "fits", "too_little"] as const;
+export type JargonFit = (typeof JARGON_FITS)[number];
+
+const listenerView = z.object({
+  takeaway: z.string().max(240),
+  jargon: z.enum(JARGON_FITS),
+  note: z.string().max(220),
+  examples: z.array(z.string().max(120)).max(3),
+});
+export const listenersSchema = z.object({ novice: listenerView, familiar: listenerView, expert: listenerView });
+export type ListenerViews = z.infer<typeof listenersSchema>;
+
 const scored = z.object({ score: z.number().int().min(0).max(10), note: z.string().max(260) });
 
 export const speechAnalysisSchema = z.object({
@@ -32,6 +48,7 @@ export const speechAnalysisSchema = z.object({
   clarity: scored,
   overall: z.object({ score: z.number().int().min(0).max(10), summary: z.string().min(1).max(420) }),
   takeaway: z.string().min(1).max(320),
+  listeners: listenersSchema,
   onTopicPct: z.number().int().min(0).max(100),
   points: z
     .array(
@@ -59,8 +76,11 @@ export const speechAnalysisSchema = z.object({
     .max(MAX_FLAGGED_SENTENCES),
   advice: z.string().min(1).max(300),
 });
-/** `materialsMatch`: zhoda prejavu s materiálmi tímu (0–100); len pri členoch tímu s nahratými materiálmi. */
-export type SpeechAnalysis = z.infer<typeof speechAnalysisSchema> & { materialsMatch?: number };
+/**
+  `materialsMatch`: zhoda prejavu s materiálmi tímu (0–100); len pri členoch tímu s nahratými materiálmi.
+  `listeners` chýba v rozboroch spred zavedenia úrovní poslucháčov.
+*/
+export type SpeechAnalysis = Omit<z.infer<typeof speechAnalysisSchema>, "listeners"> & { listeners?: ListenerViews; materialsMatch?: number };
 
 /** Prvé volanie: prehľad (téma, osnova, zrozumiteľnosť, skóre, body osnovy, zbytočné časti, rada). */
 export const speechOverviewSchema = speechAnalysisSchema.omit({ sentences: true });
@@ -148,6 +168,14 @@ Vráť:
 - clarity: zrozumiteľnosť pre človeka, ktorý o téme nič nevie (0–10) a note.
 - overall: celkové skóre reči (0–10: obsah, štruktúra, zrozumiteľnosť a plynulosť dokopy) a summary = 1–2 vety.
 - takeaway: 1–2 vety, čo si poslucháč reálne odnesie (jeho očami) a či to sedí so zadanou témou.
+- listeners: čo si z prejavu odnesú traja poslucháči podľa toho, ako tému poznajú: novice = laik, o téme nevie nič;
+  familiar = tému pozná z okraja; expert = profesionál v odbore. Pre každého:
+  takeaway = 1 veta, aké hlavné posolstvo pochopí (jeho očami; ak nepochopí nič podstatné, povedz to);
+  jargon = miera odborných a technických slov a viet z jeho pohľadu: too_much = priveľa, stráca sa; fits = primerane;
+  too_little = primálo, je to preňho povrchné alebo príliš zjednodušené;
+  note = 1 krátka veta prečo a čo upraviť pre túto úroveň;
+  examples = najviac 3 krátke citáty z prepisu (odborné slovo alebo časť vety), ktoré by túto úroveň zastavili;
+  pri too_little miesta, kde odborníkovi chýba presnosť či hĺbka; pri fits väčšinou prázdne. Citáty nevymýšľaj.
 - onTopicPct: podiel prejavu, ktorý sa držal témy (0–100).
 - points: pre každý bod osnovy (podľa indexu; title = text bodu) status (covered = vysvetlené tak, že to poslucháč pochopí; partial = len spomenuté;
   missing = nezaznelo), score 0–10 = ako dobre a presvedčivo bol bod obsahovo podaný (0, ak chýba) a note = čo zaznelo alebo čo chýbalo.
@@ -204,7 +232,7 @@ export function buildSpeechPrompt(input: {
     : null;
   return [
     input.feedbackLocale === "en"
-      ? `IMPORTANT: Write every text field (${overview ? "note, summary, takeaway, title of derived points, advice" : "note"}) in English (informal, friendly second person).`
+      ? `IMPORTANT: Write every text field (${overview ? "note, summary, takeaway, title of derived points, advice" : "note"}; quotes stay verbatim from the transcript) in English (informal, friendly second person).`
       : "Všetky texty píš po slovensky.",
     `Jazyk prejavu: ${input.language}. Publikum: ${input.audience}. Cieľová dĺžka ${input.targetSeconds} s, skutočná ${Math.round(input.durationMs / 1000)} s.`,
     input.outline?.topic ? `Téma (záväzné zadanie):\n"""${input.outline.topic}"""` : "Téma nie je zadaná, odvoď ju z prejavu a podkladov.",

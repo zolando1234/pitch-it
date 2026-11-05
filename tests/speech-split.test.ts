@@ -30,6 +30,11 @@ const overview = {
   clarity: scored,
   overall: { score: 7, summary: "Fajn prejav." },
   takeaway: "Appka na tréning.",
+  listeners: {
+    novice: { takeaway: "Appka na prejavy.", jargon: "fits" as const, note: "Jasné.", examples: [] },
+    familiar: { takeaway: "Tréner prejavov.", jargon: "fits" as const, note: "Jasné.", examples: [] },
+    expert: { takeaway: "Chýba metrika.", jargon: "too_little" as const, note: "Pridaj čísla.", examples: ["appku"] },
+  },
   onTopicPct: 90,
   points: [{ index: 0, title: "Problém", status: "covered" as const, score: 8, note: "Jasné." }],
   waste: [],
@@ -46,6 +51,8 @@ test("počet označených viet rastie s dĺžkou prejavu, no má strop", () => {
 test("dve schémy dokopy dávajú pôvodný rozbor", () => {
   assert.ok(speechOverviewSchema.safeParse(overview).success);
   assert.equal("sentences" in speechOverviewSchema.shape, false);
+  assert.equal("listeners" in speechOverviewSchema.shape, true);
+  assert.equal(speechOverviewSchema.safeParse({ ...overview, listeners: undefined }).success, false);
   const flags = sentenceFlagsSchema.parse({ sentences: [{ index: 1, severity: "major", issue: "convoluted", note: "Zamotané." }] });
   const merged = combineAnalysis(speechOverviewSchema.parse(overview), flags);
   assert.ok(speechAnalysisSchema.safeParse(merged).success);
@@ -69,6 +76,11 @@ test("prompt prehľadu obsahuje osnovu a podklady, prompt viet očíslovaný pre
 
 test("systémové texty sú rozdelené podľa úlohy", () => {
   assert.match(OVERVIEW_SYSTEM, /takeaway/);
+  // tri úrovne poslucháčov a miera odborných slov
+  assert.match(OVERVIEW_SYSTEM, /listeners/);
+  assert.match(OVERVIEW_SYSTEM, /novice[\s\S]*familiar[\s\S]*expert/);
+  assert.match(OVERVIEW_SYSTEM, /too_much[\s\S]*too_little/);
+  assert.doesNotMatch(SENTENCES_SYSTEM, /listeners/);
   assert.doesNotMatch(OVERVIEW_SYSTEM, /sentences/);
   assert.match(SENTENCES_SYSTEM, /convoluted/);
   assert.doesNotMatch(SENTENCES_SYSTEM, /takeaway/);

@@ -23,6 +23,12 @@ const FB = {
     order: "Poradie",
     clarity: "Zrozumiteľnosť",
     takeaway: "Čo si poslucháč odnesie",
+    listenersTitle: "Čo si odnesú poslucháči podľa znalosti témy",
+    listenersSub: "Ako prejav pochopí laik, človek, ktorý tému pozná z okraja, a odborník, a či je na nich odborných slov priveľa alebo primálo",
+    level: { novice: "Laik", familiar: "Pozná tému z okraja", expert: "Odborník v odbore" },
+    levelHint: { novice: "o téme nevie nič", familiar: "tému pozná len trochu", expert: "profesionál v odbore" },
+    jargon: { too_much: "Odborných slov priveľa", fits: "Odborné slová primerane", too_little: "Odbornosti primálo" },
+    jargonExamples: { stuck: "Tu by sa zasekol:", shallow: "Tu by chcel viac presnosti:" },
     clarityPoint: (c: number) => ` · zrozumiteľnosť ${c}/10`,
     digressions: "Odbočky mimo témy",
     nextTime: "Na ďalší pokus: ",
@@ -113,6 +119,12 @@ const FB = {
     order: "Order",
     clarity: "Clarity",
     takeaway: "What the listener takes away",
+    listenersTitle: "What listeners take away, by how well they know the topic",
+    listenersSub: "How a newcomer, someone who knows the topic a little and an expert understand the talk, and whether the jargon is too much or too little for them",
+    level: { novice: "Newcomer", familiar: "Knows the topic a little", expert: "Expert in the field" },
+    levelHint: { novice: "knows nothing about the topic", familiar: "knows the basics", expert: "a professional in the field" },
+    jargon: { too_much: "Too much jargon", fits: "Jargon about right", too_little: "Too little depth" },
+    jargonExamples: { stuck: "This is where they'd get stuck:", shallow: "This is where they'd want more precision:" },
     clarityPoint: (c: number) => ` · clarity ${c}/10`,
     digressions: "Off-topic detours",
     nextTime: "Next time: ",
@@ -192,6 +204,7 @@ const FB = {
   },
 };
 import type { PointStatus } from "@/lib/pitch/outline";
+import type { JargonFit } from "@/lib/pitch/speech-analysis";
 import type { QaResult } from "@/lib/pitch/qa";
 
 /*
@@ -206,6 +219,12 @@ const SCORE_COLOR: Record<ScoreTone, { text: string; bar: string }> = {
   good: { text: "var(--color-accent)", bar: "var(--color-signal)" },
   mid: { text: "var(--color-marker)", bar: "var(--color-marker)" },
   low: { text: "var(--color-coral)", bar: "var(--color-coral)" },
+};
+
+const JARGON_COLOR: Record<JargonFit, string> = {
+  too_much: "var(--color-coral)",
+  fits: "var(--color-accent)",
+  too_little: "var(--color-marker)",
 };
 
 const BODY_TONE: Record<BodyTone, { fill: string; label: string; strip: string }> = {
@@ -579,6 +598,41 @@ export function FeedbackScreen({ data }: { data: FeedbackData }) {
                   <div style={{ marginTop: "20px", padding: "18px 20px", borderRadius: "16px", background: "var(--pi-sel)", border: "1px solid var(--color-line)" }}>
                     <div style={{ fontWeight: 700, marginBottom: "6px" }}>{tx.takeaway}</div>
                     <p style={{ margin: 0, fontSize: "16px", lineHeight: "1.55" }}>{speech.takeaway}</p>
+                  </div>
+                ) : null}
+                {speech?.listeners?.length ? (
+                  <div style={{ marginTop: "20px" }}>
+                    <div style={{ fontWeight: 700 }}>{tx.listenersTitle}</div>
+                    <div className="muted" style={{ fontSize: "13px", lineHeight: "1.5", margin: "4px 0 12px" }}>
+                      {tx.listenersSub}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+                      {speech.listeners.map((l) => (
+                        <div key={l.level} style={{ flex: "1 1 240px", minWidth: "0", padding: "16px 18px", borderRadius: "16px", border: "1px solid var(--color-line)" }}>
+                          <b style={{ fontSize: "16px" }}>{tx.level[l.level]}</b>
+                          <div className="muted" style={{ fontSize: "13px" }}>
+                            {tx.levelHint[l.level]}
+                          </div>
+                          <p style={{ margin: "10px 0 0", fontSize: "15px", lineHeight: "1.55" }}>{l.takeaway}</p>
+                          <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: 700, color: JARGON_COLOR[l.jargon] }}>{tx.jargon[l.jargon]}</div>
+                          {l.note ? (
+                            <p className="muted" style={{ margin: "4px 0 0", fontSize: "14px", lineHeight: "1.55" }}>
+                              {l.note}
+                            </p>
+                          ) : null}
+                          {l.examples.length ? (
+                            <div style={{ marginTop: "10px", fontSize: "14px", lineHeight: "1.55" }}>
+                              <span className="muted">{l.jargon === "too_little" ? tx.jargonExamples.shallow : tx.jargonExamples.stuck}</span>
+                              {l.examples.map((e, i) => (
+                                <div key={i}>
+                                  <i>„{e}“</i>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
                 {speech?.points.length ? (
