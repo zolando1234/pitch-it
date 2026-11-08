@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { cache } from "react";
+import { offersFeedback } from "@/components/app/feedback-card";
+import { FeedbackTeaser } from "@/components/app/feedback-teaser";
 import { Icon } from "@/components/app/icons";
 import { getCurrentUser } from "@/lib/auth/session";
 import { pitchSummary, teamPitchSummary, type PlanSummary } from "@/lib/billing/summary";
@@ -7,11 +9,12 @@ import { getPitchBalance } from "@/lib/db/pitch-wallet";
 import { getMembership } from "@/lib/db/teams";
 import { getLocale } from "@/lib/i18n/server";
 
-/** Karta plánu v spodnej časti bočného panelu (desktop aj mobilné menu). */
-export function PlanCard({ summary }: { summary: PlanSummary }) {
+/** Karta plánu v spodnej časti bočného panelu (desktop aj mobilné menu); nad zostatkom minút prípadne ponuka +5 min za dotazník. */
+export function PlanCard({ summary, feedback = false }: { summary: PlanSummary; feedback?: boolean }) {
   const primary = summary.action.emphasis === "primary";
   return (
     <div className="rounded-[14px] border border-plan-line bg-plan px-4 pt-4 pb-4">
+      {feedback ? <FeedbackTeaser /> : null}
       <div className="flex items-start gap-3.5 px-1">
         <Icon name="bolt" className="mt-0.5 size-7 text-accent" strokeWidth={1.5} />
         <div className="min-w-0">
@@ -31,17 +34,17 @@ export function PlanCard({ summary }: { summary: PlanSummary }) {
   );
 }
 
-const loadSummary = cache(async (): Promise<PlanSummary | null> => {
+const loadSummary = cache(async (): Promise<{ summary: PlanSummary; feedback: boolean } | null> => {
   const user = await getCurrentUser();
   if (!user) return null;
-  const [balance, membership, locale] = await Promise.all([getPitchBalance(user.id), getMembership(user.id), getLocale()]);
-  return membership ? teamPitchSummary(membership.team.name, balance, locale) : pitchSummary(balance, locale);
+  const [balance, membership, locale, feedback] = await Promise.all([getPitchBalance(user.id), getMembership(user.id), getLocale(), offersFeedback(user.id)]);
+  return { summary: membership ? teamPitchSummary(membership.team.name, balance, locale) : pitchSummary(balance, locale), feedback };
 });
 
 /** Číta reláciu, preto je vždy vo vnútri <Suspense>. */
 export async function PlanCardLoader() {
-  const summary = await loadSummary();
-  return summary ? <PlanCard summary={summary} /> : null;
+  const loaded = await loadSummary();
+  return loaded ? <PlanCard summary={loaded.summary} feedback={loaded.feedback} /> : null;
 }
 
 export function PlanCardSkeleton() {

@@ -48,4 +48,6 @@ export const RATE_LIMITS = {
   micAnswer: { limit: 10, windowMs: 10 * 60 * 1000 },
   /** odoslania pozvánok do tímu (každé môže mať viac e-mailov) */
   teamInvite: { limit: 15, windowMs: 60 * 60 * 1000 },
+  /** odoslanie dotazníka spokojnosti */
+  appFeedback: { limit: 5, windowMs: 10 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitRule>;

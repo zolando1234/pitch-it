@@ -163,6 +163,20 @@ async function creditOnce(key: string, userId: string, apply: (wallet: PitchWall
   return true;
 }
 
+/**
+ * Odmena za vyplnený dotazník, presne raz: Pro dostane dokúpené minúty (ostávajú aj do ďalších týždňov),
+ * ostatní minúty zadarmo navyše (negatívna spotreba zadarmo ako pri FREE_BONUS_SECONDS).
+ */
+export async function addFeedbackBonus(userId: string, seconds: number): Promise<boolean> {
+  const plan = await getPlan(userId);
+  return creditOnce(`bonus:feedback:v1:${userId}`, userId, (w) => ({
+    ...w,
+    free_used: w?.free_used ?? 0,
+    credits: w?.credits ?? 0,
+    ...(plan === "pro" ? { topup_seconds: (w?.topup_seconds ?? 0) + seconds } : { free_seconds_used: (w?.free_seconds_used ?? 0) - seconds }),
+  }));
+}
+
 /** Starší balík pitchov (už sa nepredáva; dobehnuté platby sa ešte pripíšu). */
 export async function addPitchCredits(userId: string, credits: number, checkoutSessionId: string): Promise<boolean> {
   return creditOnce(`stripe:pitch-pack:${checkoutSessionId}`, userId, (w) => ({ ...w, free_used: w?.free_used ?? 0, credits: (w?.credits ?? 0) + credits }));

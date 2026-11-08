@@ -2,6 +2,7 @@ import "server-only";
 
 import { check } from "@/lib/db/core";
 import { getAdminDb } from "@/lib/store/client";
+import type { FeedbackRow } from "@/lib/feedback/survey";
 import { buildAdminOverview, type AdminOverview, type AdminRaw } from "@/lib/admin/overview";
 
 /*
@@ -18,7 +19,7 @@ async function all(table: string, columns: string): Promise<Row[]> {
 }
 
 export async function loadAdminOverview(): Promise<AdminOverview> {
-  const [users, profiles, wallets, attempts, events, contexts, subscriptions, aiUsage] = await Promise.all([
+  const [users, profiles, wallets, attempts, events, contexts, subscriptions, aiUsage, feedback] = await Promise.all([
     all("auth_users", "id, email, created_at, meta"),
     all("profiles", "id, display_name"),
     all("pitch_wallets", "user_id, free_used, credits, free_seconds_used"),
@@ -27,8 +28,15 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
     all("pitch_contexts", "user_id, about, documents"),
     all("subscriptions", "user_id, plan, status"),
     all("ai_usage", "created_at, kind, purpose, model, input_tokens, output_tokens, seconds, cost_usd"),
+    all("app_feedback", "user_id, created_at, ratings, comment"),
   ]);
   const raw: AdminRaw = {
+    feedback: feedback.map((f) => ({
+      user_id: String(f.user_id),
+      created_at: String(f.created_at ?? ""),
+      ratings: (f.ratings as FeedbackRow["ratings"]) ?? null,
+      comment: typeof f.comment === "string" ? f.comment : null,
+    })),
     aiUsage: aiUsage.map((r) => ({
       created_at: String(r.created_at ?? ""),
       kind: r.kind === "stt" ? "stt" : "llm",

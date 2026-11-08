@@ -1,5 +1,6 @@
 import { summarizeAiUsage, type AiCostSummary, type AiUsageRow } from "@/lib/admin/ai-cost";
 import { activePlan, FREE_SECONDS } from "@/lib/billing/pricing";
+import { summarizeFeedback, type FeedbackRow, type FeedbackSummary } from "@/lib/feedback/survey";
 
 /*
   Prehľad pre administrátora: používatelia, platiaci, využitie. Čisté funkcie nad surovými
@@ -28,6 +29,8 @@ export type AdminRaw = {
   contexts: Array<{ user_id: string; documents: number; hasAbout: boolean }>;
   /** denník nákladov na AI (staršie dáta ho nemajú) */
   aiUsage?: AiUsageRow[];
+  /** dotazník spokojnosti (staršie dáta ho nemajú) */
+  feedback?: FeedbackRow[];
 };
 
 export type AdminPlan = "paid" | "free" | "free_used_up";
@@ -68,6 +71,8 @@ export type AdminOverview = {
   rows: AdminUserRow[];
   /** náklady na AI: tokeny a USD */
   ai: AiCostSummary;
+  /** dotazník spokojnosti: priemery hviezdičiek a odpovede */
+  feedback: FeedbackSummary;
 };
 
 const DAY = 86_400_000;
@@ -187,5 +192,6 @@ export function buildAdminOverview(raw: AdminRaw, now = new Date()): AdminOvervi
     now: { active: today.active, repeatPayers: today.repeatPayers },
     rows,
     ai: summarizeAiUsage(raw.aiUsage ?? [], ready.filter((a) => within(a.created_at, 30)).length, now),
+    feedback: summarizeFeedback(raw.feedback ?? [], new Map(raw.users.map((u) => [u.id, u.email]))),
   };
 }

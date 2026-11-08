@@ -6,6 +6,7 @@ import type { AdminOverview, AdminPlan, AdminUserRow } from "@/lib/admin/overvie
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { TrendChart } from "@/components/admin/trend-chart";
 import { FREE_SECONDS } from "@/lib/billing/pricing";
+import { FEEDBACK_QUESTIONS } from "@/lib/feedback/survey";
 
 /*
   Administrácia: používatelia, platiaci, využitie a zoznam účtov s vyhľadávaním.
@@ -51,6 +52,12 @@ const TX = {
     cols: ["Používateľ", "Účet", "Registrácia", "Pitche", "Zadarmo", "Kredity", "Zaplatil", "Posledný pitch"],
     none: "Nikto nevyhovuje filtru.",
     min: "min",
+    feedback: {
+      title: "Dotazník spokojnosti",
+      note: (n: number) => `${n} odpovedí · za vyplnenie +5 min zadarmo`,
+      empty: "Zatiaľ nikto dotazník nevyplnil.",
+      noComment: "bez komentára",
+    },
     ai: {
       title: "Náklady na AI",
       note: "Claude podľa skutočných tokenov, prepis reči (ElevenLabs) podľa dĺžky zvuku s odhadnutou cenou. Faktúra dodávateľa je rozhodujúca. Meria sa od nasadenia tejto funkcie.",
@@ -108,6 +115,12 @@ const TX = {
     cols: ["User", "Plan", "Registered", "Pitches", "Free used", "Credits", "Paid", "Last pitch"],
     none: "Nobody matches the filter.",
     min: "min",
+    feedback: {
+      title: "Satisfaction survey",
+      note: (n: number) => `${n} responses · +5 free min for filling it in`,
+      empty: "Nobody has filled in the survey yet.",
+      noComment: "no comment",
+    },
     ai: {
       title: "AI costs",
       note: "Claude by actual tokens, speech-to-text (ElevenLabs) by audio length at an estimated price. The vendor's invoice is authoritative. Measured since this feature went live.",
@@ -231,6 +244,43 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
         <Small value={data.paying.checkoutsStarted} label={tx.checkouts} />
         <Small value={data.paying.purchases} label={tx.purchases} />
         <Small value={data.paying.freeUsedUp} label={tx.usedUp} />
+      </section>
+
+      <section aria-labelledby="admin-dotaznik" className="flex flex-col gap-3">
+        <div>
+          <h2 id="admin-dotaznik" className="text-[17px] font-bold text-paper">
+            {tx.feedback.title}
+          </h2>
+          <p className="text-[13px] text-mute">{tx.feedback.note(data.feedback.count)}</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {FEEDBACK_QUESTIONS.map((q) => {
+            const avg = data.feedback.averages[q.key];
+            return <Small key={q.key} value={avg === null ? "–" : `${dec(avg)} ★`} label={q[locale]} />;
+          })}
+        </div>
+        {data.feedback.items.length ? (
+          <ul className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto">
+            {data.feedback.items.map((f) => (
+              <li key={f.userId} className="dash-card p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-[14px] font-semibold text-paper">{f.email}</span>
+                  <span className="text-[12px] text-faint">{fmtDate(f.createdAt)}</span>
+                </div>
+                <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-mute">
+                  {FEEDBACK_QUESTIONS.map((q) => (
+                    <span key={q.key}>
+                      {q[locale]} <span className="font-bold text-accent tabular-nums">{f.ratings[q.key] ?? "–"}★</span>
+                    </span>
+                  ))}
+                </p>
+                <p className={`mt-2 text-[14px] whitespace-pre-line ${f.comment ? "text-paper" : "text-faint"}`}>{f.comment || tx.feedback.noComment}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[14px] text-mute">{tx.feedback.empty}</p>
+        )}
       </section>
 
       <section aria-labelledby="ai-naklady" className="flex flex-col gap-3">

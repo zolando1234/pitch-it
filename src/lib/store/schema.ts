@@ -298,6 +298,13 @@ export const TABLES: Record<string, TableSpec> = {
     refs: [user()],
     read: own("user_id"),
   },
+  /** Dotazník spokojnosti (hviezdičky + komentár); jeden na používateľa, za vyplnenie 5 minút zadarmo. */
+  app_feedback: {
+    pk: ["user_id"],
+    defaults: () => ({ ratings: {}, comment: "" }),
+    refs: [user()],
+    read: own("user_id"),
+  },
   /** Denník nákladov na AI (tokeny Claude, sekundy prepisu) pre administráciu. */
   ai_usage: {
     pk: ["id"],
