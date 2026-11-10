@@ -7,25 +7,24 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { buttonClasses } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/submit-button";
 import { useToast } from "@/components/ui/toast";
-import { FEEDBACK_BONUS_SECONDS, FEEDBACK_COMMENT_MAX, FEEDBACK_QUESTIONS, type FeedbackKey } from "@/lib/feedback/survey";
+import { FEEDBACK_ANSWER_MAX, FEEDBACK_BONUS_SECONDS, FEEDBACK_COMMENT_MAX, FEEDBACK_LABELS, FEEDBACK_QUESTIONS, FEEDBACK_USES, type FeedbackKey, type FeedbackUse } from "@/lib/feedback/survey";
 
 /*
-  Ponuka v karte plánu (nad zostatkom minút) pre ľudí, ktorí už nahrali pitch: krátky dotazník (hviezdičky + komentár)
-  za 5 minút zadarmo. Po odoslaní sa obnoví serverový obsah (karta plánu ukáže nové minúty, ponuka zmizne).
+  Ponuka „5 minút gratis“ v karte plánu (nad zostatkom minút) pre ľudí, ktorí už nahrali pitch: po kliknutí
+  krátky dotazník (hviezdičky, tri povinné otázky a jedna voľná) za 5 minút zadarmo. Po odoslaní sa obnoví serverový obsah (karta plánu ukáže nové minúty, ponuka zmizne).
 */
 
 const BONUS_MIN = FEEDBACK_BONUS_SECONDS / 60;
 
 const TX = {
   sk: {
-    bonus: `+${BONUS_MIN} min zadarmo`,
-    open: "za vyplnenie krátkeho dotazníka",
+    bonus: `${BONUS_MIN} minút gratis`,
     dialogTitle: "Krátky dotazník",
-    dialogNote: `Tri hviezdičkové otázky a pár slov, ak chceš. Za vyplnenie ti pripíšeme ${BONUS_MIN} minút zadarmo.`,
-    comment: "Čo by si zlepšil/a alebo čo sa ti páčilo?",
-    commentHint: "Nepovinné",
+    dialogNote: `Pár hviezdičiek a tri krátke odpovede. Za vyplnenie ti pripíšeme ${BONUS_MIN} minút zadarmo.`,
+    optional: "Nepovinné",
+    pickAll: "môžeš vybrať viac",
     stars: (n: number) => `${n} z 5 hviezdičiek`,
-    missing: "Ohodnoť prosím všetky tri otázky.",
+    missing: "Vyplň prosím všetky povinné otázky (hviezdičky aj tri odpovede).",
     cancel: "Zrušiť",
     submit: `Odoslať a získať +${BONUS_MIN} min`,
     sending: "Odosielam…",
@@ -33,14 +32,13 @@ const TX = {
     failed: "Odoslanie zlyhalo. Skús to znova.",
   },
   en: {
-    bonus: `+${BONUS_MIN} free min`,
-    open: "for a short survey",
+    bonus: `${BONUS_MIN} free minutes`,
     dialogTitle: "Short survey",
-    dialogNote: `Three star questions and a few words if you like. We'll add ${BONUS_MIN} free minutes for filling it in.`,
-    comment: "What would you improve, or what did you like?",
-    commentHint: "Optional",
+    dialogNote: `A few stars and three short answers. We'll add ${BONUS_MIN} free minutes for filling it in.`,
+    optional: "Optional",
+    pickAll: "pick any",
     stars: (n: number) => `${n} of 5 stars`,
-    missing: "Please rate all three questions.",
+    missing: "Please answer all required questions (the stars and the three answers).",
     cancel: "Cancel",
     submit: `Send and get +${BONUS_MIN} min`,
     sending: "Sending…",
@@ -75,6 +73,24 @@ function StarRow({ label, value, onChange, starLabel }: { label: string; value: 
   );
 }
 
+function TextQuestion({ label, hint, value, onChange, max, rows }: { label: string; hint?: string; value: string; onChange: (v: string) => void; max: number; rows: number }) {
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="text-[14.5px] font-semibold text-paper">
+        {label} {hint ? <span className="font-normal text-faint">({hint})</span> : null}
+      </span>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={max}
+        rows={rows}
+        required={!hint}
+        className="w-full resize-y rounded-xl border border-line-strong bg-ink-2 px-3.5 py-2.5 text-[15px] text-paper placeholder:text-faint focus:border-signal focus:outline-none"
+      />
+    </label>
+  );
+}
+
 export function FeedbackTeaser() {
   const locale = useLocale();
   const tx = TX[locale];
@@ -82,6 +98,9 @@ export function FeedbackTeaser() {
   const toast = useToast();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [ratings, setRatings] = useState<Partial<Record<FeedbackKey, number>>>({});
+  const [experience, setExperience] = useState("");
+  const [usedFor, setUsedFor] = useState<FeedbackUse[]>([]);
+  const [missing, setMissing] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -90,7 +109,7 @@ export function FeedbackTeaser() {
   if (sent) return null;
 
   const submit = () => {
-    if (FEEDBACK_QUESTIONS.some((q) => !ratings[q.key])) {
+    if (FEEDBACK_QUESTIONS.some((q) => !ratings[q.key]) || experience.trim().length < 2 || !usedFor.length || missing.trim().length < 2) {
       setError(tx.missing);
       return;
     }
@@ -100,7 +119,7 @@ export function FeedbackTeaser() {
         const response = await fetch("/api/hodnotenie", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ratings, comment }),
+          body: JSON.stringify({ ratings, experience, usedFor, missing, comment }),
         });
         const data = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
         if (!response.ok) {
@@ -125,16 +144,13 @@ export function FeedbackTeaser() {
         className="mb-3.5 flex w-full items-center gap-2.5 rounded-xl border border-line-strong px-3 py-2 text-left leading-tight transition-colors duration-150 hover:bg-panel-2"
       >
         <Icon name="star" className="size-5 shrink-0 [&_path]:fill-current text-accent" strokeWidth={1.5} />
-        <span className="min-w-0">
-          <span className="block text-[14px] font-bold text-accent">{tx.bonus}</span>
-          <span className="block text-[12.5px] text-mute">{tx.open}</span>
-        </span>
+        <span className="text-[14px] font-bold text-accent">{tx.bonus}</span>
       </button>
 
       <dialog
         ref={dialogRef}
         aria-labelledby="dotaznik-nadpis"
-        className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[16px] border border-line-strong bg-panel p-0 text-paper backdrop:bg-ink/80"
+        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(34rem,calc(100vw-2rem))] overflow-y-auto rounded-[16px] border border-line-strong bg-panel p-0 text-paper backdrop:bg-ink/80"
       >
         <div className="p-6">
           <h2 id="dotaznik-nadpis" className="type-heading text-[1.35rem]">
@@ -155,18 +171,35 @@ export function FeedbackTeaser() {
                 starLabel={tx.stars}
               />
             ))}
-            <label className="flex flex-col gap-2">
-              <span className="text-[14.5px] font-semibold text-paper">
-                {tx.comment} <span className="font-normal text-faint">({tx.commentHint})</span>
-              </span>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                maxLength={FEEDBACK_COMMENT_MAX}
-                rows={4}
-                className="w-full resize-y rounded-xl border border-line-strong bg-ink-2 px-3.5 py-2.5 text-[15px] text-paper placeholder:text-faint focus:border-signal focus:outline-none"
-              />
-            </label>
+            <TextQuestion label={FEEDBACK_LABELS.experience[locale]} value={experience} onChange={setExperience} max={FEEDBACK_ANSWER_MAX} rows={3} />
+            <fieldset>
+              <legend className="text-[14.5px] font-semibold text-paper">
+                {FEEDBACK_LABELS.usedFor[locale]} <span className="font-normal text-faint">({tx.pickAll})</span>
+              </legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {FEEDBACK_USES.map((u) => {
+                  const on = usedFor.includes(u.key);
+                  return (
+                    <button
+                      key={u.key}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        setUsedFor((list) => (on ? list.filter((k) => k !== u.key) : [...list, u.key]));
+                        setError(null);
+                      }}
+                      className={`rounded-full border px-3.5 py-1.5 text-[14px] font-semibold transition-colors duration-150 ${
+                        on ? "border-signal bg-signal text-on-signal" : "border-line-strong text-paper hover:bg-panel-2"
+                      }`}
+                    >
+                      {u[locale]}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <TextQuestion label={FEEDBACK_LABELS.missing[locale]} value={missing} onChange={setMissing} max={FEEDBACK_ANSWER_MAX} rows={3} />
+            <TextQuestion label={FEEDBACK_LABELS.comment[locale]} hint={tx.optional} value={comment} onChange={setComment} max={FEEDBACK_COMMENT_MAX} rows={3} />
           </div>
 
           {error ? (

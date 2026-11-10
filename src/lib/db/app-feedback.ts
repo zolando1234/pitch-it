@@ -24,7 +24,12 @@ export async function saveAppFeedback(userId: string, input: FeedbackInput): Pro
   const key = `app_feedback:v1:${userId}`;
   if (!(await kv.setnx(key, "1"))) return false;
   try {
-    const { error } = await getAdminDb().from("app_feedback").insert({ user_id: userId, ratings: input.ratings, comment: input.comment.trim() });
+    const { error } = await getAdminDb().from("app_feedback").insert({
+      user_id: userId,
+      ratings: input.ratings,
+      answers: { experience: input.experience, usedFor: input.usedFor, missing: input.missing },
+      comment: input.comment.trim(),
+    });
     check({ error }, "app_feedback.save");
   } catch (error) {
     // zápis zlyhal: používateľ môže dotazník odoslať znova

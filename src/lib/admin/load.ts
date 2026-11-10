@@ -28,13 +28,14 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
     all("pitch_contexts", "user_id, about, documents"),
     all("subscriptions", "user_id, plan, status"),
     all("ai_usage", "created_at, kind, purpose, model, input_tokens, output_tokens, seconds, cost_usd"),
-    all("app_feedback", "user_id, created_at, ratings, comment"),
+    all("app_feedback", "user_id, created_at, ratings, answers, comment"),
   ]);
   const raw: AdminRaw = {
     feedback: feedback.map((f) => ({
       user_id: String(f.user_id),
       created_at: String(f.created_at ?? ""),
       ratings: (f.ratings as FeedbackRow["ratings"]) ?? null,
+      answers: (f.answers as FeedbackRow["answers"]) ?? null,
       comment: typeof f.comment === "string" ? f.comment : null,
     })),
     aiUsage: aiUsage.map((r) => ({

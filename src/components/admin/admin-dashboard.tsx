@@ -6,7 +6,7 @@ import type { AdminOverview, AdminPlan, AdminUserRow } from "@/lib/admin/overvie
 import { LANGUAGE_INFO, parseLanguage } from "@/lib/pitch/language";
 import { TrendChart } from "@/components/admin/trend-chart";
 import { FREE_SECONDS } from "@/lib/billing/pricing";
-import { FEEDBACK_QUESTIONS } from "@/lib/feedback/survey";
+import { FEEDBACK_LABELS, FEEDBACK_QUESTIONS, FEEDBACK_USES } from "@/lib/feedback/survey";
 
 /*
   Administrácia: používatelia, platiaci, využitie a zoznam účtov s vyhľadávaním.
@@ -57,6 +57,8 @@ const TX = {
       note: (n: number) => `${n} odpovedí · za vyplnenie +5 min zadarmo`,
       empty: "Zatiaľ nikto dotazník nevyplnil.",
       noComment: "bez komentára",
+      noAnswer: "bez odpovede",
+      usesTitle: "Na čo appku používajú",
     },
     ai: {
       title: "Náklady na AI",
@@ -120,6 +122,8 @@ const TX = {
       note: (n: number) => `${n} responses · +5 free min for filling it in`,
       empty: "Nobody has filled in the survey yet.",
       noComment: "no comment",
+      noAnswer: "no answer",
+      usesTitle: "What they use the app for",
     },
     ai: {
       title: "AI costs",
@@ -259,6 +263,16 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
             return <Small key={q.key} value={avg === null ? "–" : `${dec(avg)} ★`} label={q[locale]} />;
           })}
         </div>
+        {data.feedback.count ? (
+          <div>
+            <p className="mb-2 text-[13px] font-semibold text-mute">{tx.feedback.usesTitle}</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {FEEDBACK_USES.map((u) => (
+                <Small key={u.key} value={data.feedback.uses[u.key]} label={u[locale]} />
+              ))}
+            </div>
+          </div>
+        ) : null}
         {data.feedback.items.length ? (
           <ul className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto">
             {data.feedback.items.map((f) => (
@@ -274,7 +288,27 @@ export function AdminDashboard({ data }: { data: AdminOverview }) {
                     </span>
                   ))}
                 </p>
-                <p className={`mt-2 text-[14px] whitespace-pre-line ${f.comment ? "text-paper" : "text-faint"}`}>{f.comment || tx.feedback.noComment}</p>
+                {f.usedFor.length ? (
+                  <p className="mt-2 flex flex-wrap gap-1.5">
+                    {f.usedFor.map((key) => (
+                      <span key={key} className="rounded-full border border-line-strong px-2.5 py-0.5 text-[12px] text-paper">
+                        {FEEDBACK_USES.find((u) => u.key === key)?.[locale]}
+                      </span>
+                    ))}
+                  </p>
+                ) : null}
+                <dl className="mt-2 flex flex-col gap-1.5 text-[14px]">
+                  {(["experience", "missing"] as const).map((k) => (
+                    <div key={k}>
+                      <dt className="text-[12px] text-faint">{FEEDBACK_LABELS[k][locale]}</dt>
+                      <dd className={`whitespace-pre-line ${f[k] ? "text-paper" : "text-faint"}`}>{f[k] || tx.feedback.noAnswer}</dd>
+                    </div>
+                  ))}
+                  <div>
+                    <dt className="text-[12px] text-faint">{FEEDBACK_LABELS.comment[locale]}</dt>
+                    <dd className={`whitespace-pre-line ${f.comment ? "text-paper" : "text-faint"}`}>{f.comment || tx.feedback.noComment}</dd>
+                  </div>
+                </dl>
               </li>
             ))}
           </ul>
